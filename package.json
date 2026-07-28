@@ -1,0 +1,32 @@
+{
+  "name": "geosatrack-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for Wirepas Mesh Asset Tracking Platform (GeoSaTrack)",
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f",
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "build:all": "npm run build --workspaces",
+    "prepare:env": "node -e \"const fs = require('fs'); if (!fs.existsSync('.env')) fs.copyFileSync('.env.example', '.env'); console.log('.env file prepared!')\""
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "wirepas",
+    "teltonika",
+    "asset-tracking",
+    "nestjs",
+    "nextjs",
+    "timescaledb"
+  ],
+  "author": "Geosatrack Team",
+  "license": "ISC"
+}
