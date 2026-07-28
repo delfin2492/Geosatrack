@@ -1,0 +1,165 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------------------
+// 1. TENANCY & USERS
+// ------------------------------------------------------------------------------
+
+model Tenant {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  users     User[]
+  sites     Site[]
+  gateways  Gateway[]
+  anchors   Anchor[]
+  assets    Asset[]
+  alerts    Alert[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("operator") // superadmin, tenant_admin, site_manager, operator
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ------------------------------------------------------------------------------
+// 2. INFRASTRUCTURE & ZONES
+// ------------------------------------------------------------------------------
+
+model Site {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zones     Zone[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Zone {
+  id           String   @id @default(cuid())
+  name         String
+  floorPlanUrl String?  // URL/Path denah lantai (PNG/SVG)
+  width        Float    @default(100.0) // Lebar denah dalam meter (sumbu X)
+  height       Float    @default(100.0) // Tinggi denah dalam meter (sumbu Y)
+  siteId       String
+  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  anchors      Anchor[]
+  assets       Asset[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Gateway {
+  id        String   @id // MAC Address atau unique gateway ID (misal: "gw-00:11:22:33:44:55")
+  name      String
+  status    String   @default("offline") // online, offline
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Anchor {
+  id        String   @id // MAC Address atau node ID (misal: "anchor-00:11:22:33:44:56")
+  name      String
+  x         Float    @default(0.0) // Posisi sumbu X pada denah lantai (meter)
+  y         Float    @default(0.0) // Posisi sumbu Y pada denah lantai (meter)
+  status    String   @default("offline")
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zoneId    String?
+  zone      Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ------------------------------------------------------------------------------
+// 3. ASSETS & TAGS (IoT Devices)
+// ------------------------------------------------------------------------------
+
+model Asset {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("static") // static, moving, tilt_warning, fall_detected, high_vibration, offline
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zoneId      String?
+  zone        Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  tagId       String?  @unique
+  tag         Tag?     @relation(fields: [tagId], references: [id], onDelete: SetNull)
+  alerts      Alert[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Tag {
+  id          String   @id // Wirepas Node ID (misal: "node-439201")
+  name        String?
+  battery     Float?   // Tegangan baterai (Volt)
+  rssi        Int?     // Sinyal terakhir (dBm)
+  temperature Float?
+  humidity    Float?
+  lastSeen    DateTime?
+  asset       Asset?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ------------------------------------------------------------------------------
+// 4. ALERTS
+// ------------------------------------------------------------------------------
+
+model Alert {
+  id         String    @id @default(cuid())
+  type       String    // fall_detected, tilt_warning, low_battery, temperature_critical
+  message    String
+  isResolved Boolean   @default(false)
+  resolvedAt DateTime?
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetId    String?
+  asset      Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// ------------------------------------------------------------------------------
+// 5. TIMESCALEDB TELEMETRY RAW DATA
+// Catatan: Kunci primer komposit digunakan untuk kompatibilitas TimescaleDB.
+// ------------------------------------------------------------------------------
+
+model Telemetry {
+  timestamp   DateTime
+  tagId       String
+  temperature Float?
+  humidity    Float?
+  battery     Float?
+  rssi        Int?
+  accelX      Float?
+  accelY      Float?
+  accelZ      Float?
+  pitch       Float?
+  roll        Float?
+  hall        Int?
+
+  @@id([timestamp, tagId])
+}
