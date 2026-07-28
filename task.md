@@ -56,3 +56,24 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
 *   [ ] Pembuatan Manifest Kubernetes & Helm Charts.
 *   [ ] Pembuatan Pipeline CI/CD otomatis untuk deploy ke kluster cloud.
 *   [ ] Setup dashboard monitoring dengan Prometheus dan Grafana.
+
+---
+
+## 🛠️ Prosedur Pembaruan Progress (Wajib Diikuti Agen AI/Pengembang)
+Setiap kali Anda selesai mengerjakan sebuah langkah, menambahkan fitur, atau mengubah konfigurasi:
+1.  **Perbarui Check-list**: Ubah `[ ]` menjadi `[/]` (in-progress) atau `[x]` (completed) pada daftar di atas.
+2.  **Perbarui Fokus Saat Ini**: Sesuaikan bagian `## 🎯 Fokus Saat Ini` untuk mencerminkan tugas aktif berikutnya.
+3.  **Tulis Riwayat Pembaruan**: Catat entri baru pada bagian `## 📜 Riwayat Pembaruan (Changelog)` di bawah dengan format:
+    `[TANGGAL] - [AKTOR] - [DESKRIPSI PERUBAHAN & FILE YANG DIUBAH]`
+4.  **Commit & Push**: Commit file `task.md` bersamaan dengan source code fitur yang didevelop.
+
+---
+
+## 📜 Riwayat Pembaruan (Changelog)
+
+*   **2026-07-28** - **Antigravity (AI)** - Menginisialisasi repositori Git dan melakukan commit pertama berkas `README.md`.
+*   **2026-07-28** - **Antigravity (AI)** - Membuat boilerplate monorepo: menginisialisasi aplikasi NestJS backend di `apps/backend` dan Next.js 15 frontend di `apps/frontend`.
+*   **2026-07-28** - **Antigravity (AI)** - Membuat skema database multi-tenant Prisma, menjalankan migrasi awal database local PostgreSQL/TimescaleDB, melakukan database seeding dengan data tiruan lengkap, serta mengonversi tabel `Telemetry` menjadi TimescaleDB Hypertable.
+*   **2026-07-28** - **Antigravity (AI)** - Menginstal dependensi `mqtt` dan `@nestjs/config`, membuat layanan global `PrismaService`, membuat dekoder data sensor Endpoint 11/238, serta membuat `MqttService` untuk ingesti data dari EMQX broker.
+*   **2026-07-28** - **Antigravity (AI)** - Membuat berkas panduan progress `task.md` di level root dan menetapkan aturan pencatatan riwayat pembaruan sistem.
+
