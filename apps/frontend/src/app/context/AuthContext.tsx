@@ -80,8 +80,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
         };
 
+        // Only check login if returning from Keycloak authentication flow (prevents redirect to Keycloak 404 page)
+        const hasAuthCallback = window.location.hash.includes('code=') || window.location.search.includes('code=');
+
         const auth = await kc.init({
-          onLoad: 'check-sso', // Let the app check login silently first
+          onLoad: hasAuthCallback ? 'check-sso' : undefined,
           checkLoginIframe: false,
         });
 
