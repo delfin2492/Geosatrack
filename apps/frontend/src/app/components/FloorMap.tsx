@@ -129,14 +129,17 @@ export default function FloorMap({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Detect theme class on <html>
+    const isDark = document.documentElement.classList.contains('dark');
+
     // Clear canvas
     ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
     // 1. Draw Grid Lines
     const gridSpacing = 5; // grid every 5 meters
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(9, 9, 11, 0.05)';
+    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(9, 9, 11, 0.4)';
     ctx.font = '9px monospace';
 
     // Draw grid bounds in meters
@@ -174,11 +177,11 @@ export default function FloorMap({
     const floorHeight = meterToPixel(heightMeters);
 
     ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)'; // Teal boundary
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(9, 9, 11, 0.3)';
     ctx.strokeRect(floorTopLeft.x, floorTopLeft.y, floorWidth, floorHeight);
     
     // Fill warehouse background area slightly
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.015)' : 'rgba(9, 9, 11, 0.015)';
     ctx.fillRect(floorTopLeft.x, floorTopLeft.y, floorWidth, floorHeight);
 
     // 3. Draw Static Anchor Nodes (Mesh routers)
@@ -189,20 +192,22 @@ export default function FloorMap({
       // Draw anchor outer glow pulse
       ctx.beginPath();
       ctx.arc(screenPos.x, screenPos.y, isHovered ? 16 : 10, 0, Math.PI * 2);
-      ctx.fillStyle = isHovered ? 'rgba(99, 102, 241, 0.25)' : 'rgba(99, 102, 241, 0.1)';
+      ctx.fillStyle = isHovered 
+        ? (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(9, 9, 11, 0.15)') 
+        : (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(9, 9, 11, 0.05)');
       ctx.fill();
 
       // Draw anchor border
       ctx.beginPath();
       ctx.arc(screenPos.x, screenPos.y, 6, 0, Math.PI * 2);
       ctx.lineWidth = 2;
-      ctx.strokeStyle = '#6366f1'; // Indigo anchor border
-      ctx.fillStyle = '#0f172a'; // Slate center
+      ctx.strokeStyle = isDark ? '#ffffff' : '#09090b'; 
+      ctx.fillStyle = isDark ? '#09090b' : '#ffffff'; 
       ctx.fill();
       ctx.stroke();
 
       // Label anchor name
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(9, 9, 11, 0.6)';
       ctx.font = 'bold 8px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText(anchor.name, screenPos.x, screenPos.y - 12);
@@ -218,7 +223,7 @@ export default function FloorMap({
         const pulseRadius = 15 + Math.sin(Date.now() / 150) * 4;
         ctx.beginPath();
         ctx.arc(screenPos.x, screenPos.y, pulseRadius, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
+        ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(9, 9, 11, 0.08)';
         ctx.fill();
       }
 
@@ -226,11 +231,11 @@ export default function FloorMap({
       ctx.beginPath();
       ctx.arc(screenPos.x, screenPos.y, isHovered ? 12 : 9, 0, Math.PI * 2);
       if (asset.status === 'tilt_warning' || asset.status === 'fall_detected') {
-        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)'; // Red warning
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)'; // Red warning for anomaly
         ctx.strokeStyle = '#ef4444';
       } else {
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.2)'; // Green online
-        ctx.strokeStyle = '#10b981';
+        ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(9, 9, 11, 0.1)';
+        ctx.strokeStyle = isDark ? '#ffffff' : '#09090b';
       }
       ctx.lineWidth = 2;
       ctx.fill();
@@ -239,11 +244,11 @@ export default function FloorMap({
       // Draw asset inner dot
       ctx.beginPath();
       ctx.arc(screenPos.x, screenPos.y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = isDark ? '#ffffff' : '#09090b';
       ctx.fill();
 
       // Draw text tags
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = isDark ? '#ffffff' : '#09090b';
       ctx.font = 'bold 9px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText(asset.name, screenPos.x, screenPos.y - 14);

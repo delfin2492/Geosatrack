@@ -5,21 +5,24 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useTheme } from '../context/ThemeContext';
 import { 
   Boxes, 
   Map, 
-  Settings, 
   Activity, 
   ShieldAlert, 
   LogOut, 
   User, 
-  Shield 
+  Shield,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { authenticated, username, tenantId, login, logout } = useAuth();
   const { socketStatus } = useSocket();
+  const { theme, toggleTheme } = useTheme();
 
   const navigation = [
     { name: 'Map View', href: '/map', icon: Map },
@@ -37,10 +40,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Logo Brand */}
           <div className="h-16 flex items-center gap-3 px-6 border-b border-border">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/30">
-              <Boxes className="h-5 w-5 text-primary glow-text-primary" />
+              <Boxes className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-base font-bold tracking-tight bg-gradient-to-r from-primary to-emerald-400 bg-clip-text text-transparent">
+              <h2 className="text-base font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
                 Geomesh
               </h2>
               <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
@@ -60,7 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   href={item.href}
                   className={`flex items-center gap-3.5 px-4 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all border ${
                     isActive 
-                      ? 'bg-primary/10 border-primary/20 text-primary glow-text-primary shadow-sm' 
+                      ? 'bg-primary/10 border-primary/20 text-primary shadow-sm' 
                       : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                   }`}
                 >
@@ -73,7 +76,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* User Info & Footer */}
-        <div className="p-4 border-t border-border bg-card/45">
+        <div className="p-4 border-t border-border bg-card/45 space-y-3">
+          {/* Theme Toggler Button */}
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-card hover:bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-mono">Switch</span>
+          </button>
+
           {authenticated ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3 px-2 py-1.5 bg-secondary/35 rounded-lg border border-border/50">
@@ -92,7 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <button
                 onClick={logout}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 text-xs font-semibold text-muted-foreground transition-all"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 text-xs font-semibold text-muted-foreground transition-all cursor-pointer"
               >
                 <LogOut className="h-4 w-4" />
                 Sign Out
@@ -101,7 +116,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           ) : (
             <button
               onClick={login}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 text-xs font-bold text-primary-foreground transition-all shadow-md shadow-primary/25"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 text-xs font-bold text-primary-foreground transition-all shadow-md shadow-primary/25 cursor-pointer"
             >
               <Shield className="h-4 w-4" />
               Sign In Portal
@@ -125,11 +140,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Real-time Connection status */}
             <div className="flex items-center gap-2 rounded-full bg-secondary/55 px-3 py-1 text-xs border border-border">
               <span className="relative flex h-2 w-2">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  socketStatus === 'connected' ? 'bg-emerald-400' : socketStatus === 'connecting' ? 'bg-amber-400' : 'bg-red-400'
-                }`}></span>
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-zinc-400`}></span>
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                  socketStatus === 'connected' ? 'bg-emerald-500' : socketStatus === 'connecting' ? 'bg-amber-500' : 'bg-red-500'
+                  socketStatus === 'connected' ? 'bg-foreground' : 'bg-muted-foreground'
                 }`}></span>
               </span>
               <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
