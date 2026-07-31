@@ -5,8 +5,8 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
 ---
 
 ## 🎯 Fokus Saat Ini
-*   **Fase Sedang Berjalan**: Fase 3 - Pembuatan API RESTful & Integrasi WebSocket Real-Time.
-*   **Target Terdekat**: Integrasi Keycloak Guard untuk otentikasi REST API dan WebSocket (Validasi JWT & hak akses tenant).
+*   **Fase Sedang Berjalan**: Fase 4 - Frontend Next.js 15 & Dashboard (Minggu 10 - 13).
+*   **Target Terdekat**: Setup UI template dasar menggunakan Tailwind CSS & Shadcn/ui dan integrasi Keycloak client di Next.js.
 
 ---
 
@@ -31,16 +31,16 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
 *   [x] Menambahkan logika pemicu peringatan otomatis (`Alert`) untuk baterai lemah, sensor jatuh, atau kemiringan tidak aman.
 *   [x] Uji coba kompilasi kode dan sinkronisasi pembaruan ke GitHub.
 
-### [/] Fase 3: Backend API & Autentikasi (Minggu 7 - 9)
+### [x] Fase 3: Backend API & Autentikasi (Minggu 7 - 9)
 *   [x] Pembuatan modul REST API untuk mengelola data:
     *   [x] Modul Aset (`AssetController` - CRUD & filter tenant)
     *   [x] Modul Peta Zona (`ZoneController` - manajemen koordinat dan gambar denah)
     *   [x] Modul Cabang (`SiteController` & `TenantController`)
 *   [x] Integrasi Swagger/OpenAPI untuk dokumentasi interaktif API backend.
 *   [x] Pembuatan WebSocket Gateway di NestJS untuk menyiarkan status aset dan notifikasi alert secara real-time ke frontend.
-*   [/] Integrasi Keycloak Guard untuk otentikasi REST API dan WebSocket (Validasi JWT & hak akses tenant).
+*   [x] Integrasi Keycloak Guard untuk otentikasi REST API dan WebSocket (Validasi JWT & hak akses tenant).
 
-### [ ] Fase 4: Frontend Next.js 15 & Dashboard (Minggu 10 - 13)
+### [/] Fase 4: Frontend Next.js 15 & Dashboard (Minggu 10 - 13)
 *   [ ] Setup UI template dasar menggunakan Tailwind CSS & Shadcn/ui.
 *   [ ] Integrasi otentikasi Keycloak client di Next.js.
 *   [ ] Peta Denah Lantai 2D (Floor Map Visualizer) menggunakan Canvas/React Konva.
@@ -71,6 +71,7 @@ Setiap kali Anda selesai mengerjakan sebuah langkah, menambahkan fitur, atau men
 
 ## 📜 Riwayat Pembaruan (Changelog)
 
+*   **2026-07-31** - **Antigravity (AI)** - Mengintegrasikan KeycloakConnectModule di backend NestJS untuk validasi JWT token secara offline, serta memperbarui GetTenantId decorator untuk mendeteksi ID penyewa dari payload token Keycloak secara dinamis.
 *   **2026-07-31** - **Antigravity (AI)** - Membuat global WebsocketModule dan WebsocketGateway di backend NestJS untuk menyiarkan real-time sensor updates, alert events, dan tag status perubahan secara real-time ke client room.
 *   **2026-07-31** - **Antigravity (AI)** - Menginisialisasi modul REST API untuk Tenant, Site, Zone, dan Asset dengan isolasi multi-tenant (menggunakan header x-tenant-id via GetTenantId decorator), mengonfigurasi Swagger OpenAPI docs, dan memverifikasi kelayakan build backend.
 *   **2026-07-28** - **Antigravity (AI)** - Menginisialisasi repositori Git dan melakukan commit pertama berkas `README.md`.
