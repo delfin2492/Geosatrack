@@ -6,7 +6,7 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
 
 ## 🎯 Fokus Saat Ini
 *   **Fase Sedang Berjalan**: Fase 4 - Frontend Next.js 15 & Dashboard (Minggu 10 - 13).
-*   **Target Terdekat**: Peta Denah Lantai 2D (Floor Map Visualizer) menggunakan Canvas/React Konva.
+*   **Target Terdekat**: Peta Topologi Jaringan Mesh menggunakan React Flow.
 
 ---
 
@@ -43,8 +43,8 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
 ### [/] Fase 4: Frontend Next.js 15 & Dashboard (Minggu 10 - 13)
 *   [x] Setup UI template dasar menggunakan Tailwind CSS & Shadcn/ui.
 *   [x] Integrasi otentikasi Keycloak client di Next.js.
-*   [/] Peta Denah Lantai 2D (Floor Map Visualizer) menggunakan Canvas/React Konva.
-*   [ ] Peta Topologi Jaringan Mesh menggunakan React Flow.
+*   [x] Peta Denah Lantai 2D (Floor Map Visualizer) menggunakan Canvas/React Konva.
+*   [/] Peta Topologi Jaringan Mesh menggunakan React Flow.
 *   [ ] Visualisasi analitik menggunakan grafik histori (suhu, kelembapan, status baterai).
 
 ### [ ] Fase 5: QA, Simulasi Skala & Tuning (Minggu 14 - 16)
@@ -71,6 +71,7 @@ Setiap kali Anda selesai mengerjakan sebuah langkah, menambahkan fitur, atau men
 
 ## 📜 Riwayat Pembaruan (Changelog)
 
+*   **2026-07-31** - **Antigravity (AI)** - Membuat dan mengintegrasikan komponen FloorMap berbasis HTML5 canvas yang mendukung zoom, pan, gridlines, detail data tag via hover, dan drag-and-drop koordinat Anchor node ke page.tsx.
 *   **2026-07-31** - **Antigravity (AI)** - Menyiapkan template UI Next.js 15 menggunakan Tailwind CSS v4, mengimplementasikan AuthProvider berbasis keycloak-js untuk otentikasi client-side, dan mendesain dashboard monitoring interaktif real-time dengan simulator.
 *   **2026-07-31** - **Antigravity (AI)** - Mengintegrasikan KeycloakConnectModule di backend NestJS untuk validasi JWT token secara offline, serta memperbarui GetTenantId decorator untuk mendeteksi ID penyewa dari payload token Keycloak secara dinamis.
 *   **2026-07-31** - **Antigravity (AI)** - Membuat global WebsocketModule dan WebsocketGateway di backend NestJS untuk menyiarkan real-time sensor updates, alert events, dan tag status perubahan secara real-time ke client room.

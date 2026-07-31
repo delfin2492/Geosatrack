@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from './context/AuthContext';
 import { io, Socket } from 'socket.io-client';
+import FloorMap from './components/FloorMap';
 import { 
   Boxes, 
   Wifi, 
@@ -65,6 +66,43 @@ export default function Dashboard() {
   const [simulationActive, setSimulationActive] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  // Manage Anchors Position state on map
+  const [anchors, setAnchors] = useState<any[]>([
+    { id: 'anchor-1', name: 'Anchor North-East', x: 48, y: 10 },
+    { id: 'anchor-2', name: 'Anchor South-West', x: 12, y: 30 },
+  ]);
+
+  // Convert raw assets to visual MapAssets
+  const getMapAssets = () => {
+    return assets.map((asset, index) => {
+      // Base positions for demonstration
+      const baseCoords = [
+        { x: 22, y: 15 }, // Forklift
+        { x: 40, y: 26 }, // Pallet
+        { x: 30, y: 10 }, // Container
+      ];
+      const pos = { ...baseCoords[index % baseCoords.length] };
+      
+      // If forklift and simulation is active, add some offset
+      if (asset.id === 'forklift-1' && simulationActive) {
+        // Move forklift around in a circle/orbit
+        const time = Date.now() / 3000;
+        pos.x = 22 + Math.sin(time) * 12;
+        pos.y = 15 + Math.cos(time) * 6;
+      }
+
+      return {
+        id: asset.id,
+        name: asset.name,
+        type: asset.type,
+        status: asset.status,
+        x: pos.x,
+        y: pos.y,
+        tag: asset.tag,
+      };
+    });
+  };
 
   // Default Mock Data for rich visualization
   const mockAssets: Asset[] = [
@@ -428,77 +466,18 @@ export default function Dashboard() {
         {/* MAP & DETAIL LAYOUT */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* LEFT: 2D FLOOR MAP CANVAS MOCKUP (Col span 2) */}
-          <div className="lg:col-span-2 glass-panel rounded-xl overflow-hidden flex flex-col border">
-            <div className="border-b px-4 py-3 flex items-center justify-between bg-card/50">
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-bold tracking-wide">Floor Plan Visualizer (Storage Zone Alpha)</h3>
-              </div>
-              <div className="flex gap-2">
-                <span className="text-[10px] bg-secondary px-2.5 py-1 rounded border border-border font-bold">Lantai 1</span>
-                <span className="text-[10px] bg-secondary px-2.5 py-1 rounded border border-border font-bold text-muted-foreground">Lantai 2</span>
-              </div>
-            </div>
-
-            {/* Map Canvas Background Container */}
-            <div 
-              ref={mapContainerRef}
-              className="relative h-[360px] bg-zinc-950 flex items-center justify-center overflow-hidden"
-              style={{
-                backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0)',
-                backgroundSize: '24px 24px'
+          {/* LEFT: 2D FLOOR MAP CANVAS (Col span 2) */}
+          <div className="lg:col-span-2 h-[460px] flex flex-col">
+            <FloorMap 
+              assets={getMapAssets()} 
+              anchors={anchors}
+              onAnchorUpdate={(id, x, y) => {
+                console.log(`Saved anchor ${id} position: ${x}m, ${y}m`);
+                setAnchors((prev) => prev.map((a) => (a.id === id ? { ...a, x, y } : a)));
               }}
-            >
-              {/* Floor layout outlines */}
-              <div className="absolute inset-10 border border-dashed border-border/40 rounded-lg flex items-center justify-center bg-card/10">
-                <span className="text-xs text-muted-foreground/30 font-semibold tracking-wider uppercase">Storage Racks Area</span>
-              </div>
-
-              {/* Dynamic tag visualization */}
-              {assets.map((asset, index) => {
-                // Fixed coordinates for demonstration
-                const coords = [
-                  { x: '35%', y: '40%' }, // Forklift
-                  { x: '65%', y: '65%' }, // Pallet
-                  { x: '50%', y: '25%' }  // Container
-                ];
-                const pos = coords[index % coords.length];
-
-                return (
-                  <div
-                    key={asset.id}
-                    onClick={() => setSelectedAsset(asset)}
-                    className="absolute cursor-pointer transform -translate-x-1/2 -translate-y-1/2 group z-10"
-                    style={{ left: pos.x, top: pos.y }}
-                  >
-                    {/* Ring Pulse for activity */}
-                    {asset.status === 'moving' && (
-                      <div className="absolute -inset-2 bg-primary/20 rounded-full animate-signal-ring pointer-events-none" />
-                    )}
-
-                    {/* Tag Signal Dot */}
-                    <div className={`h-6 w-6 rounded-full flex items-center justify-center border-2 transition-all ${
-                      asset.status === 'tilt_warning' || asset.status === 'fall_detected'
-                        ? 'bg-red-500/80 border-red-300 animate-pulse'
-                        : 'bg-primary/80 border-primary-foreground'
-                    }`}>
-                      <Boxes className="h-3 w-3 text-white" />
-                    </div>
-
-                    {/* Text Label on Hover */}
-                    <div className="absolute top-7 left-1/2 transform -translate-x-1/2 bg-card border border-border px-2 py-0.5 rounded text-[9px] font-bold text-foreground opacity-90 group-hover:opacity-100 whitespace-nowrap shadow-lg">
-                      {asset.name}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            
-            <div className="border-t px-4 py-2.5 bg-card/30 flex items-center justify-between text-xs text-muted-foreground">
-              <p>💡 Tip: Click on any dot to inspect asset telemetries.</p>
-              <p>Coord: EPSG:3857 (Warehouse System)</p>
-            </div>
+              widthMeters={60}
+              heightMeters={40}
+            />
           </div>
 
           {/* RIGHT: SELECTED ASSET TELEMETRY & ALERTS */}
