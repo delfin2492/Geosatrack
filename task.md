@@ -6,7 +6,7 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
 
 ## 🎯 Fokus Saat Ini
 *   **Fase Sedang Berjalan**: Fase 3 - Pembuatan API RESTful & Integrasi WebSocket Real-Time.
-*   **Target Terdekat**: Membuat WebSocket Gateway di NestJS untuk menyiarkan status aset dan notifikasi alert secara real-time ke frontend.
+*   **Target Terdekat**: Integrasi Keycloak Guard untuk otentikasi REST API dan WebSocket (Validasi JWT & hak akses tenant).
 
 ---
 
@@ -37,8 +37,8 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
     *   [x] Modul Peta Zona (`ZoneController` - manajemen koordinat dan gambar denah)
     *   [x] Modul Cabang (`SiteController` & `TenantController`)
 *   [x] Integrasi Swagger/OpenAPI untuk dokumentasi interaktif API backend.
-*   [/] Pembuatan WebSocket Gateway di NestJS untuk menyiarkan status aset dan notifikasi alert secara real-time ke frontend.
-*   [ ] Integrasi Keycloak Guard untuk otentikasi REST API dan WebSocket (Validasi JWT & hak akses tenant).
+*   [x] Pembuatan WebSocket Gateway di NestJS untuk menyiarkan status aset dan notifikasi alert secara real-time ke frontend.
+*   [/] Integrasi Keycloak Guard untuk otentikasi REST API dan WebSocket (Validasi JWT & hak akses tenant).
 
 ### [ ] Fase 4: Frontend Next.js 15 & Dashboard (Minggu 10 - 13)
 *   [ ] Setup UI template dasar menggunakan Tailwind CSS & Shadcn/ui.
@@ -71,6 +71,7 @@ Setiap kali Anda selesai mengerjakan sebuah langkah, menambahkan fitur, atau men
 
 ## 📜 Riwayat Pembaruan (Changelog)
 
+*   **2026-07-31** - **Antigravity (AI)** - Membuat global WebsocketModule dan WebsocketGateway di backend NestJS untuk menyiarkan real-time sensor updates, alert events, dan tag status perubahan secara real-time ke client room.
 *   **2026-07-31** - **Antigravity (AI)** - Menginisialisasi modul REST API untuk Tenant, Site, Zone, dan Asset dengan isolasi multi-tenant (menggunakan header x-tenant-id via GetTenantId decorator), mengonfigurasi Swagger OpenAPI docs, dan memverifikasi kelayakan build backend.
 *   **2026-07-28** - **Antigravity (AI)** - Menginisialisasi repositori Git dan melakukan commit pertama berkas `README.md`.
 *   **2026-07-28** - **Antigravity (AI)** - Membuat boilerplate monorepo: menginisialisasi aplikasi NestJS backend di `apps/backend` dan Next.js 15 frontend di `apps/frontend`.

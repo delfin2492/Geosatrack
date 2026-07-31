@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as mqtt from 'mqtt';
 import { PrismaService } from '../prisma/prisma.service';
 import { DecoderService, TelemetryPayload, StatusPayload } from '../decoders/decoder.service';
+import { WebsocketGateway } from '../modules/websocket/websocket.gateway';
 
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
@@ -13,6 +14,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly decoder: DecoderService,
+    private readonly websocketGateway: WebsocketGateway,
   ) {}
 
   onModuleInit() {
@@ -130,6 +132,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
+    // Broadcast Tag Update
+    this.websocketGateway.sendToTenant(tenantId, 'tagUpdate', tag);
+
     // 2. Fetch the Asset linked to this Tag
     const asset = await this.prisma.asset.findUnique({
       where: { tagId: tag.id },
@@ -141,10 +146,24 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       const newStatus = this.decoder.evaluateAssetStatus(telemetry, mockStatus);
 
       // Update Asset Status
-      await this.prisma.asset.update({
+      const updatedAsset = await this.prisma.asset.update({
         where: { id: asset.id },
         data: { status: newStatus },
+        include: {
+          zone: {
+            select: {
+              name: true,
+              site: {
+                select: { name: true },
+              },
+            },
+          },
+          tag: true,
+        },
       });
+
+      // Broadcast Asset Update
+      this.websocketGateway.sendToTenant(tenantId, 'assetUpdate', updatedAsset);
 
       // Handle Alerting if anomaly is detected
       if (newStatus === 'fall_detected') {
@@ -155,7 +174,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 3. Write raw telemetry to TimescaleDB
-    await this.prisma.telemetry.create({
+    const rawTelemetry = await this.prisma.telemetry.create({
       data: {
         timestamp: new Date(),
         tagId,
@@ -171,6 +190,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         hall: hall_sensor,
       },
     });
+
+    // Broadcast raw telemetry log
+    this.websocketGateway.sendToTenant(tenantId, 'telemetryNew', rawTelemetry);
   }
 
   private async processStatus(tenantId: string, tagId: string, status: StatusPayload) {
@@ -193,6 +215,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
+    // Broadcast Tag Update
+    this.websocketGateway.sendToTenant(tenantId, 'tagUpdate', tag);
+
     // 2. Fetch the Asset linked to this Tag
     const asset = await this.prisma.asset.findUnique({
       where: { tagId: tag.id },
@@ -203,10 +228,24 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       const dummyTelemetry: TelemetryPayload = { accel_z: 1.0, pitch: 0, roll: 0 };
       const newStatus = this.decoder.evaluateAssetStatus(dummyTelemetry, status);
 
-      await this.prisma.asset.update({
+      const updatedAsset = await this.prisma.asset.update({
         where: { id: asset.id },
         data: { status: newStatus },
+        include: {
+          zone: {
+            select: {
+              name: true,
+              site: {
+                select: { name: true },
+              },
+            },
+          },
+          tag: true,
+        },
       });
+
+      // Broadcast Asset Update
+      this.websocketGateway.sendToTenant(tenantId, 'assetUpdate', updatedAsset);
 
       // Trigger low battery alert if voltage is under 2.8V
       if (battery_voltage && battery_voltage < 2.8) {
@@ -241,7 +280,13 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         tenantId,
         assetId,
       },
+      include: {
+        asset: true,
+      },
     });
+
+    // Broadcast new alert event
+    this.websocketGateway.sendToTenant(tenantId, 'alertNew', alert);
 
     this.logger.warn(`⚠️ ALERT CREATED [${type}]: ${message} (Alert ID: ${alert.id})`);
   }
