@@ -97,7 +97,7 @@ graph TD
 Platform ini menggunakan pendekatan monorepo untuk mempermudah pengembangan dan kolaborasi tim:
 
 ```
-geosatrack/
+geomesh/
 ├── apps/
 │   ├── backend/                  # NestJS Application API Services
 │   │   ├── src/
@@ -225,7 +225,7 @@ Dashboard dirancang menggunakan kerangka Next.js 15 dengan pustaka UI premium (T
 
 ```
 +-------------------------------------------------------------------------------+
-| [Logo] GeoSaTrack   [Tenant: PT ABC Logistics]           [User: Admin]        |
+| [Logo] Geomesh      [Tenant: PT ABC Logistics]           [User: Admin]        |
 +-------------------------------------------------------------------------------+
 |  Overview  |  Floor Plan  |  Mesh Topology  |  Alerts  |  Analytics  | Config |
 +-------------------------------------------------------------------------------+
@@ -298,4 +298,4 @@ gantt
 
 ---
 
-*Dikembangkan oleh Tim IoT Geosatrack. Untuk informasi lebih lanjut mengenai dokumentasi API dan lisensi, silakan hubungi tim pengembang atau buka bagian `apps/backend/docs`.*
+*Dikembangkan oleh Tim IoT Geomesh. Untuk informasi lebih lanjut mengenai dokumentasi API dan lisensi, silakan hubungi tim pengembang atau buka bagian `apps/backend/docs`.*

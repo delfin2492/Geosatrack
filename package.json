@@ -1,8 +1,8 @@
 {
-  "name": "geosatrack-monorepo",
+  "name": "geomesh-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "Monorepo for Wirepas Mesh Asset Tracking Platform (GeoSaTrack)",
+  "description": "Monorepo for Wirepas Mesh Asset Tracking Platform (Geomesh)",
   "scripts": {
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
@@ -27,6 +27,6 @@
     "nextjs",
     "timescaledb"
   ],
-  "author": "Geosatrack Team",
+  "author": "Geomesh Team",
   "license": "ISC"
 }

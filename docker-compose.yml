@@ -4,13 +4,13 @@ services:
   # 1. EMQX MQTT Broker (Broker IoT)
   emqx:
     image: emqx/emqx:5.7.0
-    container_name: geosatrack-emqx
+    container_name: geomesh-emqx
     ports:
       - "1883:1883"      # Port MQTT TCP
       - "8083:8083"      # Port MQTT WebSockets
       - "18083:18083"    # EMQX Dashboard
     environment:
-      - "EMQX_DASHBOARD__BOOTSTRAP_USER_PASSWD=admin_geosatrack"
+      - "EMQX_DASHBOARD__BOOTSTRAP_USER_PASSWD=admin_geomesh"
     volumes:
       - emqx-data:/opt/emqx/data
     restart: always
@@ -18,11 +18,11 @@ services:
   # 2. Database PostgreSQL + TimescaleDB (Relational & Time-Series)
   timescaledb:
     image: timescale/timescaledb:latest-pg16
-    container_name: geosatrack-db
+    container_name: geomesh-db
     ports:
       - "5432:5432"      # Port PostgreSQL/TimescaleDB
     environment:
-      - POSTGRES_DB=geosatrack
+      - POSTGRES_DB=geomesh
       - POSTGRES_USER=geouser
       - POSTGRES_PASSWORD=geopassword
     volumes:
@@ -32,7 +32,7 @@ services:
   # 3. Redis Cache (Penyimpanan state & koordinat real-time)
   redis:
     image: redis:7.2-alpine
-    container_name: geosatrack-redis
+    container_name: geomesh-redis
     ports:
       - "6379:6379"
     volumes:
@@ -42,7 +42,7 @@ services:
   # 4. Identity & Access Management (Keycloak OAuth2/OIDC)
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
-    container_name: geosatrack-auth
+    container_name: geomesh-auth
     command: start-dev
     ports:
       - "8080:8080"

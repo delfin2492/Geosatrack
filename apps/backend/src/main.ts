@@ -15,7 +15,7 @@ async function bootstrap() {
 
   // Swagger Setup
   const config = new DocumentBuilder()
-    .setTitle('GeoSaTrack API')
+    .setTitle('Geomesh API')
     .setDescription(
       'Platform Asset Tracking Multi‑Tenant Industri (Wirepas + Teltonika) API Documentation',
     )

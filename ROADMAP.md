@@ -8,7 +8,7 @@ Dokumen ini berisi panduan terstruktur dari awal pembuatan lingkungan pengembang
 
 ```mermaid
 gantt
-    title Estimasi Linimasa Pengembangan Geosatrack
+    title Estimasi Linimasa Pengembangan Geomesh
     dateFormat  YYYY-MM-DD
     axisFormat %W
     

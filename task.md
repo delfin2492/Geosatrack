@@ -1,4 +1,4 @@
-# 📋 Progress & Task Tracker: GeoSaTrack
+# 📋 Progress & Task Tracker: Geomesh
 
 Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenant (Wirepas Mesh + Teltonika). File ini dirancang agar agen AI Antigravity di perangkat mana pun dapat langsung membaca status pengerjaan saat ini dan melanjutkan tanpa perlu mempelajari ulang seluruh konsep dari nol.
 
