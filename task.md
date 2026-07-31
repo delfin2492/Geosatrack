@@ -6,7 +6,7 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
 
 ## 🎯 Fokus Saat Ini
 *   **Fase Sedang Berjalan**: Fase 3 - Pembuatan API RESTful & Integrasi WebSocket Real-Time.
-*   **Target Terdekat**: Membuat modul REST API untuk mengekspos data Aset, Cabang (Sites), dan Peta Zona (Zones) untuk frontend Next.js.
+*   **Target Terdekat**: Membuat WebSocket Gateway di NestJS untuk menyiarkan status aset dan notifikasi alert secara real-time ke frontend.
 
 ---
 
@@ -32,12 +32,12 @@ Dokumen ini melacak status pengerjaan proyek Platform Asset Tracking Multi-Tenan
 *   [x] Uji coba kompilasi kode dan sinkronisasi pembaruan ke GitHub.
 
 ### [/] Fase 3: Backend API & Autentikasi (Minggu 7 - 9)
-*   [/] Pembuatan modul REST API untuk mengelola data:
-    *   [ ] Modul Aset (`AssetController` - CRUD & filter tenant)
-    *   [ ] Modul Peta Zona (`ZoneController` - manajemen koordinat dan gambar denah)
-    *   [ ] Modul Cabang (`SiteController` & `TenantController`)
-*   [ ] Integrasi Swagger/OpenAPI untuk dokumentasi interaktif API backend.
-*   [ ] Pembuatan WebSocket Gateway di NestJS untuk menyiarkan status aset dan notifikasi alert secara real-time ke frontend.
+*   [x] Pembuatan modul REST API untuk mengelola data:
+    *   [x] Modul Aset (`AssetController` - CRUD & filter tenant)
+    *   [x] Modul Peta Zona (`ZoneController` - manajemen koordinat dan gambar denah)
+    *   [x] Modul Cabang (`SiteController` & `TenantController`)
+*   [x] Integrasi Swagger/OpenAPI untuk dokumentasi interaktif API backend.
+*   [/] Pembuatan WebSocket Gateway di NestJS untuk menyiarkan status aset dan notifikasi alert secara real-time ke frontend.
 *   [ ] Integrasi Keycloak Guard untuk otentikasi REST API dan WebSocket (Validasi JWT & hak akses tenant).
 
 ### [ ] Fase 4: Frontend Next.js 15 & Dashboard (Minggu 10 - 13)
@@ -71,6 +71,7 @@ Setiap kali Anda selesai mengerjakan sebuah langkah, menambahkan fitur, atau men
 
 ## 📜 Riwayat Pembaruan (Changelog)
 
+*   **2026-07-31** - **Antigravity (AI)** - Menginisialisasi modul REST API untuk Tenant, Site, Zone, dan Asset dengan isolasi multi-tenant (menggunakan header x-tenant-id via GetTenantId decorator), mengonfigurasi Swagger OpenAPI docs, dan memverifikasi kelayakan build backend.
 *   **2026-07-28** - **Antigravity (AI)** - Menginisialisasi repositori Git dan melakukan commit pertama berkas `README.md`.
 *   **2026-07-28** - **Antigravity (AI)** - Membuat boilerplate monorepo: menginisialisasi aplikasi NestJS backend di `apps/backend` dan Next.js 15 frontend di `apps/frontend`.
 *   **2026-07-28** - **Antigravity (AI)** - Membuat skema database multi-tenant Prisma, menjalankan migrasi awal database local PostgreSQL/TimescaleDB, melakukan database seeding dengan data tiruan lengkap, serta mengonversi tabel `Telemetry` menjadi TimescaleDB Hypertable.
