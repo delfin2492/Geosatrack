@@ -395,16 +395,24 @@ export default function AssetsPage() {
 
     const L = require('leaflet');
 
+    // Clean up potential left-over Leaflet ID to prevent reuse errors
+    if ((mapContainer as any)._leaflet_id) {
+      (mapContainer as any)._leaflet_id = null;
+    }
+
     // Jakarta coordinate defaults
     const initialLat = latitude ? parseFloat(latitude) : -6.2444;
     const initialLng = longitude ? parseFloat(longitude) : 106.8505;
 
-    // Standardize marker icons pathing
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
+    // Use custom icon created explicitly with CDN paths to prevent default asset 404s
+    const customIcon = L.icon({
       iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
       iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
       shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
     });
 
     const map = L.map(mapContainer).setView([initialLat, initialLng], 12);
@@ -415,7 +423,7 @@ export default function AssetsPage() {
 
     let marker: any = null;
     if (latitude && longitude) {
-      marker = L.marker([initialLat, initialLng]).addTo(map);
+      marker = L.marker([initialLat, initialLng], { icon: customIcon }).addTo(map);
     }
 
     map.on('click', (e: any) => {
@@ -426,7 +434,7 @@ export default function AssetsPage() {
       if (marker) {
         marker.setLatLng(e.latlng);
       } else {
-        marker = L.marker(e.latlng).addTo(map);
+        marker = L.marker(e.latlng, { icon: customIcon }).addTo(map);
       }
     });
 
