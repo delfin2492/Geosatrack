@@ -111,7 +111,7 @@ export default function AssetsPage() {
     const asset = assets.find((a) => a.id === id);
     if (asset) {
       setEditName(asset.name);
-      setEditDesc(asset.description || 'Peralatan operasional logistik.');
+      setEditDesc(asset.description || 'Logistics operational equipment.');
       setEditType(asset.type);
     }
     setIsEditingAsset(false);
@@ -378,7 +378,7 @@ export default function AssetsPage() {
                       <div>
                         <h4 className="text-lg font-bold text-foreground">{selectedAsset.name}</h4>
                         <p className="text-xs text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
-                          {selectedAsset.description || 'Peralatan operasional gudang, terhubung ke sensor tag dengan koordinat terpetakan di Floor Plan.'}
+                          {selectedAsset.description || 'Warehouse operational equipment, connected to a sensor tag with coordinates mapped in the Floor Plan.'}
                         </p>
                       </div>
 
@@ -507,7 +507,7 @@ export default function AssetsPage() {
                           onClick={() => setIsEditingAgent(false)}
                           className="text-muted-foreground hover:text-foreground font-bold"
                         >
-                          Batal
+                          Cancel
                         </button>
                       )}
                     </div>

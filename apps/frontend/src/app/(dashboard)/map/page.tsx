@@ -126,7 +126,7 @@ export default function MapPage() {
               OpenStreetMap Indonesia & Wirepas Mesh Visualizer
             </h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Peta Asli OpenStreetMap Indonesia (Jakarta, Surabaya, Balikpapan/IKN, Medan) & Denah Floor Plan.
+              Original OpenStreetMap Indonesia (Jakarta, Surabaya, Balikpapan/IKN, Medan) & Indoor Floor Plan layout.
             </p>
           </div>
           
@@ -136,7 +136,7 @@ export default function MapPage() {
             className="flex items-center gap-1.5 text-xs py-1.5 px-3 h-8"
           >
             <Play className={`h-3 w-3 ${simulationActive ? 'animate-spin' : ''}`} />
-            {simulationActive ? 'Simulasi Active' : 'Start Simulator'}
+            {simulationActive ? 'Simulation Active' : 'Start Simulator'}
           </Button>
         </div>
 
@@ -241,7 +241,7 @@ export default function MapPage() {
             </>
           ) : (
             <p className="text-center text-xs text-muted-foreground py-8">
-              Pilih Mesh Node pada peta.
+              Select a Mesh Node on the map.
             </p>
           )}
         </CardContent>

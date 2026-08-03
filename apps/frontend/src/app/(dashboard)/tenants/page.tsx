@@ -17,9 +17,7 @@ import {
 import {
   Building2,
   Plus,
-  Crown,
   AlertCircle,
-  ArrowRight,
   RefreshCw,
   Search,
   Edit,
@@ -42,7 +40,7 @@ interface TenantItem {
 }
 
 export default function TenantsPage() {
-  const { isSuperAdmin, tenantId, switchTenantContext } = useAuth();
+  const { isSuperAdmin, tenantId } = useAuth();
 
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +94,7 @@ export default function TenantsPage() {
     setMsgSuccess(null);
 
     if (!companyName || !adminName || !adminEmail) {
-      setMsgError('Harap lengkapi nama perusahaan, nama admin, dan email admin.');
+      setMsgError('Please enter company name, admin name, and admin email.');
       return;
     }
 
@@ -119,10 +117,10 @@ export default function TenantsPage() {
       const result = await res.json();
 
       if (!res.ok) {
-        throw new Error(result.message || 'Gagal mendaftarkan tenant.');
+        throw new Error(result.message || 'Failed to register tenant.');
       }
 
-      setMsgSuccess(`Tenant "${result.tenant.name}" berhasil dibuat!`);
+      setMsgSuccess(`Tenant "${result.tenant.name}" successfully created!`);
       setCompanyName('');
       setAdminName('');
       setAdminEmail('');
@@ -135,7 +133,7 @@ export default function TenantsPage() {
         setMsgSuccess(null);
       }, 1500);
     } catch (err: any) {
-      setMsgError(err.message || 'Terjadi kesalahan saat membuat tenant.');
+      setMsgError(err.message || 'An error occurred during tenant creation.');
     } finally {
       setIsSubmitting(false);
     }
@@ -176,24 +174,24 @@ export default function TenantsPage() {
       const result = await res.json();
 
       if (!res.ok) {
-        throw new Error(result.message || 'Gagal mengubah tenant.');
+        throw new Error(result.message || 'Failed to update tenant.');
       }
 
-      setMsgSuccess(`Tenant "${result.name}" berhasil diperbarui.`);
+      setMsgSuccess(`Tenant "${result.name}" successfully updated.`);
       fetchTenants();
       setTimeout(() => {
         setShowEditModal(false);
         setMsgSuccess(null);
       }, 1500);
     } catch (err: any) {
-      setMsgError(err.message || 'Terjadi kesalahan.');
+      setMsgError(err.message || 'An error occurred.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteTenant = async (id: string, name: string) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus tenant "${name}"? Semua aset dan user terkait akan terhapus permanen.`)) {
+    if (!window.confirm(`Are you sure you want to delete tenant "${name}"? All associated assets and users will be permanently deleted.`)) {
       return;
     }
 
@@ -205,13 +203,13 @@ export default function TenantsPage() {
 
       if (!res.ok) {
         const result = await res.json();
-        throw new Error(result.message || 'Gagal menghapus tenant.');
+        throw new Error(result.message || 'Failed to delete tenant.');
       }
 
-      alert(`Tenant "${name}" berhasil dihapus.`);
+      alert(`Tenant "${name}" successfully deleted.`);
       fetchTenants();
     } catch (err: any) {
-      alert(err.message || 'Terjadi kesalahan saat menghapus.');
+      alert(err.message || 'An error occurred during deletion.');
     }
   };
 
@@ -225,9 +223,9 @@ export default function TenantsPage() {
         <div className="p-4 rounded-full bg-destructive/10 text-destructive w-12 h-12 mx-auto flex items-center justify-center">
           <AlertCircle className="h-6 w-6" />
         </div>
-        <h2 className="text-sm font-bold text-foreground">Akses Terbatas (Superadmin Only)</h2>
+        <h2 className="text-sm font-bold text-foreground">Access Denied (Superadmin Only)</h2>
         <p className="text-xs text-muted-foreground max-w-md mx-auto">
-          Halaman Pengelolaan Tenant hanya dapat diakses oleh akun Superadmin (`superadmin@geomesh.io`).
+          The Tenant Management page can only be accessed by the Superadmin account (`superadmin@geomesh.io`).
         </p>
       </div>
     );
@@ -242,14 +240,14 @@ export default function TenantsPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="p-1.5 rounded-lg bg-secondary border text-foreground">
-                <Crown className="h-4 w-4" />
+                <Building2 className="h-4 w-4" />
               </span>
               <h2 className="text-sm font-bold tracking-tight text-foreground">
-                Manajemen Multi-Tenant (Superadmin Panel)
+                Multi-Tenant Management
               </h2>
             </div>
             <p className="text-xs text-muted-foreground">
-              Kelola seluruh organisasi / tenant terdaftar, buat akun admin baru, dan atur batas kuota lisensi.
+              Manage all registered organizations and tenants, create admin accounts, and configure license limits.
             </p>
           </div>
 
@@ -272,7 +270,7 @@ export default function TenantsPage() {
               className="flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
-              Buat Tenant Baru
+              Create New Tenant
             </Button>
           </div>
         </div>
@@ -284,14 +282,14 @@ export default function TenantsPage() {
           <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
             type="text"
-            placeholder="Cari nama tenant / perusahaan..."
+            placeholder="Search tenant or company name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="text-xs text-muted-foreground font-mono">
-          Total: <span className="text-foreground font-bold">{tenants.length}</span> Tenant
+          Total: <span className="text-foreground font-bold">{tenants.length}</span> Tenants
         </div>
       </div>
 
@@ -300,25 +298,25 @@ export default function TenantsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nama Tenant</TableHead>
+              <TableHead>Tenant Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Limit Agents</TableHead>
               <TableHead>Limit Assets</TableHead>
-              <TableHead>Registrasi Date</TableHead>
-              <TableHead className="text-right">Aksi</TableHead>
+              <TableHead>Registration Date</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                  Memuat data tenant...
+                  Loading tenants...
                 </TableCell>
               </TableRow>
             ) : filteredTenants.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                  Tidak ada tenant yang cocok dengan pencarian.
+                  No tenants found matching your search.
                 </TableCell>
               </TableRow>
             ) : (
@@ -351,17 +349,6 @@ export default function TenantsPage() {
                     <TableCell className="text-muted-foreground font-mono">{regDate}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          onClick={() => switchTenantContext(t.id, t.name)}
-                          disabled={isCurrent}
-                          variant={isCurrent ? "ghost" : "outline"}
-                          size="sm"
-                          className="text-[10px] font-bold h-7.5"
-                        >
-                          <span>{isCurrent ? 'Context Active' : 'Switch'}</span>
-                          {!isCurrent && <ArrowRight className="h-3 w-3 ml-1" />}
-                        </Button>
-                        
                         <Button
                           onClick={() => handleOpenEdit(t)}
                           variant="outline"
@@ -396,7 +383,7 @@ export default function TenantsPage() {
             <CardHeader className="py-4 flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-4.5 w-4.5 text-primary" />
-                Registrasi Tenant Baru
+                Register New Tenant
               </CardTitle>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -423,30 +410,30 @@ export default function TenantsPage() {
               <form onSubmit={handleCreateTenant} className="space-y-3.5">
                 <div className="grid grid-cols-2 gap-3.5">
                   <div className="space-y-1.5">
-                    <label className="text-muted-foreground">Nama Perusahaan / Tenant *</label>
+                    <label className="text-muted-foreground">Company Name / Tenant *</label>
                     <Input
                       type="text"
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
                       required
-                      placeholder="PT Borneo Mining Logistik"
+                      placeholder="e.g. PT Borneo Mining Logistik"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-muted-foreground">Nama Administrator *</label>
+                    <label className="text-muted-foreground">Admin Name *</label>
                     <Input
                       type="text"
                       value={adminName}
                       onChange={(e) => setAdminName(e.target.value)}
                       required
-                      placeholder="Eko Prasetyo"
+                      placeholder="e.g. Eko Prasetyo"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3.5">
                   <div className="space-y-1.5">
-                    <label className="text-muted-foreground">Email Admin *</label>
+                    <label className="text-muted-foreground">Admin Email *</label>
                     <Input
                       type="email"
                       value={adminEmail}
@@ -456,7 +443,7 @@ export default function TenantsPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-muted-foreground">Kata Sandi Admin Default</label>
+                    <label className="text-muted-foreground">Default Admin Password</label>
                     <Input
                       type="text"
                       value={adminPassword}
@@ -468,7 +455,7 @@ export default function TenantsPage() {
 
                 <div className="grid grid-cols-2 gap-3.5">
                   <div className="space-y-1.5">
-                    <label className="text-muted-foreground">Limit Agents</label>
+                    <label className="text-muted-foreground">Agent Limit</label>
                     <Input
                       type="number"
                       value={agentLimit}
@@ -477,7 +464,7 @@ export default function TenantsPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-muted-foreground">Limit Assets</label>
+                    <label className="text-muted-foreground">Asset Limit</label>
                     <Input
                       type="number"
                       value={assetLimit}
@@ -493,13 +480,13 @@ export default function TenantsPage() {
                     onClick={() => setShowCreateModal(false)}
                     variant="outline"
                   >
-                    Batal
+                    Cancel
                   </Button>
                   <Button
                     type="submit"
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Memproses...' : 'Simpan & Buat Tenant'}
+                    {isSubmitting ? 'Processing...' : 'Save & Register'}
                   </Button>
                 </div>
               </form>
@@ -515,7 +502,7 @@ export default function TenantsPage() {
             <CardHeader className="py-4 flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Building2 className="h-4.5 w-4.5 text-primary" />
-                Ubah Konfigurasi Tenant
+                Edit Tenant Configuration
               </CardTitle>
               <button
                 onClick={() => setShowEditModal(false)}
@@ -541,7 +528,7 @@ export default function TenantsPage() {
 
               <form onSubmit={handleEditTenant} className="space-y-3.5">
                 <div className="space-y-1.5">
-                  <label className="text-muted-foreground">Nama Perusahaan / Tenant</label>
+                  <label className="text-muted-foreground">Company / Tenant Name</label>
                   <Input
                     type="text"
                     value={editName}
@@ -551,21 +538,21 @@ export default function TenantsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-muted-foreground">Status Lisensi</label>
+                  <label className="text-muted-foreground">License Status</label>
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
                     className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
                   >
-                    <option value="active">active (Aktif)</option>
-                    <option value="inactive">inactive (Nonaktif)</option>
-                    <option value="suspended">suspended (Ditangguhkan)</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
                   </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-muted-foreground">Limit Agents</label>
+                    <label className="text-muted-foreground">Agent Limit</label>
                     <Input
                       type="number"
                       value={editAgentLimit}
@@ -574,7 +561,7 @@ export default function TenantsPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-muted-foreground">Limit Assets</label>
+                    <label className="text-muted-foreground">Asset Limit</label>
                     <Input
                       type="number"
                       value={editAssetLimit}
@@ -590,13 +577,13 @@ export default function TenantsPage() {
                     onClick={() => setShowEditModal(false)}
                     variant="outline"
                   >
-                    Batal
+                    Cancel
                   </Button>
                   <Button
                     type="submit"
                     disabled={isSubmitting}
                   >
-                    {isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
                   </Button>
                 </div>
               </form>

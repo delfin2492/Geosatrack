@@ -17,8 +17,7 @@ import {
   Sun,
   Moon,
   Building2,
-  ChevronRight,
-  Crown
+  ChevronRight
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -134,9 +133,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="flex items-center gap-3 px-2 py-1.5 bg-secondary/35 rounded-lg border border-border/50">
               <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0 relative">
                 {username?.charAt(0).toUpperCase() || 'U'}
-                {isSuperAdmin && (
-                  <Crown className="h-3 w-3 text-amber-400 absolute -top-1 -right-1" />
-                )}
               </div>
               <div className="flex flex-col overflow-hidden">
                 <span className="text-xs font-bold truncate text-foreground flex items-center gap-1">
@@ -172,18 +168,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Real-time Connection status */}
-            <div className="flex items-center gap-2 rounded-full bg-secondary/55 px-3 py-1 text-xs border border-border">
-              <span className="relative flex h-2 w-2">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-zinc-400`}></span>
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                  socketStatus === 'connected' ? 'bg-foreground' : 'bg-muted-foreground'
-                }`}></span>
-              </span>
-              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                Socket: {socketStatus}
-              </span>
-            </div>
           </div>
         </header>
 
