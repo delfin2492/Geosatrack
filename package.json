@@ -10,7 +10,8 @@
     "dev:backend": "npm run dev --workspace=apps/backend",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "build:all": "npm run build --workspaces",
-    "prepare:env": "node -e \"const fs = require('fs'); if (!fs.existsSync('.env')) fs.copyFileSync('.env.example', '.env'); console.log('.env file prepared!')\""
+    "prepare:env": "node -e \"const fs = require('fs'); if (!fs.existsSync('.env')) fs.copyFileSync('.env.example', '.env'); console.log('.env file prepared!')\"",
+    "update:local": "powershell -ExecutionPolicy Bypass -File ./update.ps1"
   },
   "workspaces": [
     "apps/*",
