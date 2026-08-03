@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
@@ -17,15 +17,33 @@ import {
   Sun,
   Moon,
   Building2,
-  ChevronRight
+  ChevronRight,
+  X,
+  Loader2
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { authenticated, initialized, username, role, isSuperAdmin, tenantId, tenantName, isImpersonating, exitImpersonation, logout } = useAuth();
-  const { socketStatus } = useSocket();
+  const { 
+    authenticated, 
+    initialized, 
+    username, 
+    role, 
+    isSuperAdmin, 
+    tenantId, 
+    tenantName, 
+    isImpersonating, 
+    switchTenantContext,
+    exitImpersonation, 
+    logout 
+  } = useAuth();
   const { theme, toggleTheme } = useTheme();
+
+  // Impersonation modal popup states
+  const [showTenantPopup, setShowTenantPopup] = useState(false);
+  const [tenantList, setTenantList] = useState<any[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
 
   useEffect(() => {
     if (initialized && !authenticated) {
@@ -33,11 +51,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [initialized, authenticated, router]);
 
+  useEffect(() => {
+    if (showTenantPopup) {
+      setLoadingTenants(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      fetch(`${apiUrl}/tenants`)
+        .then((res) => res.json())
+        .then((data) => {
+          setTenantList(data);
+          setLoadingTenants(false);
+        })
+        .catch((err) => {
+          console.error('Failed to fetch tenants:', err);
+          setLoadingTenants(false);
+        });
+    }
+  }, [showTenantPopup]);
+
   if (!initialized || !authenticated) {
     return (
       <div className="h-screen w-screen bg-background flex flex-col items-center justify-center space-y-3 font-sans text-foreground">
         <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        <span className="text-xs font-mono text-muted-foreground">Memeriksa Sesi Autentikasi...</span>
+        <span className="text-xs font-mono text-muted-foreground">Checking authentication session...</span>
       </div>
     );
   }
@@ -49,10 +84,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Insights', href: '/insights', icon: Activity },
   ];
 
-  // Include Tenants page for Superadmin
+  // Dynamic Navigation based on Superadmin status and Impersonation status
   const navigation = isSuperAdmin
-    ? [...baseNavigation, { name: 'Tenants Manager', href: '/tenants', icon: Building2 }]
+    ? (isImpersonating 
+        ? [...baseNavigation, { name: 'Tenants Manager', href: '/tenants', icon: Building2 }]
+        : [{ name: 'Tenants Manager', href: '/tenants', icon: Building2 }])
     : baseNavigation;
+
+  const handleExitImpersonation = () => {
+    exitImpersonation();
+    router.push('/tenants');
+  };
+
+  const handleSelectTenant = (id: string, name: string) => {
+    switchTenantContext(id, name);
+    setShowTenantPopup(false);
+    router.push('/map');
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
@@ -100,34 +148,48 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* User Info & Footer */}
         <div className="p-4 border-t border-border bg-card/45 space-y-3">
-          {/* Theme Toggler Button */}
-          <button
-            onClick={toggleTheme}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-border bg-card hover:bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              {theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-              {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
-            </span>
-            <span className="text-[10px] text-muted-foreground font-mono">Switch</span>
-          </button>
-
+          
           <div className="space-y-3">
-            {/* Tenant Badge */}
-            <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 space-y-1">
-              <div className="flex items-center justify-between text-[10px] text-primary font-bold uppercase tracking-wider">
-                <span className="flex items-center gap-1">
-                  <Building2 className="h-3 w-3" />
-                  Active Tenant
-                </span>
-                <Link href="/login" className="hover:underline flex items-center gap-0.5 text-muted-foreground hover:text-foreground">
-                  Switch <ChevronRight className="h-2.5 w-2.5" />
-                </Link>
+            {/* Active Tenant / Impersonation trigger */}
+            {isSuperAdmin && !isImpersonating ? (
+              // If Superadmin and NOT impersonating, show the view switch button instead of the tenant card
+              <button
+                onClick={() => setShowTenantPopup(true)}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer shadow-sm"
+              >
+                <Building2 className="h-4 w-4" />
+                View Tenant Workspace
+              </button>
+            ) : (
+              // Show normal active tenant card for tenant users or active impersonating superadmin
+              <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 space-y-2">
+                <div className="flex items-center justify-between text-[10px] text-primary font-bold uppercase tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <Building2 className="h-3 w-3" />
+                    Active Tenant
+                  </span>
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => setShowTenantPopup(true)}
+                      className="hover:underline flex items-center gap-0.5 text-muted-foreground hover:text-foreground font-semibold cursor-pointer"
+                    >
+                      Switch
+                    </button>
+                  )}
+                </div>
+                <div className="text-xs font-bold truncate text-foreground">
+                  {tenantName || tenantId || 'PT ABC Logistics'}
+                </div>
+                {isSuperAdmin && isImpersonating && (
+                  <button
+                    onClick={handleExitImpersonation}
+                    className="w-full mt-1.5 py-1 px-2 rounded bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border border-yellow-500/30 text-[10px] font-bold uppercase tracking-wide transition-all cursor-pointer text-center"
+                  >
+                    Exit View
+                  </button>
+                )}
               </div>
-              <div className="text-xs font-bold truncate text-foreground">
-                {tenantName || tenantId || 'PT ABC Logistics'}
-              </div>
-            </div>
+            )}
 
             {/* User Account */}
             <div className="flex items-center gap-3 px-2 py-1.5 bg-secondary/35 rounded-lg border border-border/50">
@@ -168,21 +230,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-4">
-            {isImpersonating && (
-              <div className="flex items-center gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 px-3 py-1.5 text-xs text-yellow-500 font-semibold shadow-sm">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-yellow-400"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
-                </span>
-                <span>Viewing Tenant: <span className="font-bold text-foreground">{tenantName}</span></span>
-                <button
-                  onClick={exitImpersonation}
-                  className="ml-2 px-2 py-0.5 rounded bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-[10px] uppercase transition-all cursor-pointer"
-                >
-                  Exit View
-                </button>
-              </div>
-            )}
+            {/* Theme Toggle Button positioned at top-right corner */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center"
+              title="Toggle Light/Dark Mode"
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
           </div>
         </header>
 
@@ -191,6 +246,58 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+
+      {/* TENANT SELECTION POPUP MODAL (Superadmin workspace selection) */}
+      {showTenantPopup && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl p-5 w-full max-w-sm shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Building2 className="h-4 w-4 text-primary" />
+                Select Tenant Workspace
+              </span>
+              <button
+                onClick={() => setShowTenantPopup(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer p-0.5"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+              {loadingTenants ? (
+                <div className="flex items-center justify-center py-6 text-xs text-muted-foreground gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading tenants...
+                </div>
+              ) : tenantList.length === 0 ? (
+                <div className="text-center py-6 text-xs text-muted-foreground">
+                  No tenants registered.
+                </div>
+              ) : (
+                tenantList.map((t) => {
+                  const isCurrent = t.id === tenantId;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => handleSelectTenant(t.id, t.name)}
+                      className={`w-full text-left px-3 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                        isCurrent 
+                          ? 'bg-primary/10 border-primary/20 text-primary font-bold' 
+                          : 'border-border/60 hover:bg-secondary/80 text-foreground'
+                      }`}
+                    >
+                      <div className="truncate">{t.name}</div>
+                      <div className="text-[9px] text-muted-foreground font-mono mt-0.5">ID: {t.id}</div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
