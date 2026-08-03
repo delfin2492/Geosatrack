@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
@@ -177,6 +177,10 @@ export default function AssetsPage() {
   const [selectedHistoryAttr, setSelectedHistoryAttr] = useState('Temperature');
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
+
+  // Leaflet form map ref & instance states
+  const formMapRef = useRef<HTMLDivElement | null>(null);
+  const [mapInstance, setMapInstance] = useState<any>(null);
 
   const refreshAssets = async () => {
     if (!tenantId) return;
@@ -376,6 +380,63 @@ export default function AssetsPage() {
     }));
   };
 
+  // Leaflet initialization inside form container
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const mapContainer = formMapRef.current;
+    if (!mapContainer) {
+      if (mapInstance) {
+        mapInstance.remove();
+        setMapInstance(null);
+      }
+      return;
+    }
+
+    const L = require('leaflet');
+
+    // Jakarta coordinate defaults
+    const initialLat = latitude ? parseFloat(latitude) : -6.2444;
+    const initialLng = longitude ? parseFloat(longitude) : 106.8505;
+
+    // Standardize marker icons pathing
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    });
+
+    const map = L.map(mapContainer).setView([initialLat, initialLng], 12);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let marker: any = null;
+    if (latitude && longitude) {
+      marker = L.marker([initialLat, initialLng]).addTo(map);
+    }
+
+    map.on('click', (e: any) => {
+      const { lat, lng } = e.latlng;
+      setLatitude(lat.toFixed(6));
+      setLongitude(lng.toFixed(6));
+
+      if (marker) {
+        marker.setLatLng(e.latlng);
+      } else {
+        marker = L.marker(e.latlng).addTo(map);
+      }
+    });
+
+    setMapInstance(map);
+
+    return () => {
+      map.remove();
+    };
+  }, [showAddModal, mode]);
+
   // Filter based on search query
   const filteredAssets = assets.filter((a) =>
     a.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -559,25 +620,24 @@ export default function AssetsPage() {
                 </div>
               </div>
 
+              {/* Coordinates interactive leaflet selection map */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-muted-foreground">Position Latitude</label>
-                  <Input
-                    type="number"
-                    step="0.000001"
-                    value={latitude}
-                    onChange={(e) => setLatitude(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-muted-foreground">Position Longitude</label>
-                  <Input
-                    type="number"
-                    step="0.000001"
-                    value={longitude}
-                    onChange={(e) => setLongitude(e.target.value)}
-                  />
+                <div className="space-y-1.5 col-span-2">
+                  <label className="text-muted-foreground flex items-center justify-between">
+                    <span>Coordinates Selection *</span>
+                    <span className="text-[10px] text-primary italic font-normal">Click on the map to select locations</span>
+                  </label>
+                  <div ref={formMapRef} className="h-44 w-full bg-secondary/15 rounded-xl border border-border overflow-hidden z-10"></div>
+                  <div className="grid grid-cols-2 gap-2 mt-1.5">
+                    <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
+                      <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Latitude</span>
+                      <span className="font-mono text-xs text-foreground font-extrabold">{latitude || '(Not Selected)'}</span>
+                    </div>
+                    <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
+                      <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Longitude</span>
+                      <span className="font-mono text-xs text-foreground font-extrabold">{longitude || '(Not Selected)'}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -922,7 +982,7 @@ export default function AssetsPage() {
 
       {/* ==================== ADD ASSET & AGENT POPUP MODAL ==================== */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/35 flex items-center justify-center p-4">
           <Card className="w-full max-w-3xl h-[550px] flex flex-col overflow-hidden border border-border shadow-2xl">
             
             {/* Modal Title bar */}
@@ -932,6 +992,7 @@ export default function AssetsPage() {
                 Add Asset
               </span>
               <button
+                type="button"
                 onClick={() => setShowAddModal(false)}
                 className="text-muted-foreground hover:text-foreground cursor-pointer"
               >
@@ -948,6 +1009,7 @@ export default function AssetsPage() {
                 {/* Category togglers */}
                 <div className="grid grid-cols-2 p-2 gap-1.5 border-b border-border bg-secondary/15">
                   <button
+                    type="button"
                     onClick={() => {
                       setAddModalTab('AGENT');
                       setAddModalSelectedType('AGENT_MQTT');
@@ -962,6 +1024,7 @@ export default function AssetsPage() {
                     Agents
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       setAddModalTab('ASSET');
                       setAddModalSelectedType('CITY');
@@ -984,6 +1047,7 @@ export default function AssetsPage() {
                     const Icon = item.icon;
                     return (
                       <button
+                        type="button"
                         key={item.key}
                         onClick={() => {
                           setAddModalSelectedType(item.key);
@@ -1044,27 +1108,24 @@ export default function AssetsPage() {
                     </div>
                   </div>
 
+                  {/* Coordinates interactive leaflet selection map */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-muted-foreground">Position Latitude</label>
-                      <Input
-                        type="number"
-                        step="0.000001"
-                        value={latitude}
-                        onChange={(e) => setLatitude(e.target.value)}
-                        placeholder="e.g. -7.4244"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-muted-foreground">Position Longitude</label>
-                      <Input
-                        type="number"
-                        step="0.000001"
-                        value={longitude}
-                        onChange={(e) => setLongitude(e.target.value)}
-                        placeholder="e.g. 109.2505"
-                      />
+                    <div className="space-y-1.5 col-span-2">
+                      <label className="text-muted-foreground flex items-center justify-between">
+                        <span>Coordinates Selection *</span>
+                        <span className="text-[10px] text-primary italic font-normal">Click on the map to select locations</span>
+                      </label>
+                      <div ref={formMapRef} className="h-44 w-full bg-secondary/15 rounded-xl border border-border overflow-hidden z-10"></div>
+                      <div className="grid grid-cols-2 gap-2 mt-1.5">
+                        <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
+                          <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Latitude</span>
+                          <span className="font-mono text-xs text-foreground font-extrabold">{latitude || '(Not Selected)'}</span>
+                        </div>
+                        <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
+                          <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Longitude</span>
+                          <span className="font-mono text-xs text-foreground font-extrabold">{longitude || '(Not Selected)'}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
