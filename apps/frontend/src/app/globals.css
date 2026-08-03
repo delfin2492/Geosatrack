@@ -166,3 +166,9 @@ html, body {
 .glow-text-primary {
   text-shadow: 0 0 12px var(--primary);
 }
+
+/* Hide Next.js Dev Overlay Indicator */
+[data-nextjs-toast], [data-nextjs-toast-wrapper], nextjs-portal {
+  display: none !important;
+}
+

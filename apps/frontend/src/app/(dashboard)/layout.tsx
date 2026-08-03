@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useTheme } from '../context/ThemeContext';
@@ -15,21 +15,45 @@ import {
   User, 
   Shield,
   Sun,
-  Moon
+  Moon,
+  Building2,
+  ChevronRight,
+  Crown
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { authenticated, username, tenantId, login, logout } = useAuth();
+  const router = useRouter();
+  const { authenticated, initialized, username, role, isSuperAdmin, tenantId, tenantName, logout } = useAuth();
   const { socketStatus } = useSocket();
   const { theme, toggleTheme } = useTheme();
 
-  const navigation = [
+  useEffect(() => {
+    if (initialized && !authenticated) {
+      router.replace('/login');
+    }
+  }, [initialized, authenticated, router]);
+
+  if (!initialized || !authenticated) {
+    return (
+      <div className="h-screen w-screen bg-background flex flex-col items-center justify-center space-y-3 font-sans text-foreground">
+        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs font-mono text-muted-foreground">Memeriksa Sesi Autentikasi...</span>
+      </div>
+    );
+  }
+
+  const baseNavigation = [
     { name: 'Map View', href: '/map', icon: Map },
     { name: 'Assets', href: '/assets', icon: Boxes },
     { name: 'Automation Rules', href: '/rules', icon: ShieldAlert },
     { name: 'Insights', href: '/insights', icon: Activity },
   ];
+
+  // Include Tenants page for Superadmin
+  const navigation = isSuperAdmin
+    ? [...baseNavigation, { name: 'Tenants Manager', href: '/tenants', icon: Building2 }]
+    : baseNavigation;
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
@@ -89,39 +113,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <span className="text-[10px] text-muted-foreground font-mono">Switch</span>
           </button>
 
-          {authenticated ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 px-2 py-1.5 bg-secondary/35 rounded-lg border border-border/50">
-                <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary">
-                  {username?.charAt(0).toUpperCase() || 'U'}
-                </div>
-                <div className="flex flex-col overflow-hidden">
-                  <span className="text-xs font-bold truncate text-foreground flex items-center gap-1">
-                    <User className="h-3 w-3 text-muted-foreground" />
-                    {username}
-                  </span>
-                  <span className="text-[9px] font-mono text-muted-foreground truncate">
-                    Tenant: {tenantId}
-                  </span>
-                </div>
+          <div className="space-y-3">
+            {/* Tenant Badge */}
+            <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 space-y-1">
+              <div className="flex items-center justify-between text-[10px] text-primary font-bold uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <Building2 className="h-3 w-3" />
+                  Active Tenant
+                </span>
+                <Link href="/login" className="hover:underline flex items-center gap-0.5 text-muted-foreground hover:text-foreground">
+                  Switch <ChevronRight className="h-2.5 w-2.5" />
+                </Link>
               </div>
-              <button
-                onClick={logout}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 text-xs font-semibold text-muted-foreground transition-all cursor-pointer"
-              >
-                <LogOut className="h-4 w-4" />
-                Sign Out
-              </button>
+              <div className="text-xs font-bold truncate text-foreground">
+                {tenantName || tenantId || 'PT ABC Logistics'}
+              </div>
             </div>
-          ) : (
+
+            {/* User Account */}
+            <div className="flex items-center gap-3 px-2 py-1.5 bg-secondary/35 rounded-lg border border-border/50">
+              <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0 relative">
+                {username?.charAt(0).toUpperCase() || 'U'}
+                {isSuperAdmin && (
+                  <Crown className="h-3 w-3 text-amber-400 absolute -top-1 -right-1" />
+                )}
+              </div>
+              <div className="flex flex-col overflow-hidden">
+                <span className="text-xs font-bold truncate text-foreground flex items-center gap-1">
+                  <User className="h-3 w-3 text-muted-foreground" />
+                  {username}
+                </span>
+                <span className="text-[9px] font-mono text-muted-foreground capitalize truncate">
+                  Role: {role || 'operator'}
+                </span>
+              </div>
+            </div>
+
             <button
-              onClick={login}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary hover:bg-primary/90 text-xs font-bold text-primary-foreground transition-all shadow-md shadow-primary/25 cursor-pointer"
+              onClick={logout}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 text-xs font-semibold text-muted-foreground transition-all cursor-pointer"
             >
-              <Shield className="h-4 w-4" />
-              Sign In Portal
+              <LogOut className="h-4 w-4" />
+              Sign Out
             </button>
-          )}
+          </div>
         </div>
       </aside>
 

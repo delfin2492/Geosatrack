@@ -35,11 +35,24 @@ async function main() {
   console.log(`🏢 Created tenants: ${tenant1.name}, ${tenant2.name}`);
 
   // 3. Create Users
+  const superadmin = await prisma.user.create({
+    data: {
+      email: 'superadmin@geomesh.io',
+      password: 'superadmin123',
+      name: 'Super Admin System',
+      role: 'superadmin',
+      isVerified: true,
+      tenantId: tenant1.id,
+    },
+  });
+
   const user1 = await prisma.user.create({
     data: {
       email: 'admin@abclogistics.com',
+      password: 'admin123',
       name: 'Budi Santoso',
       role: 'tenant_admin',
+      isVerified: true,
       tenantId: tenant1.id,
     },
   });
@@ -47,13 +60,15 @@ async function main() {
   const user2 = await prisma.user.create({
     data: {
       email: 'operator@abclogistics.com',
+      password: 'operator123',
       name: 'Siti Rahma',
       role: 'operator',
+      isVerified: true,
       tenantId: tenant1.id,
     },
   });
 
-  console.log(`👤 Created users: ${user1.name} (Admin), ${user2.name} (Operator)`);
+  console.log(`👤 Created users: ${superadmin.name} (Superadmin), ${user1.name} (Tenant Admin), ${user2.name} (Operator)`);
 
   // 4. Create Sites
   const site1 = await prisma.site.create({

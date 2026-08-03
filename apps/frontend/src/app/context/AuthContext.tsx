@@ -3,15 +3,31 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type Keycloak from 'keycloak-js';
 
+export interface UserSession {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  isVerified: boolean;
+  tenantId: string;
+  tenantName: string;
+}
+
 interface AuthContextType {
   keycloak: Keycloak | null;
   authenticated: boolean;
   initialized: boolean;
+  user: UserSession | null;
+  role: string | null;
   username: string | null;
   email: string | null;
   tenantId: string | null;
+  tenantName: string | null;
   token: string | null;
+  isSuperAdmin: boolean;
   login: () => void;
+  loginWithCredentials: (email: string, password?: string) => Promise<any>;
+  switchTenantContext: (tenantId: string, tenantName: string) => void;
   logout: () => void;
 }
 
@@ -19,11 +35,17 @@ const AuthContext = createContext<AuthContextType>({
   keycloak: null,
   authenticated: false,
   initialized: false,
+  user: null,
+  role: null,
   username: null,
   email: null,
   tenantId: null,
+  tenantName: null,
   token: null,
+  isSuperAdmin: false,
   login: () => {},
+  loginWithCredentials: async () => {},
+  switchTenantContext: () => {},
   logout: () => {},
 });
 
@@ -33,54 +55,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [keycloakInstance, setKeycloakInstance] = useState<Keycloak | null>(null);
   const [authenticated, setAuthenticated] = useState<boolean>(false);
   const [initialized, setInitialized] = useState<boolean>(false);
-  const [username, setUsername] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
-  const [tenantId, setTenantId] = useState<string | null>(null);
+  const [user, setUser] = useState<UserSession | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    // Dynamically load Keycloak to avoid Next.js SSR document/window undefined issues
+    let hasStoredSession = false;
+
+    // 1. Check local session storage
+    const savedUser = localStorage.getItem('geomesh_user_session');
+    if (savedUser) {
+      try {
+        const parsed: UserSession = JSON.parse(savedUser);
+        setUser(parsed);
+        setAuthenticated(true);
+        hasStoredSession = true;
+      } catch (e) {
+        console.error('Failed to parse saved user session', e);
+        localStorage.removeItem('geomesh_user_session');
+      }
+    }
+
+    // 2. Initialize Keycloak in background if available
     const initKeycloak = async () => {
       try {
         const KeycloakClass = (await import('keycloak-js')).default;
-        
+
         const url = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'http://localhost:8080';
         const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'geomesh';
         const clientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || 'geomesh-frontend';
 
-        // Check if Keycloak configuration is present
-        if (!url || !realm || !clientId) {
-          console.warn('⚠️ Keycloak configuration is missing. Running in Bypass/Developer Mode.');
-          setInitialized(true);
-          // Set dummy developer profile
-          setUsername('Developer Admin');
-          setEmail('developer@geomesh.local');
-          setTenantId('pt-abc-logistics'); // dummy seed tenant id
-          setAuthenticated(true);
-          return;
-        }
+        const kc = new KeycloakClass({ url, realm, clientId });
 
-        const kc = new KeycloakClass({
-          url,
-          realm,
-          clientId,
-        });
-
-        kc.onTokenExpired = () => {
-          kc.updateToken(30)
-            .then((refreshed) => {
-              if (refreshed) {
-                console.log('Token refreshed successfully');
-                setToken(kc.token || null);
-              }
-            })
-            .catch(() => {
-              console.error('Failed to refresh token');
-              kc.clearToken();
-            });
-        };
-
-        // Only check login if returning from Keycloak authentication flow (prevents redirect to Keycloak 404 page)
         const hasAuthCallback = window.location.hash.includes('code=') || window.location.search.includes('code=');
 
         const auth = await kc.init({
@@ -89,57 +94,94 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         setKeycloakInstance(kc);
-        setAuthenticated(auth);
-        setToken(kc.token || null);
-
         if (auth && kc.tokenParsed) {
           const parsed = kc.tokenParsed as any;
-          setUsername(parsed.preferred_username || parsed.name || null);
-          setEmail(parsed.email || null);
-          
-          // Map tenantId from custom Keycloak attribute/claim
-          const tId = parsed.tenantId || parsed.tenant_id || parsed.realm_access?.tenantId;
-          setTenantId(tId || 'pt-abc-logistics'); // default fallback if claim not present yet
+          const userSession: UserSession = {
+            id: parsed.sub || 'kc-user',
+            email: parsed.email || 'user@geomesh.io',
+            name: parsed.preferred_username || parsed.name || 'Keycloak User',
+            role: parsed.role || 'tenant_admin',
+            isVerified: true,
+            tenantId: parsed.tenantId || 'pt-abc-logistics',
+            tenantName: parsed.tenantName || 'PT ABC Logistics',
+          };
+
+          setUser(userSession);
+          setAuthenticated(true);
+          setToken(kc.token || null);
+          localStorage.setItem('geomesh_user_session', JSON.stringify(userSession));
+        } else if (!hasStoredSession) {
+          setAuthenticated(false);
+          setUser(null);
         }
 
         setInitialized(true);
-        console.log('Keycloak initialized successfully. Authenticated:', auth);
-      } catch (error) {
-        console.error('❌ Failed to initialize Keycloak. Falling back to Developer Mode.', error);
+      } catch (err) {
+        if (!hasStoredSession) {
+          setAuthenticated(false);
+          setUser(null);
+        }
         setInitialized(true);
-        // Fallback profile for easy local development
-        setUsername('Dev Mode (Keycloak Offline)');
-        setEmail('dev-mode@geomesh.local');
-        setTenantId('pt-abc-logistics');
-        setAuthenticated(true);
       }
     };
 
     initKeycloak();
   }, []);
 
+  const loginWithCredentials = async (emailStr: string, passwordStr?: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+    const res = await fetch(`${apiUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailStr, password: passwordStr }),
+    });
+
+    const result = await res.json();
+    if (!res.ok) {
+      throw new Error(result.message || 'Gagal login.');
+    }
+
+    const userSession: UserSession = {
+      id: result.user.id,
+      email: result.user.email,
+      name: result.user.name || result.user.email.split('@')[0],
+      role: result.user.role,
+      isVerified: result.user.isVerified,
+      tenantId: result.user.tenantId,
+      tenantName: result.tenant?.name || 'PT ABC Logistics',
+    };
+
+    setUser(userSession);
+    setAuthenticated(true);
+    localStorage.setItem('geomesh_user_session', JSON.stringify(userSession));
+    return userSession;
+  };
+
+  const switchTenantContext = (tenantId: string, tenantName: string) => {
+    if (!user) return;
+    const updated: UserSession = { ...user, tenantId, tenantName };
+    setUser(updated);
+    localStorage.setItem('geomesh_user_session', JSON.stringify(updated));
+  };
+
   const login = () => {
     if (keycloakInstance) {
-      keycloakInstance.login();
-    } else {
-      console.log('Dummy login clicked in developer mode');
+      keycloakInstance.login({ redirectUri: window.location.origin + '/map' });
     }
   };
 
   const logout = () => {
-    if (keycloakInstance) {
-      keycloakInstance.logout({
-        redirectUri: window.location.origin,
-      });
+    localStorage.removeItem('geomesh_user_session');
+    setUser(null);
+    setAuthenticated(false);
+    if (keycloakInstance && keycloakInstance.authenticated) {
+      keycloakInstance.logout({ redirectUri: window.location.origin + '/login' });
     } else {
-      console.log('Dummy logout clicked in developer mode');
-      setAuthenticated(false);
-      setUsername(null);
-      setEmail(null);
-      setTenantId(null);
-      setToken(null);
+      window.location.href = '/login';
     }
   };
+
+  const isSuperAdmin = user?.role === 'superadmin';
 
   return (
     <AuthContext.Provider
@@ -147,11 +189,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         keycloak: keycloakInstance,
         authenticated,
         initialized,
-        username,
-        email,
-        tenantId,
+        user,
+        role: user?.role || null,
+        username: user?.name || null,
+        email: user?.email || null,
+        tenantId: user?.tenantId || null,
+        tenantName: user?.tenantName || null,
         token,
+        isSuperAdmin,
         login,
+        loginWithCredentials,
+        switchTenantContext,
         logout,
       }}
     >

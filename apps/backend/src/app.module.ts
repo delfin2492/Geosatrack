@@ -15,6 +15,8 @@ import {
   TokenValidation,
 } from 'nest-keycloak-connect';
 
+import { AuthModule } from './modules/auth/auth.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -32,6 +34,7 @@ import {
     DecoderModule,
     MqttModule,
     WebsocketModule,
+    AuthModule,
     TenantModule,
     SiteModule,
     ZoneModule,

@@ -28,14 +28,16 @@ model Tenant {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  role      String   @default("operator") // superadmin, tenant_admin, site_manager, operator
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String?  @default("geomesh123")
+  name       String?
+  role       String   @default("operator") // superadmin, tenant_admin, site_manager, operator
+  isVerified Boolean  @default(true)
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 // ------------------------------------------------------------------------------

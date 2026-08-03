@@ -71,6 +71,7 @@ Setiap kali Anda selesai mengerjakan sebuah langkah, menambahkan fitur, atau men
 
 ## 📜 Riwayat Pembaruan (Changelog)
 
+*   **2026-08-03** - **Antigravity (AI)** - Mengimplementasikan modul autentikasi email & password terverifikasi, akun Superadmin dengan kontrol penuh ke seluruh sistem dan halaman `Tenants Manager` (`/tenants`), halaman login minimalis bertema GeoMesh, penanganan proteksi rute (`route protection`) & pengalihan logout, serta peta interaktif OpenStreetMap Indonesia dengan fitur scroll zoom dan navigasi zoom otomatis dari titik koordinat ke denah floor plan indoor.
 *   **2026-07-31** - **Antigravity (AI)** - Membuat dan mengintegrasikan komponen FloorMap berbasis HTML5 canvas yang mendukung zoom, pan, gridlines, detail data tag via hover, dan drag-and-drop koordinat Anchor node ke page.tsx.
 *   **2026-07-31** - **Antigravity (AI)** - Menyiapkan template UI Next.js 15 menggunakan Tailwind CSS v4, mengimplementasikan AuthProvider berbasis keycloak-js untuk otentikasi client-side, dan mendesain dashboard monitoring interaktif real-time dengan simulator.
 *   **2026-07-31** - **Antigravity (AI)** - Mengintegrasikan KeycloakConnectModule di backend NestJS untuk validasi JWT token secara offline, serta memperbarui GetTenantId decorator untuk mendeteksi ID penyewa dari payload token Keycloak secara dinamis.

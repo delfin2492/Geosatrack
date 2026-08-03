@@ -12,6 +12,13 @@ export class TenantController {
     return this.tenantService.create(name);
   }
 
+  @Post('register')
+  register(
+    @Body() dto: { companyName: string; adminName: string; adminEmail: string },
+  ) {
+    return this.tenantService.registerTenant(dto);
+  }
+
   @Get()
   findAll() {
     return this.tenantService.findAll();
