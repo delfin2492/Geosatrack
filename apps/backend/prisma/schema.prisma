@@ -104,7 +104,10 @@ model Asset {
   id          String   @id @default(cuid())
   name        String
   description String?
+  type        String   @default("FORKLIFT")
   status      String   @default("static") // static, moving, tilt_warning, fall_detected, high_vibration, offline
+  latitude    Float?
+  longitude   Float?
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   zoneId      String?

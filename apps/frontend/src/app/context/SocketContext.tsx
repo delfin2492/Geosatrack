@@ -12,6 +12,10 @@ interface Asset {
   status: string;
   tenantId: string;
   zoneId: string | null;
+  tagId?: string | null;
+  createdAt?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   tag: {
     id: string;
     name: string;
@@ -19,6 +23,7 @@ interface Asset {
     humidity: number | null;
     battery: number | null;
     rssi: number | null;
+    lastSeen?: string | Date | null;
   } | null;
   zone?: {
     name: string;
@@ -76,79 +81,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [telemetryLogs, setTelemetryLogs] = useState<any[]>([]);
   const [simulationActive, setSimulationActive] = useState<boolean>(false);
 
-  // Default Mock Data for initialization or fallback
-  const mockAssets: Asset[] = [
-    {
-      id: 'forklift-1',
-      name: 'Toyota Forklift TF-01',
-      type: 'FORKLIFT',
-      status: 'moving',
-      tenantId: 'pt-abc-logistics',
-      zoneId: 'zone-alpha',
-      tag: {
-        id: 'node-439201',
-        name: 'Sensor Tag A',
-        temperature: 24.5,
-        humidity: 55,
-        battery: 3.12,
-        rssi: -62,
-      },
-      zone: { name: 'Storage Zone Alpha', site: { name: 'Warehouse Cawang' } }
-    },
-    {
-      id: 'pallet-2',
-      name: 'Pallet Kargo Ekspor A4',
-      type: 'PALLET',
-      status: 'tilt_warning',
-      tenantId: 'pt-abc-logistics',
-      zoneId: 'zone-beta',
-      tag: {
-        id: 'node-439202',
-        name: 'Sensor Tag B',
-        temperature: 22.1,
-        humidity: 60,
-        battery: 2.72,
-        rssi: -71,
-      },
-      zone: { name: 'Receiving Dock', site: { name: 'Warehouse Cawang' } }
-    },
-    {
-      id: 'container-3',
-      name: 'Container Box Refrigerator C1',
-      type: 'CONTAINER',
-      status: 'static',
-      tenantId: 'pt-abc-logistics',
-      zoneId: 'zone-alpha',
-      tag: {
-        id: 'node-439203',
-        name: 'Sensor Tag C',
-        temperature: 4.2,
-        humidity: 85,
-        battery: 3.25,
-        rssi: -58,
-      },
-      zone: { name: 'Storage Zone Alpha', site: { name: 'Warehouse Cawang' } }
-    }
-  ];
-
-  const mockAlerts: Alert[] = [
-    {
-      id: 'alert-1',
-      type: 'tilt_warning',
-      message: 'Aset "Pallet Kargo Ekspor A4" terdeteksi miring melebihi 15 derajat!',
-      createdAt: new Date().toISOString(),
-      isResolved: false,
-      asset: { name: 'Pallet Kargo Ekspor A4' }
-    },
-    {
-      id: 'alert-2',
-      type: 'low_battery',
-      message: 'Baterai sensor "node-439202" pada aset "Pallet Kargo Ekspor A4" melemah (2.72V)!',
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      isResolved: false,
-      asset: { name: 'Pallet Kargo Ekspor A4' }
-    }
-  ];
+  // Default Mock Data for initialization or fallback (Emptied per user request)
+  const mockAssets: Asset[] = [];
+  const mockAlerts: Alert[] = [];
 
   const fetchInitialData = async () => {
     if (!tenantId) return;
@@ -159,21 +94,21 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const assetsRes = await fetch(`http://localhost:4000/api/assets`, { headers });
       if (assetsRes.ok) {
         const assetsData = await assetsRes.json();
-        if (assetsData.length > 0) setAssets(assetsData);
+        setAssets(assetsData);
       } else {
-        setAssets(mockAssets);
+        setAssets([]);
       }
 
       const alertsRes = await fetch(`http://localhost:4000/api/assets/alerts?unresolvedOnly=true`, { headers });
       if (alertsRes.ok) {
         const alertsData = await alertsRes.json();
-        setAlerts(alertsData.length > 0 ? alertsData : mockAlerts);
+        setAlerts(alertsData);
       } else {
-        setAlerts(mockAlerts);
+        setAlerts([]);
       }
     } catch (e) {
-      setAssets(mockAssets);
-      setAlerts(mockAlerts);
+      setAssets([]);
+      setAlerts([]);
     }
   };
 

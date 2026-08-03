@@ -33,32 +33,7 @@ interface Rule {
 }
 
 export default function RulesPage() {
-  const [rules, setRules] = useState<Rule[]>([
-    {
-      id: 'rule-1',
-      name: 'Forklift Collision Detection',
-      triggerType: 'ACCELERATION_HARD_COLLISION',
-      condition: 'Z-Axis deceleration > 12m/s²',
-      action: 'Raise Critical Fall Alert & Log to DB',
-      isActive: true,
-    },
-    {
-      id: 'rule-2',
-      name: 'Critical Freezer Temp Check',
-      triggerType: 'TEMPERATURE_THRESHOLD',
-      condition: 'Ambient temperature > 8 °C for 5 min',
-      action: 'Send Email warning & trigger SMS broadcast',
-      isActive: true,
-    },
-    {
-      id: 'rule-3',
-      name: 'Asset Tag Low Battery Warnings',
-      triggerType: 'BATTERY_LOW',
-      condition: 'Battery voltage < 2.8 V',
-      action: 'Raise Warning Alert and mark for Maintenance',
-      isActive: false,
-    }
-  ]);
+  const [rules, setRules] = useState<Rule[]>([]);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [ruleName, setRuleName] = useState('');

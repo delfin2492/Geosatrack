@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -12,573 +13,728 @@ import {
   Boxes, 
   FileText, 
   Plus, 
-  Link2, 
-  Unlink, 
-  Save, 
+  Trash2,
   Edit,
-  Radio,
-  Cpu,
-  RefreshCw,
-  HardDrive
+  Save,
+  Sliders,
+  HardDrive,
+  Copy,
+  Filter,
+  Activity,
+  X,
+  Link2,
+  Unlink,
+  Globe,
+  Loader2
 } from 'lucide-react';
 
-interface AgentItem {
+interface ZoneItem {
   id: string;
   name: string;
-  protocol: string;
-  status: string;
-  brokerUrl: string;
-  activeNodes: string[];
-  msgRate: string;
-  username: string;
+  siteId: string;
+  site?: {
+    name: string;
+  };
 }
 
 export default function AssetsPage() {
+  const { tenantId, token } = useAuth();
   const { assets, setAssets } = useSocket();
-  
-  // Tab selector state: 'assets' | 'agents'
-  const [activeTab, setActiveTab] = useState<'assets' | 'agents'>('assets');
 
-  // ASSETS TAB STATES
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(assets[0]?.id || 'forklift-1');
-  const [isEditingAsset, setIsEditingAsset] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editDesc, setEditDesc] = useState('');
-  const [editType, setEditType] = useState('FORKLIFT');
+  // Zones for categorization and tree representation
+  const [zones, setZones] = useState<ZoneItem[]>([]);
+  const [loadingZones, setLoadingZones] = useState(false);
 
-  const selectedAsset = assets.find((a) => a.id === selectedAssetId) || assets[0];
+  // Search/Filter state
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // AGENTS TAB STATES
-  const [agents, setAgents] = useState<AgentItem[]>([
-    {
-      id: 'mqtt-agent',
-      name: 'MQTT Gateway Integration',
-      protocol: 'MQTT (EMQX)',
-      status: 'Connected',
-      brokerUrl: 'mqtt://localhost:1883',
-      activeNodes: ['node-439201', 'node-439202'],
-      msgRate: '4.2 msg/s',
-      username: 'admin_geomesh',
-    },
-    {
-      id: 'http-webhook',
-      name: 'HTTP Webhook Listener',
-      protocol: 'HTTP API',
-      status: 'Connected',
-      brokerUrl: 'http://localhost:4000/api/webhooks',
-      activeNodes: [],
-      msgRate: '0.0 msg/s',
-      username: 'api_key_geomesh',
-    },
-    {
-      id: 'ble-mesh',
-      name: 'BLE EYE Beacon Receiver',
-      protocol: 'Bluetooth mesh',
-      status: 'Connected',
-      brokerUrl: 'hci0 (Bluetooth HCI Host)',
-      activeNodes: ['node-eye-9011'],
-      msgRate: '1.2 msg/s',
-      username: 'system_ble',
-    },
-    {
-      id: 'tcp-stream',
-      name: 'TCP Raw Socket Parser',
-      protocol: 'TCP Socket',
-      status: 'Disconnected',
-      brokerUrl: 'tcp://0.0.0.0:9000',
-      activeNodes: [],
-      msgRate: '0.0 msg/s',
-      username: 'tcp_admin',
-    }
-  ]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string>('mqtt-agent');
-  const [isEditingAgent, setIsEditingAgent] = useState(false);
-  const [editAgentUrl, setEditAgentUrl] = useState('mqtt://localhost:1883');
-  const [editAgentUser, setEditAgentUser] = useState('admin_geomesh');
+  // Mode states: 'view' | 'edit' | 'create'
+  const [mode, setMode] = useState<'view' | 'edit' | 'create'>('view');
 
-  const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
+  // Selection states
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
 
-  // Group assets by Site and Zone
-  const sites = {
-    'Warehouse Cawang': {
-      'Storage Zone Alpha': assets.filter(a => a.zoneId === 'zone-alpha'),
-      'Receiving Dock': assets.filter(a => a.zoneId === 'zone-beta')
-    }
-  };
+  // Form states
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState('FORKLIFT');
+  const [zoneId, setZoneId] = useState('');
+  const [tagId, setTagId] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
 
-  const handleSelectAsset = (id: string) => {
-    setSelectedAssetId(id);
-    const asset = assets.find((a) => a.id === id);
-    if (asset) {
-      setEditName(asset.name);
-      setEditDesc(asset.description || 'Logistics operational equipment.');
-      setEditType(asset.type);
-    }
-    setIsEditingAsset(false);
-  };
+  // Info/Message states
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedHistoryAttr, setSelectedHistoryAttr] = useState('Temperature');
 
-  const handleSaveAsset = () => {
-    if (!selectedAssetId) return;
-    setAssets((prev) => 
-      prev.map((a) => 
-        a.id === selectedAssetId 
-          ? { ...a, name: editName, type: editType, description: editDesc } 
-          : a
-      )
-    );
-    setIsEditingAsset(false);
-  };
+  const selectedAsset = assets.find((a) => a.id === selectedAssetId);
 
-  const handleSelectAgent = (id: string) => {
-    setSelectedAgentId(id);
-    const agent = agents.find(a => a.id === id);
-    if (agent) {
-      setEditAgentUrl(agent.brokerUrl);
-      setEditAgentUser(agent.username);
-    }
-    setIsEditingAgent(false);
-  };
-
-  const handleSaveAgent = () => {
-    setAgents(prev => prev.map(a => a.id === selectedAgentId ? { ...a, brokerUrl: editAgentUrl, username: editAgentUser } : a));
-    setIsEditingAgent(false);
-  };
-
-  const toggleAgentConnection = (id: string) => {
-    setAgents(prev => prev.map(a => {
-      if (a.id === id) {
-        const nextStatus = a.status === 'Connected' ? 'Disconnected' : 'Connected';
-        return {
-          ...a,
-          status: nextStatus,
-          msgRate: nextStatus === 'Connected' ? '2.5 msg/s' : '0.0 msg/s',
-          activeNodes: nextStatus === 'Connected' ? (id === 'mqtt-agent' ? ['node-439201', 'node-439202'] : ['node-eye-9011']) : []
-        };
+  const fetchZones = async () => {
+    if (!tenantId) return;
+    setLoadingZones(true);
+    try {
+      const headers: Record<string, string> = { 'x-tenant-id': tenantId };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`http://localhost:4000/api/zones`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setZones(data);
       }
-      return a;
-    }));
+    } catch (e) {
+      console.error('Failed to fetch zones:', e);
+    } finally {
+      setLoadingZones(false);
+    }
   };
+
+  const refreshAssets = async () => {
+    if (!tenantId) return;
+    try {
+      const headers: Record<string, string> = { 'x-tenant-id': tenantId };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`http://localhost:4000/api/assets`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setAssets(data);
+      }
+    } catch (e) {
+      console.error('Failed to refresh assets:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (tenantId) {
+      fetchZones();
+      refreshAssets();
+      setSelectedAssetId(null);
+      setMode('view');
+    }
+  }, [tenantId]);
+
+  // Set default selection when assets load
+  useEffect(() => {
+    if (assets.length > 0 && !selectedAssetId) {
+      setSelectedAssetId(assets[0].id);
+      handleSelectAsset(assets[0]);
+    }
+  }, [assets]);
+
+  const handleSelectAsset = (asset: any) => {
+    setSelectedAssetId(asset.id);
+    setName(asset.name);
+    setDescription(asset.description || '');
+    setType(asset.type || 'FORKLIFT');
+    setZoneId(asset.zoneId || '');
+    setTagId(asset.tagId || '');
+    setLatitude(asset.latitude !== null && asset.latitude !== undefined ? String(asset.latitude) : '');
+    setLongitude(asset.longitude !== null && asset.longitude !== undefined ? String(asset.longitude) : '');
+    setMode('view');
+  };
+
+  const handleOpenCreate = () => {
+    setName('');
+    setDescription('');
+    setType('FORKLIFT');
+    setZoneId(zones[0]?.id || '');
+    setTagId('');
+    setLatitude('');
+    setLongitude('');
+    setMode('create');
+  };
+
+  const handleCreateAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !tenantId) return;
+
+    setIsSubmitting(true);
+    try {
+      const headers: Record<string, string> = { 
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId 
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`http://localhost:4000/api/assets`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name,
+          description,
+          type,
+          zoneId: zoneId || null,
+          tagId: tagId || null,
+          latitude: latitude ? parseFloat(latitude) : null,
+          longitude: longitude ? parseFloat(longitude) : null
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Failed to create asset.');
+      }
+
+      const created = await res.json();
+      await refreshAssets();
+      setSelectedAssetId(created.id);
+      setMode('view');
+    } catch (err: any) {
+      alert(err.message || 'Error creating asset.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAssetId || !tenantId) return;
+
+    setIsSubmitting(true);
+    try {
+      const headers: Record<string, string> = { 
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId 
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`http://localhost:4000/api/assets/${selectedAssetId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          name,
+          description,
+          type,
+          zoneId: zoneId || null,
+          tagId: tagId || null,
+          latitude: latitude ? parseFloat(latitude) : null,
+          longitude: longitude ? parseFloat(longitude) : null
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Failed to update asset.');
+      }
+
+      await refreshAssets();
+      setMode('view');
+    } catch (err: any) {
+      alert(err.message || 'Error updating asset.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteAsset = async () => {
+    if (!selectedAssetId || !tenantId || !selectedAsset) return;
+    if (!window.confirm(`Are you sure you want to delete asset "${selectedAsset.name}"?`)) return;
+
+    try {
+      const headers: Record<string, string> = { 'x-tenant-id': tenantId };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`http://localhost:4000/api/assets/${selectedAssetId}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Failed to delete asset.');
+      }
+
+      await refreshAssets();
+      setSelectedAssetId(null);
+      setMode('view');
+    } catch (err: any) {
+      alert(err.message || 'Error deleting asset.');
+    }
+  };
+
+  // Group assets by zone for the sidebar tree
+  const filteredAssets = assets.filter((a) =>
+    a.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="flex h-full w-full gap-6">
+    <div className="flex h-full w-full gap-5">
       
-      {/* LEFT COLUMN: HIERARCHY / PROTOCOL INTEGRATIONS (OpenRemote Panel style) */}
-      <Card className="w-80 p-4 flex flex-col shrink-0">
-        
-        {/* Toggle Switch Tabs (B&W Shadcn Style) */}
-        <div className="grid grid-cols-2 p-1 bg-secondary rounded-lg mb-4 border border-border">
-          <button
-            onClick={() => setActiveTab('assets')}
-            className={`py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-              activeTab === 'assets'
-                ? 'bg-card text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Assets Tree
-          </button>
-          <button
-            onClick={() => setActiveTab('agents')}
-            className={`py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
-              activeTab === 'agents'
-                ? 'bg-card text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Protocol Agents
-          </button>
+      {/* LEFT COLUMN: ASSETS SIDEBAR TREE (OpenRemote Inspired) */}
+      <Card className="w-80 flex flex-col shrink-0 overflow-hidden border border-border">
+        {/* White text on B&W/Dark header */}
+        <div className="bg-secondary/40 border-b border-border p-3 flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+            <Boxes className="h-4.5 w-4.5 text-primary" />
+            Assets
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              onClick={handleDeleteAsset}
+              disabled={!selectedAssetId}
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-red-400 disabled:opacity-35 cursor-pointer"
+              title="Delete Selected Asset"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              onClick={handleOpenCreate}
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+              title="Add Asset"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
 
-        {activeTab === 'assets' ? (
-          /* ==================== ASSETS TAB TREE ==================== */
-          <>
-            <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Location Node</h3>
-              <Button size="icon" className="h-6 w-6">
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
+        {/* Filter Input */}
+        <div className="p-3 border-b border-border/60">
+          <div className="relative">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              type="text"
+              placeholder="Filter..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 text-xs h-8"
+            />
+          </div>
+        </div>
+
+        {/* Assets Hierarchical Tree */}
+        <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 text-xs font-semibold select-none">
+          {loadingZones ? (
+            <div className="flex items-center justify-center py-6 text-muted-foreground gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading structures...
             </div>
-
-            <div className="flex-1 overflow-y-auto space-y-4 text-xs font-semibold">
-              <div>
-                <div className="flex items-center gap-2 text-foreground/80 py-1.5 px-2 hover:bg-secondary/40 rounded cursor-pointer">
-                  <Folder className="h-4 w-4 text-foreground/75 shrink-0" />
-                  <span>PT ABC Logistics</span>
-                </div>
-                
-                <div className="pl-4 mt-1.5 space-y-2 border-l border-border/80 ml-3.5">
-                  {Object.entries(sites).map(([siteName, zones]) => (
-                    <div key={siteName}>
-                      <div className="flex items-center gap-2 text-muted-foreground hover:text-foreground py-1 px-2 rounded cursor-pointer">
-                        <MapPin className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
-                        <span>{siteName}</span>
-                      </div>
-                      
-                      <div className="pl-4 mt-1 space-y-1.5 border-l border-border/80 ml-3">
-                        {Object.entries(zones).map(([zoneName, zoneAssets]) => (
-                          <div key={zoneName}>
-                            <div className="flex items-center gap-1.5 text-muted-foreground/70 py-0.5 px-2">
-                              <Folder className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                              <span>{zoneName}</span>
-                            </div>
-
-                            <div className="pl-3 mt-1 space-y-1">
-                              {zoneAssets.map((asset) => {
-                                const isSelected = selectedAssetId === asset.id;
-                                return (
-                                  <div
-                                    key={asset.id}
-                                    onClick={() => handleSelectAsset(asset.id)}
-                                    className={`flex items-center gap-2 py-1 px-3 rounded cursor-pointer transition-all border ${
-                                      isSelected 
-                                        ? 'bg-secondary border-border text-foreground font-bold' 
-                                        : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-                                    }`}
-                                  >
-                                    <Boxes className="h-3.5 w-3.5 shrink-0" />
-                                    <span className="truncate">{asset.name}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          ) : zones.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground font-medium">
+              No zones created.
             </div>
-          </>
-        ) : (
-          /* ==================== AGENTS TAB LIST ==================== */
-          <>
-            <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Protocols</h3>
-              <Button size="icon" className="h-6 w-6">
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-1.5">
-              {agents.map((agent) => {
-                const isSelected = selectedAgentId === agent.id;
-                const isConnected = agent.status === 'Connected';
-                
-                return (
-                  <div
-                    key={agent.id}
-                    onClick={() => handleSelectAgent(agent.id)}
-                    className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
-                      isSelected 
-                        ? 'bg-secondary border-border text-foreground font-bold' 
-                        : 'border-transparent text-muted-foreground hover:bg-secondary/40 hover:text-foreground'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Radio className={`h-4.5 w-4.5 shrink-0 ${isConnected ? 'text-foreground' : 'text-muted-foreground/45'}`} />
-                      <div className="min-w-0">
-                        <p className="text-xs truncate font-bold">{agent.name}</p>
-                        <p className="text-[10px] font-mono text-muted-foreground">{agent.protocol}</p>
-                      </div>
-                    </div>
-                    <Badge variant={isConnected ? "success" : "secondary"}>
-                      {agent.status}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </Card>
-
-      {/* RIGHT COLUMN: INSPECTOR PANEL (OpenRemote Style) */}
-      <Card className="flex-1 overflow-hidden flex flex-col">
-        {activeTab === 'assets' ? (
-          /* ==================== ASSET DETAILS VIEW ==================== */
-          <>
-            <CardHeader className="py-4 flex flex-row items-center justify-between border-b">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-4.5 w-4.5 text-muted-foreground" />
-                Asset Twin Configuration
-              </CardTitle>
-              {selectedAsset && !isEditingAsset && (
-                <Button
-                  onClick={() => {
-                    setIsEditingAsset(true);
-                    setEditName(selectedAsset.name);
-                    setEditDesc(selectedAsset.description || '');
-                    setEditType(selectedAsset.type);
-                  }}
-                  variant="outline"
-                  className="flex items-center gap-1.5 h-8 text-[11px]"
-                >
-                  <Edit className="h-3.5 w-3.5" />
-                  Edit Asset
-                </Button>
-              )}
-            </CardHeader>
-
-            <CardContent className="p-6 space-y-6 flex-1 overflow-y-auto pt-6">
-              {selectedAsset ? (
-                <>
-                  {isEditingAsset ? (
-                    // EDIT ASSET FORM
-                    <div className="space-y-4 max-w-xl text-xs font-semibold">
-                      <div className="space-y-1.5">
-                        <label className="text-muted-foreground">Asset Name</label>
-                        <Input
-                          type="text"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-muted-foreground">Asset Category</label>
-                        <select
-                          value={editType}
-                          onChange={(e) => setEditType(e.target.value)}
-                          className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                        >
-                          <option value="FORKLIFT">Forklift (Vehicle)</option>
-                          <option value="PALLET">Pallet (Inventory)</option>
-                          <option value="CONTAINER">Container Box (Cargo)</option>
-                          <option value="ENV_SENSOR">Environment Sensor</option>
-                          <option value="LIGHT_SWITCH">Smart Light Switch</option>
-                          <option value="DOOR_ASSET">Door State Monitor</option>
-                          <option value="CITY_BUILDING">City Building node</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-muted-foreground">Description</label>
-                        <textarea
-                          rows={4}
-                          value={editDesc}
-                          onChange={(e) => setEditDesc(e.target.value)}
-                          className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary resize-none text-xs font-semibold"
-                        />
-                      </div>
-
-                      <div className="flex gap-2 pt-2">
-                        <Button onClick={handleSaveAsset}>
-                          <Save className="h-3.5 w-3.5 mr-1" />
-                          Save Attributes
-                        </Button>
-                        <Button onClick={() => setIsEditingAsset(false)} variant="outline">
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    // ASSET twin details
-                    <div className="space-y-6">
-                      <div>
-                        <h4 className="text-lg font-bold text-foreground">{selectedAsset.name}</h4>
-                        <p className="text-xs text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
-                          {selectedAsset.description || 'Warehouse operational equipment, connected to a sensor tag with coordinates mapped in the Floor Plan.'}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 max-w-2xl text-xs">
-                        <div className="bg-secondary/20 border border-border p-4 rounded-xl space-y-1.5">
-                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Asset Category</span>
-                          <p className="font-bold text-foreground">{selectedAsset.type}</p>
-                        </div>
-                        <div className="bg-secondary/20 border border-border p-4 rounded-xl space-y-1.5">
-                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Logical Zone</span>
-                          <p className="font-bold text-foreground">{selectedAsset.zone?.name || 'Storage Zone Alpha'}</p>
-                        </div>
-                      </div>
-
-                      {/* Associated tag */}
-                      <div className="border border-border rounded-xl overflow-hidden max-w-2xl bg-secondary/10">
-                        <div className="bg-secondary/20 border-b border-border px-4 py-3 flex items-center justify-between text-xs font-semibold">
-                          <span className="font-bold text-foreground flex items-center gap-1.5">
-                            <Link2 className="h-4 w-4 text-muted-foreground" />
-                            Linked Telemetry Tag Binding
-                          </span>
-                          {selectedAsset.tag ? (
-                            <button className="flex items-center gap-1 text-red-500 hover:text-red-400 font-bold">
-                              <Unlink className="h-3.5 w-3.5" />
-                              Unlink Tag
-                            </button>
-                          ) : (
-                            <button className="flex items-center gap-1 text-foreground hover:text-muted-foreground font-bold">
-                              <Link2 className="h-3.5 w-3.5" />
-                              Link Tag
-                            </button>
-                          )}
-                        </div>
-                        <div className="p-4 text-xs font-semibold space-y-2">
-                          {selectedAsset.tag ? (
-                            <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-muted-foreground">
-                              <div>Hardware MAC / Node ID:</div>
-                              <div className="font-mono text-foreground">{selectedAsset.tag.id}</div>
-                              <div>Protocol Pathway:</div>
-                              <div className="text-foreground font-mono">MQTT Integration Agent</div>
-                              <div>Battery Discharge:</div>
-                              <div className="text-foreground">{selectedAsset.tag.battery ?? '--'} V</div>
-                              <div>Ambient Temperature:</div>
-                              <div className="text-foreground">{selectedAsset.tag.temperature ?? '--'} °C</div>
-                            </div>
-                          ) : (
-                            <p className="text-muted-foreground text-center py-4">No sensor tag linked to this asset.</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="text-center text-xs text-muted-foreground py-12">
-                  No assets registered. Select an asset from the tree.
-                </p>
-              )}
-            </CardContent>
-          </>
-        ) : (
-          /* ==================== AGENT DETAILS VIEW ==================== */
-          <>
-            <CardHeader className="py-4 flex flex-row items-center justify-between border-b">
-              <CardTitle className="flex items-center gap-2">
-                <Radio className="h-4.5 w-4.5 text-muted-foreground" />
-                Agent Connection Parameters
-              </CardTitle>
-              {selectedAgent && (
-                <Button
-                  onClick={() => toggleAgentConnection(selectedAgent.id)}
-                  variant={selectedAgent.status === 'Connected' ? 'outline' : 'default'}
-                  className="h-8 text-[11px] font-bold"
-                >
-                  {selectedAgent.status === 'Connected' ? 'Disconnect' : 'Connect'}
-                </Button>
-              )}
-            </CardHeader>
-
-            <CardContent className="p-6 space-y-6 flex-1 overflow-y-auto pt-6 text-xs font-semibold">
-              {selectedAgent ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-lg font-bold text-foreground">{selectedAgent.name}</h4>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Handles connection and telemetry decoding for the **{selectedAgent.protocol}** pipeline.
-                      </p>
-                    </div>
-                    <Badge variant={selectedAgent.status === 'Connected' ? 'success' : 'secondary'}>
-                      {selectedAgent.status}
+          ) : (
+            zones.map((zone) => {
+              const zoneAssets = filteredAssets.filter((a) => a.zoneId === zone.id);
+              
+              return (
+                <div key={zone.id} className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-muted-foreground/90 py-1 px-1.5 rounded cursor-default">
+                    <Folder className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                    <span className="truncate">{zone.name}</span>
+                    <Badge variant="secondary" className="font-mono text-[9px] ml-auto px-1.5 py-0">
+                      {zoneAssets.length}
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 max-w-2xl">
-                    <div className="bg-secondary/20 border border-border p-4 rounded-xl space-y-1">
-                      <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider">Data Throughput</span>
-                      <p className="font-bold text-foreground font-mono text-sm">{selectedAgent.msgRate}</p>
-                    </div>
-                    <div className="bg-secondary/20 border border-border p-4 rounded-xl space-y-1">
-                      <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider">Protocol Driver</span>
-                      <p className="font-bold text-foreground font-mono text-sm">{selectedAgent.protocol}</p>
-                    </div>
-                  </div>
-
-                  {/* Config settings */}
-                  <div className="max-w-2xl border border-border rounded-xl p-5 bg-secondary/10 space-y-4">
-                    <div className="flex items-center justify-between border-b pb-2">
-                      <span className="font-bold text-foreground flex items-center gap-1.5">
-                        <HardDrive className="h-4 w-4 text-muted-foreground" />
-                        Driver Settings
-                      </span>
-                      {!isEditingAgent ? (
-                        <button
-                          onClick={() => {
-                            setEditAgentUrl(selectedAgent.brokerUrl);
-                            setEditAgentUser(selectedAgent.username);
-                            setIsEditingAgent(true);
-                          }}
-                          className="text-foreground hover:text-muted-foreground font-bold flex items-center gap-1"
-                        >
-                          <Edit className="h-3 w-3" /> Edit
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setIsEditingAgent(false)}
-                          className="text-muted-foreground hover:text-foreground font-bold"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-
-                    {isEditingAgent ? (
-                      <div className="space-y-3">
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground">Host URI / Port</label>
-                          <Input
-                            value={editAgentUrl}
-                            onChange={(e) => setEditAgentUrl(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground">Driver Username / Client Key</label>
-                          <Input
-                            value={editAgentUser}
-                            onChange={(e) => setEditAgentUser(e.target.value)}
-                          />
-                        </div>
-                        <Button onClick={handleSaveAgent} className="h-8.5">
-                          <Save className="h-3.5 w-3.5 mr-1" />
-                          Apply Driver Config
-                        </Button>
+                  <div className="pl-4 border-l border-border/80 ml-3.5 space-y-1">
+                    {zoneAssets.length === 0 ? (
+                      <div className="text-[10px] text-muted-foreground/60 py-0.5 px-2.5 font-normal">
+                        No assets in zone
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-y-2 text-muted-foreground">
-                        <div>Server Endpoint:</div>
-                        <div className="font-mono text-foreground">{selectedAgent.brokerUrl}</div>
-                        <div>Client Authorization:</div>
-                        <div className="font-mono text-foreground">{selectedAgent.username || '(None)'}</div>
-                      </div>
+                      zoneAssets.map((asset) => {
+                        const isSelected = selectedAssetId === asset.id;
+                        return (
+                          <div
+                            key={asset.id}
+                            onClick={() => handleSelectAsset(asset)}
+                            className={`flex items-center gap-2 py-1 px-2.5 rounded cursor-pointer transition-all border ${
+                              isSelected 
+                                ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm' 
+                                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+                            }`}
+                          >
+                            <Boxes className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                            <span className="truncate">{asset.name}</span>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
+                </div>
+              );
+            })
+          )}
 
-                  {/* Active node links */}
-                  <div className="max-w-2xl border border-border rounded-xl overflow-hidden bg-secondary/5">
-                    <div className="bg-secondary/20 border-b border-border px-4 py-3 flex items-center justify-between font-bold">
-                      <span className="flex items-center gap-1.5">
-                        <Cpu className="h-4 w-4 text-muted-foreground" />
-                        Active Subscribed Telemetry Nodes
-                      </span>
-                      <Badge variant="secondary" className="font-mono font-bold text-[10px]">
-                        {selectedAgent.activeNodes.length} Nodes
-                      </Badge>
+          {/* Uncategorized Assets */}
+          {filteredAssets.filter(a => !a.zoneId).length > 0 && (
+            <div className="space-y-1.5 pt-2 border-t border-border/50">
+              <div className="flex items-center gap-2 text-muted-foreground/90 py-1 px-1.5">
+                <Folder className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                <span>Unassigned Assets</span>
+              </div>
+              <div className="pl-4 border-l border-border/80 ml-3.5 space-y-1">
+                {filteredAssets.filter(a => !a.zoneId).map((asset) => {
+                  const isSelected = selectedAssetId === asset.id;
+                  return (
+                    <div
+                      key={asset.id}
+                      onClick={() => handleSelectAsset(asset)}
+                      className={`flex items-center gap-2 py-1 px-2.5 rounded cursor-pointer transition-all border ${
+                        isSelected 
+                          ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm' 
+                          : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+                      }`}
+                    >
+                      <Boxes className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                      <span className="truncate">{asset.name}</span>
                     </div>
-                    <div className="p-4 space-y-1.5">
-                      {selectedAgent.activeNodes.length > 0 ? (
-                        selectedAgent.activeNodes.map((node) => (
-                          <div key={node} className="flex items-center justify-between p-2 bg-secondary/35 border border-border/60 rounded-lg">
-                            <span className="font-mono font-bold text-foreground">{node}</span>
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-mono">
-                              <RefreshCw className="h-3 w-3 animate-spin text-emerald-400" />
-                              Active telemetry feed
-                            </span>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-muted-foreground text-center py-4">No active node pings flowing through this protocol agent.</p>
-                      )}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <p className="text-muted-foreground text-center py-12">Select an integration agent to configure.</p>
-              )}
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* RIGHT COLUMN: INSPECTOR & CONFIG PANEL */}
+      <Card className="flex-1 flex flex-col overflow-hidden border border-border shadow-xl">
+        {mode === 'create' || mode === 'edit' ? (
+          /* ==================== CREATE / EDIT FORM ==================== */
+          <form onSubmit={mode === 'create' ? handleCreateAsset : handleUpdateAsset} className="flex-1 flex flex-col justify-between">
+            <CardHeader className="py-4 flex flex-row items-center justify-between border-b bg-secondary/15">
+              <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                <Sliders className="h-4.5 w-4.5 text-primary" />
+                {mode === 'create' ? 'Create New Asset Twin' : `Modify Asset: ${selectedAsset?.name}`}
+              </CardTitle>
+              <Button
+                type="button"
+                onClick={() => setMode('view')}
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+
+            <CardContent className="p-6 space-y-4 flex-1 overflow-y-auto pt-6 text-xs font-semibold">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground">Asset Name *</label>
+                  <Input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    placeholder="e.g. Air Quality DSP"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground">Asset Category</label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                  >
+                    <option value="FORKLIFT">Vehicle / Forklift</option>
+                    <option value="PALLET">Inventory Pallet</option>
+                    <option value="CONTAINER">Container Box</option>
+                    <option value="ENV_SENSOR">Environment Sensor</option>
+                    <option value="LIGHT_SWITCH">Smart Light Switch</option>
+                    <option value="DOOR_ASSET">Door Monitor</option>
+                    <option value="CITY_BUILDING">City Structure</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground">Parent Zone</label>
+                  <select
+                    value={zoneId}
+                    onChange={(e) => setZoneId(e.target.value)}
+                    className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                  >
+                    <option value="">(None / Unassigned)</option>
+                    {zones.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        {z.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground">Linked Sensor Node ID (Optional)</label>
+                  <Input
+                    type="text"
+                    value={tagId}
+                    onChange={(e) => setTagId(e.target.value)}
+                    placeholder="e.g. node-439201"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground">Position Latitude (Map Placement)</label>
+                  <Input
+                    type="number"
+                    step="0.000001"
+                    value={latitude}
+                    onChange={(e) => setLatitude(e.target.value)}
+                    placeholder="e.g. -7.4244"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground">Position Longitude (Map Placement)</label>
+                  <Input
+                    type="number"
+                    step="0.000001"
+                    value={longitude}
+                    onChange={(e) => setLongitude(e.target.value)}
+                    placeholder="e.g. 109.2505"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-muted-foreground">Description</label>
+                <textarea
+                  rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Describe operational status and specifications..."
+                  className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary resize-none text-xs font-semibold"
+                />
+              </div>
             </CardContent>
+
+            <div className="p-4 border-t border-border flex items-center justify-end gap-3 bg-secondary/10">
+              <Button type="button" onClick={() => setMode('view')} variant="outline">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+                {isSubmitting ? 'Saving...' : 'Save Configuration'}
+              </Button>
+            </div>
+          </form>
+        ) : (
+          /* ==================== VIEW MODE ==================== */
+          <>
+            {selectedAsset ? (
+              <div className="flex-1 flex flex-col">
+                {/* Header bar matching OpenRemote style */}
+                <div className="border-b border-border p-4 flex items-center justify-between bg-secondary/15 shrink-0">
+                  <div className="space-y-0.5">
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <FileText className="h-4.5 w-4.5 text-muted-foreground" />
+                      {selectedAsset.name}
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground">
+                      Created: {selectedAsset.createdAt ? new Date(selectedAsset.createdAt).toLocaleString() : '--'}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setName(selectedAsset.name);
+                      setDescription(selectedAsset.description || '');
+                      setType(selectedAsset.type || 'FORKLIFT');
+                      setZoneId(selectedAsset.zoneId || '');
+                      setTagId(selectedAsset.tagId || '');
+                      setLatitude(selectedAsset.latitude !== null && selectedAsset.latitude !== undefined ? String(selectedAsset.latitude) : '');
+                      setLongitude(selectedAsset.longitude !== null && selectedAsset.longitude !== undefined ? String(selectedAsset.longitude) : '');
+                      setMode('edit');
+                    }}
+                    variant="outline"
+                    className="flex items-center gap-1.5 h-8 text-[11px] font-bold"
+                  >
+                    <Edit className="h-3.5 w-3.5" />
+                    Modify
+                  </Button>
+                </div>
+
+                {/* Content Panel Body split in two columns */}
+                <div className="flex-1 overflow-y-auto p-5 flex flex-col lg:flex-row gap-6">
+                  {/* Left sub-column: Info & Attributes */}
+                  <div className="flex-1 space-y-5">
+                    
+                    {/* INFO Card */}
+                    <Card className="border border-border/80">
+                      <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
+                        <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                          Info
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 text-xs font-semibold space-y-3">
+                        <div className="flex items-center justify-between py-2 border-b border-border/40">
+                          <span className="text-muted-foreground">Asset Category:</span>
+                          <Badge variant="outline" className="font-mono text-[10px]">
+                            {selectedAsset.type}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between py-2 border-b border-border/40">
+                          <span className="text-muted-foreground">Active Status:</span>
+                          <Badge variant={selectedAsset.status === 'moving' ? 'success' : 'secondary'} className="capitalize">
+                            {selectedAsset.status}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-muted-foreground font-semibold">Device Eui / Linked Tag:</span>
+                          <span className="font-mono text-foreground font-bold flex items-center gap-1.5">
+                            <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
+                            {selectedAsset.tagId || '(None)'}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* ATTRIBUTES Card */}
+                    <Card className="border border-border/80">
+                      <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
+                        <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                          Attributes
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45">
+                        {selectedAsset.tag ? (
+                          <>
+                            <div className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
+                              <div>
+                                <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Temperature</p>
+                                <p className="text-sm font-bold text-foreground mt-0.5">{selectedAsset.tag.temperature ?? '--'} °C</p>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                Updated: {selectedAsset.tag.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : 'Now'}
+                              </div>
+                            </div>
+                            <div className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
+                              <div>
+                                <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Humidity</p>
+                                <p className="text-sm font-bold text-foreground mt-0.5">{selectedAsset.tag.humidity ?? '--'} %</p>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                Updated: {selectedAsset.tag.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : 'Now'}
+                              </div>
+                            </div>
+                            <div className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
+                              <div>
+                                <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Battery Voltage</p>
+                                <p className="text-sm font-bold text-foreground mt-0.5">{selectedAsset.tag.battery ?? '--'} V</p>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                Updated: {selectedAsset.tag.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : 'Now'}
+                              </div>
+                            </div>
+                            <div className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
+                              <div>
+                                <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Link Signal RSSI</p>
+                                <p className="text-sm font-bold text-foreground mt-0.5">{selectedAsset.tag.rssi ?? '--'} dBm</p>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                Updated: {selectedAsset.tag.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : 'Now'}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="p-8 text-center text-muted-foreground font-medium">
+                            No active telemetry. Link an IoT sensor tag to fetch live attributes.
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Right sub-column: Location, History */}
+                  <div className="w-full lg:w-80 shrink-0 space-y-5">
+                    
+                    {/* LOCATION Card */}
+                    <Card className="border border-border/80 overflow-hidden">
+                      <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
+                        <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center justify-between">
+                          <span>Location</span>
+                          <span className="font-mono font-normal tracking-normal text-[9px] text-muted-foreground">
+                            {selectedAsset.latitude ? `${parseFloat(String(selectedAsset.latitude)).toFixed(4)}, ${parseFloat(String(selectedAsset.longitude)).toFixed(4)}` : 'No coordinates'}
+                          </span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 space-y-4 text-xs font-semibold">
+                        {selectedAsset.latitude && selectedAsset.longitude ? (
+                          <>
+                            {/* Static coordinates indicator */}
+                            <div className="flex items-center gap-2 p-2 bg-secondary/35 border border-border/60 rounded-lg">
+                              <Globe className="h-4 w-4 text-primary shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-muted-foreground">Coordinates</p>
+                                <p className="font-mono text-[10px] truncate text-foreground">
+                                  {selectedAsset.latitude}, {selectedAsset.longitude}
+                                </p>
+                              </div>
+                            </div>
+                            {/* Visual Map Representation */}
+                            <div className="h-32 bg-secondary/15 border border-border/60 rounded-xl relative flex items-center justify-center p-2 text-center text-muted-foreground text-[10px]">
+                              <div className="space-y-1">
+                                <MapPin className="h-5 w-5 text-primary mx-auto animate-bounce" />
+                                <p className="font-bold">Coordinates Mapped</p>
+                                <p className="text-[9px] opacity-75">Jakarta Cawang Area</p>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="py-8 text-center text-muted-foreground font-medium space-y-2">
+                            <MapPin className="h-5 w-5 text-muted-foreground/45 mx-auto" />
+                            <p>No map coordinates mapped to this asset.</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* HISTORY Card */}
+                    <Card className="border border-border/80">
+                      <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50 flex flex-row items-center justify-between">
+                        <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                          History
+                        </CardTitle>
+                        <select
+                          value={selectedHistoryAttr}
+                          onChange={(e) => setSelectedHistoryAttr(e.target.value)}
+                          className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <option value="Temperature">Temperature</option>
+                          <option value="Battery">Battery</option>
+                          <option value="RSSI">RSSI</option>
+                        </select>
+                      </CardHeader>
+                      <CardContent className="p-4 text-xs font-semibold">
+                        {/* History chart mockup or log listing */}
+                        <div className="h-28 w-full bg-black/40 rounded-lg p-2 border border-border/30 relative flex flex-col justify-between">
+                          <svg className="w-full h-16" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            <path
+                              d="M 0 80 Q 20 40 40 70 T 80 50 T 100 60"
+                              fill="none"
+                              stroke="rgba(var(--primary), 0.8)"
+                              strokeWidth="2.5"
+                            />
+                          </svg>
+                          <div className="flex justify-between text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-border/30">
+                            <span>10m ago</span>
+                            <span>5m ago</span>
+                            <span>Now</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-muted-foreground gap-3">
+                <FileText className="h-8 w-8 text-muted-foreground/35" />
+                <div>
+                  <p className="font-bold">No Asset Selected</p>
+                  <p className="text-[11px] opacity-75 mt-0.5">Select an asset from the tree or click '+' to register a new one.</p>
+                </div>
+              </div>
+            )}
           </>
         )}
       </Card>
-
     </div>
   );
 }

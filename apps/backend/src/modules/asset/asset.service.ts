@@ -13,9 +13,12 @@ export class AssetService {
       status?: string;
       zoneId?: string;
       tagId?: string;
+      type?: string;
+      latitude?: number;
+      longitude?: number;
     },
   ) {
-    const { name, description, status, zoneId, tagId } = data;
+    const { name, description, status, zoneId, tagId, type, latitude, longitude } = data;
 
     // 1. Verify zone if provided
     if (zoneId) {
@@ -48,7 +51,10 @@ export class AssetService {
       data: {
         name,
         description,
+        type: type ?? 'FORKLIFT',
         status: status ?? 'static',
+        latitude: latitude !== undefined ? latitude : null,
+        longitude: longitude !== undefined ? longitude : null,
         tenantId,
         zoneId: zoneId || null,
         tagId: tagId || null,
@@ -131,11 +137,14 @@ export class AssetService {
       status?: string;
       zoneId?: string | null;
       tagId?: string | null;
+      type?: string;
+      latitude?: number | null;
+      longitude?: number | null;
     },
   ) {
     const asset = await this.findOne(tenantId, id); // Verify ownership
 
-    const { name, description, status, zoneId, tagId } = data;
+    const { name, description, status, zoneId, tagId, type, latitude, longitude } = data;
 
     // Validate Zone
     if (zoneId) {
@@ -172,6 +181,9 @@ export class AssetService {
         status: status !== undefined ? status : undefined,
         zoneId: zoneId !== undefined ? zoneId : undefined,
         tagId: tagId !== undefined ? tagId : undefined,
+        type: type !== undefined ? type : undefined,
+        latitude: latitude !== undefined ? latitude : undefined,
+        longitude: longitude !== undefined ? longitude : undefined,
       },
     });
   }
