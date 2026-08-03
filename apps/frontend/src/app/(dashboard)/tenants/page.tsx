@@ -40,7 +40,7 @@ interface TenantItem {
 }
 
 export default function TenantsPage() {
-  const { isSuperAdmin, tenantId } = useAuth();
+  const { isSuperAdmin, tenantId, switchTenantContext } = useAuth();
 
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -349,6 +349,23 @@ export default function TenantsPage() {
                     <TableCell className="text-muted-foreground font-mono">{regDate}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <Button
+                          onClick={() => switchTenantContext(t.id, t.name)}
+                          disabled={isCurrent}
+                          variant={isCurrent ? "ghost" : "outline"}
+                          size="sm"
+                          className="text-[10px] font-bold h-7.5 px-3 flex items-center gap-1"
+                        >
+                          {isCurrent ? (
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                              Active View
+                            </span>
+                          ) : (
+                            <span>View Dashboard</span>
+                          )}
+                        </Button>
+
                         <Button
                           onClick={() => handleOpenEdit(t)}
                           variant="outline"

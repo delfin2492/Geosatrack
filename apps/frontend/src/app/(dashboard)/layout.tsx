@@ -23,7 +23,7 @@ import {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { authenticated, initialized, username, role, isSuperAdmin, tenantId, tenantName, logout } = useAuth();
+  const { authenticated, initialized, username, role, isSuperAdmin, tenantId, tenantName, isImpersonating, exitImpersonation, logout } = useAuth();
   const { socketStatus } = useSocket();
   const { theme, toggleTheme } = useTheme();
 
@@ -168,6 +168,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-4">
+            {isImpersonating && (
+              <div className="flex items-center gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 px-3 py-1.5 text-xs text-yellow-500 font-semibold shadow-sm">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-yellow-400"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                </span>
+                <span>Viewing Tenant: <span className="font-bold text-foreground">{tenantName}</span></span>
+                <button
+                  onClick={exitImpersonation}
+                  className="ml-2 px-2 py-0.5 rounded bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-[10px] uppercase transition-all cursor-pointer"
+                >
+                  Exit View
+                </button>
+              </div>
+            )}
           </div>
         </header>
 

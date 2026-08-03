@@ -25,9 +25,11 @@ interface AuthContextType {
   tenantName: string | null;
   token: string | null;
   isSuperAdmin: boolean;
+  isImpersonating: boolean;
   login: () => void;
   loginWithCredentials: (email: string, password?: string) => Promise<any>;
   switchTenantContext: (tenantId: string, tenantName: string) => void;
+  exitImpersonation: () => void;
   logout: () => void;
 }
 
@@ -43,9 +45,11 @@ const AuthContext = createContext<AuthContextType>({
   tenantName: null,
   token: null,
   isSuperAdmin: false,
+  isImpersonating: false,
   login: () => {},
   loginWithCredentials: async () => {},
   switchTenantContext: () => {},
+  exitImpersonation: () => {},
   logout: () => {},
 });
 
@@ -57,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [initialized, setInitialized] = useState<boolean>(false);
   const [user, setUser] = useState<UserSession | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [originalTenant, setOriginalTenant] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     let hasStoredSession = false;
@@ -73,6 +78,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Failed to parse saved user session', e);
         localStorage.removeItem('geomesh_user_session');
       }
+    }
+
+    const savedOriginal = localStorage.getItem('geomesh_original_tenant');
+    if (savedOriginal) {
+      try {
+        setOriginalTenant(JSON.parse(savedOriginal));
+      } catch (e) {}
     }
 
     // 2. Initialize Keycloak in background if available
@@ -157,11 +169,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return userSession;
   };
 
-  const switchTenantContext = (tenantId: string, tenantName: string) => {
+  const switchTenantContext = (targetId: string, targetName: string) => {
     if (!user) return;
-    const updated: UserSession = { ...user, tenantId, tenantName };
+    if (user.role === 'superadmin' && !originalTenant) {
+      const orig = { id: user.tenantId, name: user.tenantName };
+      setOriginalTenant(orig);
+      localStorage.setItem('geomesh_original_tenant', JSON.stringify(orig));
+    }
+    const updated: UserSession = { ...user, tenantId: targetId, tenantName: targetName };
     setUser(updated);
     localStorage.setItem('geomesh_user_session', JSON.stringify(updated));
+  };
+
+  const exitImpersonation = () => {
+    if (!user || !originalTenant) return;
+    const updated: UserSession = { ...user, tenantId: originalTenant.id, tenantName: originalTenant.name };
+    setUser(updated);
+    localStorage.setItem('geomesh_user_session', JSON.stringify(updated));
+    setOriginalTenant(null);
+    localStorage.removeItem('geomesh_original_tenant');
   };
 
   const login = () => {
@@ -172,7 +198,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     localStorage.removeItem('geomesh_user_session');
+    localStorage.removeItem('geomesh_original_tenant');
     setUser(null);
+    setOriginalTenant(null);
     setAuthenticated(false);
     if (keycloakInstance && keycloakInstance.authenticated) {
       keycloakInstance.logout({ redirectUri: window.location.origin + '/login' });
@@ -197,9 +225,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tenantName: user?.tenantName || null,
         token,
         isSuperAdmin,
+        isImpersonating: !!originalTenant,
         login,
         loginWithCredentials,
         switchTenantContext,
+        exitImpersonation,
         logout,
       }}
     >
