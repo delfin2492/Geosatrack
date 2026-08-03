@@ -178,9 +178,8 @@ export default function AssetsPage() {
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
 
-  // Leaflet form map ref & instance states
+  // Leaflet form map ref
   const formMapRef = useRef<HTMLDivElement | null>(null);
-  const [mapInstance, setMapInstance] = useState<any>(null);
 
   const refreshAssets = async () => {
     if (!tenantId) return;
@@ -385,13 +384,7 @@ export default function AssetsPage() {
     if (typeof window === 'undefined') return;
 
     const mapContainer = formMapRef.current;
-    if (!mapContainer) {
-      if (mapInstance) {
-        mapInstance.remove();
-        setMapInstance(null);
-      }
-      return;
-    }
+    if (!mapContainer) return;
 
     const L = require('leaflet');
 
@@ -438,10 +431,15 @@ export default function AssetsPage() {
       }
     });
 
-    setMapInstance(map);
-
     return () => {
-      map.remove();
+      try {
+        map.remove();
+      } catch (e) {
+        console.warn('Leaflet cleanup warning:', e);
+      }
+      if (mapContainer) {
+        (mapContainer as any)._leaflet_id = null;
+      }
     };
   }, [showAddModal, mode]);
 
