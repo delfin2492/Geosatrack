@@ -71,6 +71,7 @@ Setiap kali Anda selesai mengerjakan sebuah langkah, menambahkan fitur, atau men
 
 ## 📜 Riwayat Pembaruan (Changelog)
 
+*   **2026-08-03** - **Antigravity (AI)** - Memperluas model Tenant dengan properti status, agentLimit, dan assetLimit di database schema & seed. Mengimplementasikan antarmuka CRUD (Create, Edit, Delete) berestetika monokrom Shadcn pada halaman Tenant Manager. Merefaktor halaman manajemen aset untuk memisahkan tab Assets Tree (twin fisik) dan tab Protocol Agents (MQTT, HTTP, BLE) mirip konsep OpenRemote.
 *   **2026-08-03** - **Antigravity (AI)** - Mengimplementasikan modul autentikasi email & password terverifikasi, akun Superadmin dengan kontrol penuh ke seluruh sistem dan halaman `Tenants Manager` (`/tenants`), halaman login minimalis bertema GeoMesh, penanganan proteksi rute (`route protection`) & pengalihan logout, serta peta interaktif OpenStreetMap Indonesia dengan fitur scroll zoom dan navigasi zoom otomatis dari titik koordinat ke denah floor plan indoor.
 *   **2026-07-31** - **Antigravity (AI)** - Membuat dan mengintegrasikan komponen FloorMap berbasis HTML5 canvas yang mendukung zoom, pan, gridlines, detail data tag via hover, dan drag-and-drop koordinat Anchor node ke page.tsx.
 *   **2026-07-31** - **Antigravity (AI)** - Menyiapkan template UI Next.js 15 menggunakan Tailwind CSS v4, mengimplementasikan AuthProvider berbasis keycloak-js untuk otentikasi client-side, dan mendesain dashboard monitoring interaktif real-time dengan simulator.

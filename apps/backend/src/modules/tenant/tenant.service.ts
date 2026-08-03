@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class TenantService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(name: string) {
+  async create(name: string, status: string = 'active', agentLimit: number = 5, assetLimit: number = 100) {
     const existing = await this.prisma.tenant.findUnique({
       where: { name },
     });
@@ -13,11 +13,18 @@ export class TenantService {
       throw new ConflictException(`Tenant with name "${name}" already exists.`);
     }
     return this.prisma.tenant.create({
-      data: { name },
+      data: { name, status, agentLimit, assetLimit },
     });
   }
 
-  async registerTenant(dto: { companyName: string; adminName: string; adminEmail: string }) {
+  async registerTenant(dto: { 
+    companyName: string; 
+    adminName: string; 
+    adminEmail: string; 
+    password?: string;
+    agentLimit?: number;
+    assetLimit?: number;
+  }) {
     const existingTenant = await this.prisma.tenant.findUnique({
       where: { name: dto.companyName },
     });
@@ -36,6 +43,9 @@ export class TenantService {
       const tenant = await tx.tenant.create({
         data: {
           name: dto.companyName,
+          status: 'active',
+          agentLimit: dto.agentLimit ?? 5,
+          assetLimit: dto.assetLimit ?? 100,
         },
       });
 
@@ -110,17 +120,19 @@ export class TenantService {
     return tenant;
   }
 
-  async update(id: string, name: string) {
+  async update(id: string, data: { name?: string; status?: string; agentLimit?: number; assetLimit?: number }) {
     await this.findOne(id);
-    const existing = await this.prisma.tenant.findFirst({
-      where: { name, NOT: { id } },
-    });
-    if (existing) {
-      throw new ConflictException(`Tenant with name "${name}" already exists.`);
+    if (data.name) {
+      const existing = await this.prisma.tenant.findFirst({
+        where: { name: data.name, NOT: { id } },
+      });
+      if (existing) {
+        throw new ConflictException(`Tenant with name "${data.name}" already exists.`);
+      }
     }
     return this.prisma.tenant.update({
       where: { id },
-      data: { name },
+      data,
     });
   }
 

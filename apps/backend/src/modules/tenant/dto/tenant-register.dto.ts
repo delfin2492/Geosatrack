@@ -3,4 +3,6 @@ export class RegisterTenantDto {
   adminName: string;
   adminEmail: string;
   password?: string;
+  agentLimit?: number;
+  assetLimit?: number;
 }

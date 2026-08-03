@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Param, Patch, Delete } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { ApiTags } from '@nestjs/swagger';
+import { RegisterTenantDto } from './dto/tenant-register.dto';
 
 @ApiTags('tenants')
 @Controller('tenants')
@@ -8,13 +9,18 @@ export class TenantController {
   constructor(private readonly tenantService: TenantService) {}
 
   @Post()
-  create(@Body('name') name: string) {
-    return this.tenantService.create(name);
+  create(
+    @Body('name') name: string,
+    @Body('status') status?: string,
+    @Body('agentLimit') agentLimit?: number,
+    @Body('assetLimit') assetLimit?: number,
+  ) {
+    return this.tenantService.create(name, status, agentLimit, assetLimit);
   }
 
   @Post('register')
   register(
-    @Body() dto: { companyName: string; adminName: string; adminEmail: string },
+    @Body() dto: RegisterTenantDto,
   ) {
     return this.tenantService.registerTenant(dto);
   }
@@ -30,8 +36,11 @@ export class TenantController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body('name') name: string) {
-    return this.tenantService.update(id, name);
+  update(
+    @Param('id') id: string,
+    @Body() dto: { name?: string; status?: string; agentLimit?: number; assetLimit?: number },
+  ) {
+    return this.tenantService.update(id, dto);
   }
 
   @Delete(':id')

@@ -23,12 +23,18 @@ async function main() {
   const tenant1 = await prisma.tenant.create({
     data: {
       name: 'PT ABC Logistics',
+      status: 'active',
+      agentLimit: 10,
+      assetLimit: 150,
     },
   });
 
   const tenant2 = await prisma.tenant.create({
     data: {
       name: 'PT XYZ Manufacturing',
+      status: 'active',
+      agentLimit: 5,
+      assetLimit: 50,
     },
   });
 
