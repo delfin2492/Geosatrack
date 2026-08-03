@@ -12,6 +12,7 @@ interface Asset {
   status: string;
   tenantId: string;
   zoneId: string | null;
+  parentId?: string | null;
   tagId?: string | null;
   createdAt?: string;
   latitude?: number | null;

@@ -16,9 +16,10 @@ export class AssetService {
       type?: string;
       latitude?: number;
       longitude?: number;
+      parentId?: string;
     },
   ) {
-    const { name, description, status, zoneId, tagId, type, latitude, longitude } = data;
+    const { name, description, status, zoneId, tagId, type, latitude, longitude, parentId } = data;
 
     // 1. Verify zone if provided
     if (zoneId) {
@@ -27,6 +28,16 @@ export class AssetService {
       });
       if (!zone) {
         throw new NotFoundException(`Zone with ID "${zoneId}" not found for this tenant.`);
+      }
+    }
+
+    // 1.5 Verify parent asset if provided
+    if (parentId) {
+      const parentAsset = await this.prisma.asset.findFirst({
+        where: { id: parentId, tenantId },
+      });
+      if (!parentAsset) {
+        throw new NotFoundException(`Parent Asset with ID "${parentId}" not found for this tenant.`);
       }
     }
 
@@ -58,6 +69,7 @@ export class AssetService {
         tenantId,
         zoneId: zoneId || null,
         tagId: tagId || null,
+        parentId: parentId || null,
       },
     });
   }
@@ -140,11 +152,12 @@ export class AssetService {
       type?: string;
       latitude?: number | null;
       longitude?: number | null;
+      parentId?: string | null;
     },
   ) {
     const asset = await this.findOne(tenantId, id); // Verify ownership
 
-    const { name, description, status, zoneId, tagId, type, latitude, longitude } = data;
+    const { name, description, status, zoneId, tagId, type, latitude, longitude, parentId } = data;
 
     // Validate Zone
     if (zoneId) {
@@ -153,6 +166,19 @@ export class AssetService {
       });
       if (!zone) {
         throw new NotFoundException(`Zone with ID "${zoneId}" not found for this tenant.`);
+      }
+    }
+
+    // Validate Parent Asset
+    if (parentId) {
+      if (parentId === id) {
+        throw new ConflictException(`An asset cannot be its own parent.`);
+      }
+      const parentAsset = await this.prisma.asset.findFirst({
+        where: { id: parentId, tenantId },
+      });
+      if (!parentAsset) {
+        throw new NotFoundException(`Parent Asset with ID "${parentId}" not found for this tenant.`);
       }
     }
 
@@ -184,6 +210,7 @@ export class AssetService {
         type: type !== undefined ? type : undefined,
         latitude: latitude !== undefined ? latitude : undefined,
         longitude: longitude !== undefined ? longitude : undefined,
+        parentId: parentId !== undefined ? parentId : undefined,
       },
     });
   }

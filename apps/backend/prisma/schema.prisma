@@ -112,6 +112,9 @@ model Asset {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   zoneId      String?
   zone        Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  parentId    String?
+  parent      Asset?   @relation("AssetToAsset", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Asset[]  @relation("AssetToAsset")
   tagId       String?  @unique
   tag         Tag?     @relation(fields: [tagId], references: [id], onDelete: SetNull)
   alerts      Alert[]

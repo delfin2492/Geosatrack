@@ -18,25 +18,12 @@ import {
   Save,
   Sliders,
   HardDrive,
-  Copy,
   Filter,
   Activity,
   X,
-  Link2,
-  Unlink,
   Globe,
-  Loader2,
   Cpu
 } from 'lucide-react';
-
-interface ZoneItem {
-  id: string;
-  name: string;
-  siteId: string;
-  site?: {
-    name: string;
-  };
-}
 
 // OpenRemote custom attributes mapping based on Agent/Asset type
 const attributeFieldsLookup: Record<string, { label: string; key: string; placeholder: string; type?: string; options?: string[] }[]> = {
@@ -118,13 +105,48 @@ const attributeFieldsLookup: Record<string, { label: string; key: string; placeh
   ]
 };
 
+interface TreeAsset {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: string;
+  status: string;
+  tenantId: string;
+  parentId?: string | null;
+  tagId?: string | null;
+  createdAt?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  tag: any;
+  zone: any;
+  children: TreeAsset[];
+}
+
+const buildAssetTree = (flatAssets: any[]): TreeAsset[] => {
+  const map: Record<string, TreeAsset> = {};
+  const roots: TreeAsset[] = [];
+
+  // Initialize mapping
+  flatAssets.forEach((asset) => {
+    map[asset.id] = { ...asset, children: [] };
+  });
+
+  // Nest children under parents
+  flatAssets.forEach((asset) => {
+    const mapped = map[asset.id];
+    if (asset.parentId && map[asset.parentId]) {
+      map[asset.parentId].children.push(mapped);
+    } else {
+      roots.push(mapped);
+    }
+  });
+
+  return roots;
+};
+
 export default function AssetsPage() {
   const { tenantId, token } = useAuth();
   const { assets, setAssets } = useSocket();
-
-  // Zones for categorization and tree representation
-  const [zones, setZones] = useState<ZoneItem[]>([]);
-  const [loadingZones, setLoadingZones] = useState(false);
 
   // Search/Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -139,7 +161,7 @@ export default function AssetsPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('FORKLIFT');
-  const [zoneId, setZoneId] = useState('');
+  const [parentId, setParentId] = useState('');
   const [tagId, setTagId] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
@@ -155,24 +177,6 @@ export default function AssetsPage() {
   const [selectedHistoryAttr, setSelectedHistoryAttr] = useState('Temperature');
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
-
-  const fetchZones = async () => {
-    if (!tenantId) return;
-    setLoadingZones(true);
-    try {
-      const headers: Record<string, string> = { 'x-tenant-id': tenantId };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`http://localhost:4000/api/zones`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setZones(data);
-      }
-    } catch (e) {
-      console.error('Failed to fetch zones:', e);
-    } finally {
-      setLoadingZones(false);
-    }
-  };
 
   const refreshAssets = async () => {
     if (!tenantId) return;
@@ -191,7 +195,6 @@ export default function AssetsPage() {
 
   useEffect(() => {
     if (tenantId) {
-      fetchZones();
       refreshAssets();
       setSelectedAssetId(null);
       setMode('view');
@@ -210,7 +213,7 @@ export default function AssetsPage() {
     setSelectedAssetId(asset.id);
     setName(asset.name);
     setType(asset.type || 'FORKLIFT');
-    setZoneId(asset.zoneId || '');
+    setParentId(asset.parentId || '');
     setTagId(asset.tagId || '');
     setLatitude(asset.latitude !== null && asset.latitude !== undefined ? String(asset.latitude) : '');
     setLongitude(asset.longitude !== null && asset.longitude !== undefined ? String(asset.longitude) : '');
@@ -235,7 +238,7 @@ export default function AssetsPage() {
   const handleOpenCreate = () => {
     setName('');
     setDescription('');
-    setZoneId(zones[0]?.id || '');
+    setParentId('');
     setTagId('');
     setLatitude('');
     setLongitude('');
@@ -269,7 +272,7 @@ export default function AssetsPage() {
         body: JSON.stringify({
           name,
           type: addModalSelectedType,
-          zoneId: zoneId || null,
+          parentId: parentId || null,
           tagId: tagId || null,
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
@@ -318,7 +321,7 @@ export default function AssetsPage() {
         body: JSON.stringify({
           name,
           type,
-          zoneId: zoneId || null,
+          parentId: parentId || null,
           tagId: tagId || null,
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
@@ -373,7 +376,7 @@ export default function AssetsPage() {
     }));
   };
 
-  // Group assets by zone for the sidebar tree
+  // Filter based on search query
   const filteredAssets = assets.filter((a) =>
     a.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -405,6 +408,44 @@ export default function AssetsPage() {
   const currentAddModalTypes = addModalTab === 'AGENT' ? agentTypes : assetTypes;
   const currentFieldsConfig = attributeFieldsLookup[addModalSelectedType] || [];
   const currentEditFieldsConfig = attributeFieldsLookup[type] || [];
+
+  // Recursive render function for the tree
+  const renderAssetNode = (node: TreeAsset, level = 0) => {
+    const isSelected = selectedAssetId === node.id;
+    const isAgent = node.type.startsWith('AGENT_');
+    const hasChildren = node.children && node.children.length > 0;
+
+    return (
+      <div key={node.id} className="space-y-1">
+        <div
+          onClick={() => handleSelectAsset(node)}
+          style={{ paddingLeft: `${level * 14 + 10}px` }}
+          className={`flex items-center gap-2 py-1.5 pr-2.5 rounded cursor-pointer transition-all border ${
+            isSelected 
+              ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm' 
+              : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+          }`}
+        >
+          {isAgent ? (
+            <Cpu className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
+          ) : (
+            <Boxes className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+          )}
+          <span className="truncate">{node.name}</span>
+          {hasChildren && (
+            <Badge variant="secondary" className="font-mono text-[9px] ml-auto px-1 py-0">
+              {node.children.length}
+            </Badge>
+          )}
+        </div>
+        {hasChildren && (
+          <div className="space-y-1">
+            {node.children.map((child) => renderAssetNode(child, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-full w-full gap-5">
@@ -454,97 +495,13 @@ export default function AssetsPage() {
         </div>
 
         {/* Assets Hierarchical Tree */}
-        <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 text-xs font-semibold select-none">
-          {loadingZones ? (
-            <div className="flex items-center justify-center py-6 text-muted-foreground gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Loading structures...
-            </div>
-          ) : zones.length === 0 ? (
+        <div className="flex-1 overflow-y-auto p-3.5 space-y-1 text-xs font-semibold select-none">
+          {assets.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground font-medium">
-              No zones created.
+              No assets or agents registered.
             </div>
           ) : (
-            zones.map((zone) => {
-              const zoneAssets = filteredAssets.filter((a) => a.zoneId === zone.id);
-              
-              return (
-                <div key={zone.id} className="space-y-1.5">
-                  <div className="flex items-center gap-2 text-muted-foreground/90 py-1 px-1.5 rounded cursor-default">
-                    <Folder className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-                    <span className="truncate">{zone.name}</span>
-                    <Badge variant="secondary" className="font-mono text-[9px] ml-auto px-1.5 py-0">
-                      {zoneAssets.length}
-                    </Badge>
-                  </div>
-
-                  <div className="pl-4 border-l border-border/80 ml-3.5 space-y-1">
-                    {zoneAssets.length === 0 ? (
-                      <div className="text-[10px] text-muted-foreground/60 py-0.5 px-2.5 font-normal">
-                        No assets in zone
-                      </div>
-                    ) : (
-                      zoneAssets.map((asset) => {
-                        const isSelected = selectedAssetId === asset.id;
-                        const isAgent = asset.type.startsWith('AGENT_');
-                        return (
-                          <div
-                            key={asset.id}
-                            onClick={() => handleSelectAsset(asset)}
-                            className={`flex items-center gap-2 py-1 px-2.5 rounded cursor-pointer transition-all border ${
-                              isSelected 
-                                ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm' 
-                                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-                            }`}
-                          >
-                            {isAgent ? (
-                              <Cpu className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
-                            ) : (
-                              <Boxes className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                            )}
-                            <span className="truncate">{asset.name}</span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-
-          {/* Uncategorized Assets */}
-          {filteredAssets.filter(a => !a.zoneId).length > 0 && (
-            <div className="space-y-1.5 pt-2 border-t border-border/50">
-              <div className="flex items-center gap-2 text-muted-foreground/90 py-1 px-1.5">
-                <Folder className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-                <span>Unassigned Assets</span>
-              </div>
-              <div className="pl-4 border-l border-border/80 ml-3.5 space-y-1">
-                {filteredAssets.filter(a => !a.zoneId).map((asset) => {
-                  const isSelected = selectedAssetId === asset.id;
-                  const isAgent = asset.type.startsWith('AGENT_');
-                  return (
-                    <div
-                      key={asset.id}
-                      onClick={() => handleSelectAsset(asset)}
-                      className={`flex items-center gap-2 py-1 px-2.5 rounded cursor-pointer transition-all border ${
-                        isSelected 
-                          ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm' 
-                          : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-                      }`}
-                    >
-                      {isAgent ? (
-                        <Cpu className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
-                      ) : (
-                        <Boxes className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                      )}
-                      <span className="truncate">{asset.name}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            buildAssetTree(filteredAssets).map((rootNode) => renderAssetNode(rootNode, 0))
           )}
         </div>
       </Card>
@@ -583,18 +540,21 @@ export default function AssetsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-muted-foreground">Parent Zone</label>
+                  <label className="text-muted-foreground">Parent Asset</label>
                   <select
-                    value={zoneId}
-                    onChange={(e) => setZoneId(e.target.value)}
+                    value={parentId}
+                    onChange={(e) => setParentId(e.target.value)}
                     className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
                   >
-                    <option value="">(None / Unassigned)</option>
-                    {zones.map((z) => (
-                      <option key={z.id} value={z.id}>
-                        {z.name}
-                      </option>
-                    ))}
+                    <option value="">(None / Root Asset)</option>
+                    {assets
+                      .filter((a) => a.id !== selectedAssetId)
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.type})
+                        </option>
+                      ))
+                    }
                   </select>
                 </div>
               </div>
@@ -708,7 +668,7 @@ export default function AssetsPage() {
                     onClick={() => {
                       setName(selectedAsset.name);
                       setType(selectedAsset.type || 'FORKLIFT');
-                      setZoneId(selectedAsset.zoneId || '');
+                      setParentId(selectedAsset.parentId || '');
                       setTagId(selectedAsset.tagId || '');
                       setLatitude(selectedAsset.latitude !== null && selectedAsset.latitude !== undefined ? String(selectedAsset.latitude) : '');
                       setLongitude(selectedAsset.longitude !== null && selectedAsset.longitude !== undefined ? String(selectedAsset.longitude) : '');
@@ -752,6 +712,15 @@ export default function AssetsPage() {
                           <span className="text-muted-foreground">Type Category:</span>
                           <Badge variant="outline" className="font-mono text-[10px]">
                             {selectedAsset.type}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between py-2 border-b border-border/40">
+                          <span className="text-muted-foreground">Parent Asset:</span>
+                          <Badge variant="outline" className="font-mono text-[10px]">
+                            {selectedAsset.parentId
+                              ? assets.find((a) => a.id === selectedAsset.parentId)?.name || 'Linked'
+                              : 'None (Root)'
+                            }
                           </Badge>
                         </div>
                         <div className="flex items-center justify-between py-2 border-b border-border/40">
@@ -960,7 +929,7 @@ export default function AssetsPage() {
             <div className="bg-secondary/40 border-b border-border px-4 py-3 flex items-center justify-between shrink-0">
               <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                 <Plus className="h-4.5 w-4.5 text-primary" />
-                Add asset
+                Add Asset
               </span>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -1059,16 +1028,16 @@ export default function AssetsPage() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-muted-foreground">Parent Zone</label>
+                      <label className="text-muted-foreground">Parent Asset</label>
                       <select
-                        value={zoneId}
-                        onChange={(e) => setZoneId(e.target.value)}
+                        value={parentId}
+                        onChange={(e) => setParentId(e.target.value)}
                         className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
                       >
-                        <option value="">None</option>
-                        {zones.map((z) => (
-                          <option key={z.id} value={z.id}>
-                            {z.name}
+                        <option value="">(None / Root Asset)</option>
+                        {assets.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} ({a.type})
                           </option>
                         ))}
                       </select>
