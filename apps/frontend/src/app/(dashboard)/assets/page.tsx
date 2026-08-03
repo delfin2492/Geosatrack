@@ -105,6 +105,31 @@ const attributeFieldsLookup: Record<string, { label: string; key: string; placeh
   ]
 };
 
+// OpenRemote type icon lookup
+const typeIconLookup: Record<string, React.ComponentType<any>> = {
+  AGENT_MQTT: Sliders,
+  AGENT_HTTP: Globe,
+  AGENT_BLE: Activity,
+  CITY: Globe,
+  BUILDING: Folder,
+  LIGHT: Sliders,
+  ENVIRONMENT: Activity,
+  WEATHER: Globe,
+  ANCHOR: MapPin,
+  THINGS: Boxes,
+  FORKLIFT: Boxes,
+  RACK: Folder,
+  SHIP: Globe,
+  DOOR: Folder,
+  ROOM: Folder,
+  TAG: HardDrive,
+  MACHINE: Sliders
+};
+
+const getTypeIcon = (type: string) => {
+  return typeIconLookup[type] || Boxes;
+};
+
 interface TreeAsset {
   id: string;
   name: string;
@@ -180,6 +205,9 @@ export default function AssetsPage() {
 
   // Leaflet form map ref
   const formMapRef = useRef<HTMLDivElement | null>(null);
+
+  // Leaflet view-only map ref
+  const viewMapRef = useRef<HTMLDivElement | null>(null);
 
   const refreshAssets = async () => {
     if (!tenantId) return;
@@ -379,7 +407,7 @@ export default function AssetsPage() {
     }));
   };
 
-  // Leaflet initialization inside form container
+  // Leaflet form map initialization inside form container
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -443,6 +471,61 @@ export default function AssetsPage() {
     };
   }, [showAddModal, mode]);
 
+  // Leaflet view-only map initialization inside inspector panel
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (mode !== 'view' || !selectedAsset || !selectedAsset.latitude || !selectedAsset.longitude) return;
+
+    const mapContainer = viewMapRef.current;
+    if (!mapContainer) return;
+
+    const L = require('leaflet');
+
+    // Clean up potential left-over Leaflet ID to prevent reuse errors
+    if ((mapContainer as any)._leaflet_id) {
+      (mapContainer as any)._leaflet_id = null;
+    }
+
+    const lat = parseFloat(String(selectedAsset.latitude));
+    const lng = parseFloat(String(selectedAsset.longitude));
+
+    // Custom Icon with CDN urls
+    const customIcon = L.icon({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+    });
+
+    // Initialize map in view-only mode (static preview with pan capability)
+    const map = L.map(mapContainer, {
+      zoomControl: true,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      dragging: true
+    }).setView([lat, lng], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    L.marker([lat, lng], { icon: customIcon }).addTo(map);
+
+    return () => {
+      try {
+        map.remove();
+      } catch (e) {
+        console.warn('View map cleanup warning:', e);
+      }
+      if (mapContainer) {
+        (mapContainer as any)._leaflet_id = null;
+      }
+    };
+  }, [selectedAssetId, mode]);
+
   // Filter based on search query
   const filteredAssets = assets.filter((a) =>
     a.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -479,8 +562,8 @@ export default function AssetsPage() {
   // Recursive render function for the tree
   const renderAssetNode = (node: TreeAsset, level = 0) => {
     const isSelected = selectedAssetId === node.id;
-    const isAgent = node.type.startsWith('AGENT_');
     const hasChildren = node.children && node.children.length > 0;
+    const TypeIcon = getTypeIcon(node.type);
 
     return (
       <div key={node.id} className="space-y-1">
@@ -493,11 +576,7 @@ export default function AssetsPage() {
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
           }`}
         >
-          {isAgent ? (
-            <Cpu className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
-          ) : (
-            <Boxes className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-          )}
+          <TypeIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
           <span className="truncate">{node.name}</span>
           {hasChildren && (
             <Badge variant="secondary" className="font-mono text-[9px] ml-auto px-1 py-0">
@@ -580,7 +659,10 @@ export default function AssetsPage() {
           <form onSubmit={handleUpdateAsset} className="flex-1 flex flex-col justify-between">
             <CardHeader className="py-4 flex flex-row items-center justify-between border-b bg-secondary/15">
               <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                <Sliders className="h-4.5 w-4.5 text-primary" />
+                {(() => {
+                  const TypeIcon = getTypeIcon(selectedAsset?.type || 'FORKLIFT');
+                  return <TypeIcon className="h-4.5 w-4.5 text-primary shrink-0 animate-pulse" />;
+                })()}
                 Modify: {selectedAsset?.name} ({selectedAsset?.type})
               </CardTitle>
               <Button
@@ -723,7 +805,10 @@ export default function AssetsPage() {
                 <div className="border-b border-border p-4 flex items-center justify-between bg-secondary/15 shrink-0">
                   <div className="space-y-0.5">
                     <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <FileText className="h-4.5 w-4.5 text-muted-foreground" />
+                      {(() => {
+                        const TypeIcon = getTypeIcon(selectedAsset.type);
+                        return <TypeIcon className="h-4.5 w-4.5 text-muted-foreground shrink-0" />;
+                      })()}
                       {selectedAsset.name}
                     </h3>
                     <p className="text-[10px] text-muted-foreground">
@@ -919,13 +1004,8 @@ export default function AssetsPage() {
                                 </p>
                               </div>
                             </div>
-                            <div className="h-32 bg-secondary/15 border border-border/60 rounded-xl relative flex items-center justify-center p-2 text-center text-muted-foreground text-[10px]">
-                              <div className="space-y-1">
-                                <MapPin className="h-5 w-5 text-primary mx-auto animate-bounce" />
-                                <p className="font-bold">Coordinates Mapped</p>
-                                <p className="text-[9px] opacity-75">Geographical Placement</p>
-                              </div>
-                            </div>
+                            {/* Live view map centered on coordinates */}
+                            <div ref={viewMapRef} className="h-44 w-full bg-secondary/15 rounded-xl border border-border overflow-hidden z-10"></div>
                           </>
                         ) : (
                           <div className="py-8 text-center text-muted-foreground font-medium space-y-2">
@@ -936,40 +1016,42 @@ export default function AssetsPage() {
                       </CardContent>
                     </Card>
 
-                    {/* HISTORY Card */}
-                    <Card className="border border-border/80">
-                      <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50 flex flex-row items-center justify-between">
-                        <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                          History
-                        </CardTitle>
-                        <select
-                          value={selectedHistoryAttr}
-                          onChange={(e) => setSelectedHistoryAttr(e.target.value)}
-                          className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
-                        >
-                          <option value="Temperature">Temperature</option>
-                          <option value="Battery">Battery</option>
-                          <option value="RSSI">RSSI</option>
-                        </select>
-                      </CardHeader>
-                      <CardContent className="p-4 text-xs font-semibold">
-                        <div className="h-28 w-full bg-black/40 rounded-lg p-2 border border-border/30 relative flex flex-col justify-between">
-                          <svg className="w-full h-16" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <path
-                              d="M 0 80 Q 20 40 40 70 T 80 50 T 100 60"
-                              fill="none"
-                              stroke="rgba(var(--primary), 0.8)"
-                              strokeWidth="2.5"
-                            />
-                          </svg>
-                          <div className="flex justify-between text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-border/30">
-                            <span>10m ago</span>
-                            <span>5m ago</span>
-                            <span>Now</span>
+                    {/* HISTORY Card (Hidden for CITY and BUILDING categories) */}
+                    {selectedAsset.type !== 'CITY' && selectedAsset.type !== 'BUILDING' && (
+                      <Card className="border border-border/80">
+                        <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50 flex flex-row items-center justify-between">
+                          <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                            History
+                          </CardTitle>
+                          <select
+                            value={selectedHistoryAttr}
+                            onChange={(e) => setSelectedHistoryAttr(e.target.value)}
+                            className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
+                          >
+                            <option value="Temperature">Temperature</option>
+                            <option value="Battery">Battery</option>
+                            <option value="RSSI">RSSI</option>
+                          </select>
+                        </CardHeader>
+                        <CardContent className="p-4 text-xs font-semibold">
+                          <div className="h-28 w-full bg-black/40 rounded-lg p-2 border border-border/30 relative flex flex-col justify-between">
+                            <svg className="w-full h-16" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              <path
+                                d="M 0 80 Q 20 40 40 70 T 80 50 T 100 60"
+                                fill="none"
+                                stroke="rgba(var(--primary), 0.8)"
+                                strokeWidth="2.5"
+                              />
+                            </svg>
+                            <div className="flex justify-between text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-border/30">
+                              <span>10m ago</span>
+                              <span>5m ago</span>
+                              <span>Now</span>
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
                 </div>
               </div>
