@@ -22,8 +22,122 @@ import {
   Activity,
   X,
   Globe,
-  Cpu
+  Code
 } from 'lucide-react';
+
+const defaultTeltonikaDecodeCode = `//====================================================
+// Teltonika EYE Sensor Mesh Decoder
+// Endpoint 11 & Endpoint 238
+//====================================================
+
+let evt = msg.payload.wirepas.packet_received_event;
+let ep = evt.source_endpoint;
+
+function b64ToBytes(b64){
+    return Array.from(Buffer.from(b64,'base64'));
+}
+
+function u16(b,o){
+    return b[o] | (b[o+1]<<8);
+}
+
+function s16(b,o){
+    let v=u16(b,o);
+    return (v & 0x8000)?v-0x10000:v;
+}
+
+function u32(b,o){
+    return (b[o]) |
+           (b[o+1]<<8) |
+           (b[o+2]<<16) |
+           (b[o+3]<<24 >>>0);
+}
+
+function s32(b,o){
+    let v=u32(b,o);
+    if(v>0x7fffffff) v-=0x100000000;
+    return v;
+}
+
+let out = {
+    gateway : evt.header.gw_id,
+    node     : evt.source_address,
+    endpoint : ep,
+    hop      : evt.hop_count,
+    network  : evt.network_address
+};
+
+if(ep == 11){
+    let bytes = b64ToBytes(evt.payload);
+    let i=0;
+    while(i<bytes.length){
+        let type=bytes[i++];
+        let len =bytes[i++];
+        switch(type){
+            case 0x01:
+                out.error_code=u16(bytes,i);
+                break;
+            case 0x02:
+                out.temperature=Number((s32(bytes,i)/100).toFixed(2));
+                break;
+            case 0x03:
+                out.humidity=Number((u32(bytes,i)/1024).toFixed(2));
+                break;
+            case 0x05:
+                out.accel_x=s32(bytes,i);
+                break;
+            case 0x06:
+                out.accel_y=s32(bytes,i);
+                break;
+            case 0x07:
+                out.accel_z=s32(bytes,i);
+                break;
+            case 0x08:
+                out.pitch=s16(bytes,i);
+                break;
+            case 0x09:
+                out.roll=s16(bytes,i);
+                break;
+            case 0x0A:
+                out.hall=(bytes[i]==1);
+                break;
+        }
+        i += len;
+    }
+}
+else if(ep==238){
+    let meas = evt.payload_json.measurements;
+    meas.forEach(m=>{
+        if(m.voltage!==undefined)
+            out.voltage=m.voltage;
+        if(m.node_info){
+            out.update_interval=m.node_info.update_s;
+            out.motion=m.node_info.features.motion;
+            out.is_static=m.node_info.features.is_static;
+            out.node_mode=m.node_info.node_mode;
+            out.node_class=m.node_info.node_class;
+        }
+        if(m.rss_sr_4byte_addr){
+            m.rss_sr_4byte_addr.forEach(r=>{
+                if(r.addr==248)
+                    out.gateway_rssi=r.rssi;
+                else
+                    out["rssi_"+r.addr]=r.rssi;
+            });
+        }
+    });
+}
+
+msg.payload=out;
+return msg;`;
+
+const defaultGenericAttributeCode = `//====================================================
+// Generic MQTT Payload Parser
+//====================================================
+
+let val = msg.payload.val; // extract value from payload
+msg.payload = val;
+return msg;`;
 
 // Default attributes for each asset type used for auto-initialization
 const defaultAttributesLookup: Record<string, { name: string; dataType: string; unit: string }[]> = {
@@ -128,7 +242,7 @@ interface AssetAttribute {
   mqttTopic?: string;
   mqttPublishTopic?: string;
   mqttValuePath?: string;
-  mqttDecodeFunction?: string;
+  mqttDecodeFunctionCode?: string;
 }
 
 interface TreeAsset {
@@ -195,6 +309,12 @@ export default function AssetsPage() {
   const [attributes, setAttributes] = useState<AssetAttribute[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
+  // Asset-level Ingestion parameters
+  const [mqttAgentId, setMqttAgentId] = useState('');
+  const [mqttTopic, setMqttTopic] = useState('');
+  const [mqttPublishTopic, setMqttPublishTopic] = useState('');
+  const [mqttDecodeFunctionCode, setMqttDecodeFunctionCode] = useState('');
+
   // Add Asset Popup modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalTab, setAddModalTab] = useState<'AGENT' | 'ASSET'>('AGENT');
@@ -256,6 +376,10 @@ export default function AssetsPage() {
       if (asset.description && asset.description.startsWith('{')) {
         const parsed = JSON.parse(asset.description);
         setDescription(parsed.notes || '');
+        setMqttAgentId(parsed.mqttAgentId || '');
+        setMqttTopic(parsed.mqttTopic || '');
+        setMqttPublishTopic(parsed.mqttPublishTopic || '');
+        setMqttDecodeFunctionCode(parsed.mqttDecodeFunctionCode || '');
         
         if (asset.type.startsWith('AGENT_')) {
           setCustomFields(parsed);
@@ -272,12 +396,20 @@ export default function AssetsPage() {
       } else {
         setDescription(asset.description || '');
         setCustomFields({});
+        setMqttAgentId('');
+        setMqttTopic('');
+        setMqttPublishTopic('');
+        setMqttDecodeFunctionCode('');
         const defaults = defaultAttributesLookup[asset.type] || [];
         setAttributes(defaults.map(d => ({ ...d, value: '' })));
       }
     } catch (e) {
       setDescription(asset.description || '');
       setCustomFields({});
+      setMqttAgentId('');
+      setMqttTopic('');
+      setMqttPublishTopic('');
+      setMqttDecodeFunctionCode('');
       const defaults = defaultAttributesLookup[asset.type] || [];
       setAttributes(defaults.map(d => ({ ...d, value: '' })));
     }
@@ -292,6 +424,10 @@ export default function AssetsPage() {
     setLongitude('');
     setCustomFields({});
     setAttributes([]);
+    setMqttAgentId('');
+    setMqttTopic('');
+    setMqttPublishTopic('');
+    setMqttDecodeFunctionCode('');
     setAddModalSelectedType('AGENT_MQTT_TELTONIKA');
     setAddModalTab('AGENT');
     setShowAddModal(true);
@@ -332,7 +468,7 @@ export default function AssetsPage() {
           name,
           type: addModalSelectedType,
           parentId: parentId || null,
-          tagId: null, // tagId binding is handled via dynamic attributes linking in edit
+          tagId: null, 
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
           description: serializedDescription
@@ -377,6 +513,10 @@ export default function AssetsPage() {
       } else {
         serializedDescription = JSON.stringify({
           attributes,
+          mqttAgentId: mqttAgentId || null,
+          mqttTopic: mqttTopic || null,
+          mqttPublishTopic: mqttPublishTopic || null,
+          mqttDecodeFunctionCode: mqttDecodeFunctionCode || null,
           notes: description
         });
       }
@@ -451,7 +591,6 @@ export default function AssetsPage() {
 
     const L = require('leaflet');
 
-    // Clean up potential left-over Leaflet ID to prevent reuse errors
     if ((mapContainer as any)._leaflet_id) {
       (mapContainer as any)._leaflet_id = null;
     }
@@ -795,6 +934,93 @@ export default function AssetsPage() {
                 </div>
               )}
 
+              {/* Asset-Level MQTT Ingestion Configuration (For physical assets) */}
+              {!type.startsWith('AGENT_') && (
+                <div className="space-y-3.5 pt-4 border-t border-border/60">
+                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Asset-Level Ingestion Configuration (Optional)</span>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1">
+                      <label className="text-muted-foreground">MQTT Agent Link</label>
+                      <select
+                        value={mqttAgentId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMqttAgentId(val);
+                          const linked = assets.find(a => a.id === val);
+                          if (linked?.type === 'AGENT_MQTT_TELTONIKA') {
+                            setMqttTopic('json-gw-event/received_data/#');
+                            setMqttDecodeFunctionCode(defaultTeltonikaDecodeCode);
+                          } else {
+                            setMqttTopic('');
+                            setMqttDecodeFunctionCode('');
+                          }
+                        }}
+                        className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                      >
+                        <option value="">(None / Static Asset)</option>
+                        {assets
+                          .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
+                          .map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
+                            </option>
+                          ))
+                        }
+                      </select>
+                    </div>
+
+                    {mqttAgentId && (
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground">Subscribe Topic</label>
+                        <Input
+                          type="text"
+                          value={mqttTopic}
+                          onChange={(e) => setMqttTopic(e.target.value)}
+                          placeholder="e.g. json-gw-event/received_data/#"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {mqttAgentId && (
+                    <div className="space-y-3.5 pt-1">
+                      <div className="grid grid-cols-1 gap-3.5">
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground">Publish Topic</label>
+                          <Input
+                            type="text"
+                            value={mqttPublishTopic}
+                            onChange={(e) => setMqttPublishTopic(e.target.value)}
+                            placeholder="e.g. gateway/publish/topic"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-muted-foreground flex items-center gap-1.5">
+                            <Code className="h-3.5 w-3.5 text-primary" />
+                            JavaScript Payload Decoder Function (Node-RED format)
+                          </label>
+                          <Badge variant="outline" className="text-[9px]">vm sandbox (1s timeout)</Badge>
+                        </div>
+                        <textarea
+                          rows={12}
+                          value={mqttDecodeFunctionCode}
+                          onChange={(e) => setMqttDecodeFunctionCode(e.target.value)}
+                          className="w-full font-mono text-[11px] p-3.5 bg-black/75 text-emerald-400 border border-border/80 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed"
+                          placeholder="// Write custom JS code..."
+                        />
+                        <p className="text-[9.5px] text-muted-foreground leading-normal">
+                          Write a function that manipulates the <code>msg</code> object and returns it. Context exposes <code>msg.payload</code>, <code>msg.topic</code>, and global <code>Buffer</code>.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Dynamic Metadata Attributes Editor (For physical assets) */}
               {!type.startsWith('AGENT_') && (
                 <div className="space-y-4 pt-4 border-t border-border/60">
@@ -889,7 +1115,19 @@ export default function AssetsPage() {
                                   value={attr.mqttAgentId || ''}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttAgentId: val || undefined } : a));
+                                    setAttributes(prev => prev.map((a, i) => {
+                                      if (i === idx) {
+                                        const agent = assets.find(as => as.id === val);
+                                        const defaultCode = agent?.type === 'AGENT_MQTT_TELTONIKA' ? defaultTeltonikaDecodeCode : defaultGenericAttributeCode;
+                                        return { 
+                                          ...a, 
+                                          mqttAgentId: val || undefined,
+                                          mqttTopic: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? 'json-gw-event/received_data/#' : '') : undefined,
+                                          mqttDecodeFunctionCode: val ? defaultCode : undefined
+                                        };
+                                      }
+                                      return a;
+                                    }));
                                   }}
                                   className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
                                 >
@@ -923,62 +1161,51 @@ export default function AssetsPage() {
 
                             {/* Sub-parameters for Agent Ingestions */}
                             {attr.mqttAgentId && (
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                                {(() => {
-                                  const agent = assets.find(a => a.id === attr.mqttAgentId);
-                                  const isTeltonika = agent?.type === 'AGENT_MQTT_TELTONIKA';
+                              <div className="space-y-3.5 pt-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                  <div className="space-y-1">
+                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Publish Topic</label>
+                                    <Input
+                                      type="text"
+                                      value={attr.mqttPublishTopic || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttPublishTopic: val } : a));
+                                      }}
+                                      placeholder="e.g. cmd/temp/1"
+                                    />
+                                  </div>
 
-                                  return (
-                                    <>
-                                      <div className="space-y-1">
-                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Publish Topic</label>
-                                        <Input
-                                          type="text"
-                                          value={attr.mqttPublishTopic || ''}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttPublishTopic: val } : a));
-                                          }}
-                                          placeholder="e.g. cmd/temp/1"
-                                        />
-                                      </div>
+                                  <div className="space-y-1">
+                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Value Path</label>
+                                    <Input
+                                      type="text"
+                                      value={attr.mqttValuePath || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttValuePath: val } : a));
+                                      }}
+                                      placeholder="e.g. $.source_address or $.val"
+                                    />
+                                  </div>
+                                </div>
 
-                                      <div className="space-y-1">
-                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Value Path</label>
-                                        <Input
-                                          type="text"
-                                          value={attr.mqttValuePath || ''}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttValuePath: val } : a));
-                                          }}
-                                          placeholder={isTeltonika ? 'e.g. $.source_address' : 'e.g. $.val'}
-                                        />
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Decode Function</label>
-                                        {isTeltonika ? (
-                                          <select
-                                            value={attr.mqttDecodeFunction || 'decodeTelemetry'}
-                                            onChange={(e) => {
-                                              const val = e.target.value;
-                                              setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttDecodeFunction: val } : a));
-                                            }}
-                                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                                          >
-                                            <option value="decodeTelemetry">decodeTelemetry (Mesh Ingestion)</option>
-                                            <option value="decodeStatus">decodeStatus (Node Status)</option>
-                                          </select>
-                                        ) : (
-                                          <div className="h-8 bg-secondary/25 border border-border flex items-center px-3 rounded-lg text-muted-foreground/50 text-[10.5px]">
-                                            N/A
-                                          </div>
-                                        )}
-                                      </div>
-                                    </>
-                                  );
-                                })()}
+                                <div className="space-y-1.5">
+                                  <label className="text-muted-foreground flex items-center gap-1">
+                                    <Code className="h-3 w-3 text-primary" />
+                                    Attribute JS Ingestion Decoder Function
+                                  </label>
+                                  <textarea
+                                    rows={8}
+                                    value={attr.mqttDecodeFunctionCode || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttDecodeFunctionCode: val } : a));
+                                    }}
+                                    className="w-full font-mono text-[10.5px] p-2.5 bg-black/75 text-emerald-400 border border-border/85 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed"
+                                    placeholder="// Custom attribute JS code..."
+                                  />
+                                </div>
                               </div>
                             )}
                           </div>
@@ -1000,7 +1227,7 @@ export default function AssetsPage() {
               </div>
             </CardContent>
 
-            <div className="p-4 border-t border-border flex items-center justify-end gap-3 bg-secondary/10">
+            <div className="p-4 border-t border-border flex items-center justify-end gap-3 bg-secondary/10 shrink-0">
               <Button type="button" onClick={() => setMode('view')} variant="outline">
                 Cancel
               </Button>
@@ -1041,6 +1268,11 @@ export default function AssetsPage() {
                           const parsed = JSON.parse(selectedAsset.description);
                           setCustomFields(parsed);
                           setDescription(parsed.notes || '');
+                          setMqttAgentId(parsed.mqttAgentId || '');
+                          setMqttTopic(parsed.mqttTopic || '');
+                          setMqttPublishTopic(parsed.mqttPublishTopic || '');
+                          setMqttDecodeFunctionCode(parsed.mqttDecodeFunctionCode || '');
+
                           if (!selectedAsset.type.startsWith('AGENT_')) {
                             if (parsed.attributes && Array.isArray(parsed.attributes)) {
                               setAttributes(parsed.attributes);
@@ -1052,12 +1284,20 @@ export default function AssetsPage() {
                         } else {
                           setCustomFields({});
                           setDescription(selectedAsset.description || '');
+                          setMqttAgentId('');
+                          setMqttTopic('');
+                          setMqttPublishTopic('');
+                          setMqttDecodeFunctionCode('');
                           const defaults = defaultAttributesLookup[selectedAsset.type] || [];
                           setAttributes(defaults.map(d => ({ ...d, value: '' })));
                         }
                       } catch (e) {
                         setCustomFields({});
                         setDescription(selectedAsset.description || '');
+                        setMqttAgentId('');
+                        setMqttTopic('');
+                        setMqttPublishTopic('');
+                        setMqttDecodeFunctionCode('');
                         const defaults = defaultAttributesLookup[selectedAsset.type] || [];
                         setAttributes(defaults.map(d => ({ ...d, value: '' })));
                       }
@@ -1149,6 +1389,37 @@ export default function AssetsPage() {
                       </Card>
                     )}
 
+                    {/* ASSET-LEVEL INGESTION CARD */}
+                    {!selectedAsset.type.startsWith('AGENT_') && mqttAgentId && (
+                      <Card className="border border-border/80">
+                        <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
+                          <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                            Asset-Level Ingestion Settings
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 text-xs font-semibold space-y-3">
+                          <div className="flex items-center justify-between py-2 border-b border-border/40">
+                            <span className="text-muted-foreground">Linked Agent:</span>
+                            <span className="font-mono text-foreground">
+                              {assets.find(a => a.id === mqttAgentId)?.name || 'Linked'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between py-2 border-b border-border/40">
+                            <span className="text-muted-foreground">Topic:</span>
+                            <span className="font-mono text-foreground">{mqttTopic || '--'}</span>
+                          </div>
+                          {mqttDecodeFunctionCode && (
+                            <div className="pt-2">
+                              <span className="text-muted-foreground block font-bold text-[10px] uppercase tracking-wider mb-1">Payload JS Decoder Script</span>
+                              <pre className="text-[10px] bg-black/60 p-3 rounded-lg overflow-x-auto text-emerald-400 font-mono max-h-36 max-w-full">
+                                {mqttDecodeFunctionCode}
+                              </pre>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+
                     {/* DYNAMIC ASSET ATTRIBUTES VIEW CARD (For physical assets) */}
                     {!selectedAsset.type.startsWith('AGENT_') && attributes.length > 0 && (
                       <Card className="border border-border/80">
@@ -1170,7 +1441,7 @@ export default function AssetsPage() {
                                     </Badge>
                                     {linkedAgent && (
                                       <Badge variant="outline" className="text-[8px] px-1 py-0 font-bold border-primary/20 text-primary bg-primary/5">
-                                        MQTT
+                                        MQTT Link
                                       </Badge>
                                     )}
                                   </div>
@@ -1182,7 +1453,7 @@ export default function AssetsPage() {
                                 {linkedAgent && (
                                   <div className="text-[9px] text-muted-foreground font-mono text-right space-y-0.5">
                                     <p className="max-w-[140px] truncate" title={attr.mqttTopic}>Topic: {attr.mqttTopic}</p>
-                                    {attr.mqttDecodeFunction && <p>Func: {attr.mqttDecodeFunction}</p>}
+                                    {attr.mqttDecodeFunctionCode && <p className="text-primary flex items-center justify-end gap-1"><Code className="h-3 w-3" /> JS Decoder Active</p>}
                                   </div>
                                 )}
                               </div>
