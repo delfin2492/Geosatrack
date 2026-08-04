@@ -41,20 +41,22 @@ export class AssetService {
       }
     }
 
-    // 2. Verify tag if provided, and check if it's already linked to another asset
+    // 2. Auto-provision tag if provided, and check if it's already linked to another asset
     if (tagId) {
-      const tag = await this.prisma.tag.findUnique({
+      await this.prisma.tag.upsert({
         where: { id: tagId },
+        update: {},
+        create: {
+          id: tagId,
+          name: `Tag for ${tagId}`,
+        },
       });
-      if (!tag) {
-        throw new NotFoundException(`Tag with ID "${tagId}" not found.`);
-      }
 
       const existingLinkedAsset = await this.prisma.asset.findUnique({
         where: { tagId },
       });
       if (existingLinkedAsset) {
-        throw new ConflictException(`Tag "${tagId}" is already linked to another asset.`);
+        throw new ConflictException(`Device Address "${tagId}" is already linked to another asset.`);
       }
     }
 
@@ -182,20 +184,22 @@ export class AssetService {
       }
     }
 
-    // Validate Tag
+    // Validate & Auto-provision Tag
     if (tagId && tagId !== asset.tagId) {
-      const tag = await this.prisma.tag.findUnique({
+      await this.prisma.tag.upsert({
         where: { id: tagId },
+        update: {},
+        create: {
+          id: tagId,
+          name: `Tag for ${tagId}`,
+        },
       });
-      if (!tag) {
-        throw new NotFoundException(`Tag with ID "${tagId}" not found.`);
-      }
 
       const existingLinkedAsset = await this.prisma.asset.findUnique({
         where: { tagId },
       });
       if (existingLinkedAsset) {
-        throw new ConflictException(`Tag "${tagId}" is already linked to another asset.`);
+        throw new ConflictException(`Device Address "${tagId}" is already linked to another asset.`);
       }
     }
 

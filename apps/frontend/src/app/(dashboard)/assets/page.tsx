@@ -304,6 +304,7 @@ export default function AssetsPage() {
   const [parentId, setParentId] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
+  const [tagId, setTagId] = useState('');
   
   // Dynamic parameters
   const [attributes, setAttributes] = useState<AssetAttribute[]>([]);
@@ -370,6 +371,7 @@ export default function AssetsPage() {
     setParentId(asset.parentId || '');
     setLatitude(asset.latitude !== null && asset.latitude !== undefined ? String(asset.latitude) : '');
     setLongitude(asset.longitude !== null && asset.longitude !== undefined ? String(asset.longitude) : '');
+    setTagId(asset.tagId || '');
     
     // Parse custom configurations
     try {
@@ -422,6 +424,7 @@ export default function AssetsPage() {
     setParentId('');
     setLatitude('');
     setLongitude('');
+    setTagId('');
     setCustomFields({});
     setAttributes([]);
     setMqttAgentId('');
@@ -528,7 +531,7 @@ export default function AssetsPage() {
           name,
           type,
           parentId: parentId || null,
-          tagId: null,
+          tagId: tagId || null,
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
           description: serializedDescription
@@ -847,7 +850,7 @@ export default function AssetsPage() {
             </CardHeader>
 
             <CardContent className="p-6 space-y-4 flex-1 overflow-y-auto pt-6 text-xs font-semibold">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-muted-foreground">Name *</label>
                   <Input
@@ -875,6 +878,16 @@ export default function AssetsPage() {
                       ))
                     }
                   </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground">Device Address / Serial Number (Optional)</label>
+                  <Input
+                    type="text"
+                    value={tagId}
+                    onChange={(e) => setTagId(e.target.value)}
+                    placeholder="e.g. node-439201 or 439201"
+                  />
                 </div>
               </div>
 
