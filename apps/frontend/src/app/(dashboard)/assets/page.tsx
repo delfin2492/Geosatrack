@@ -30,10 +30,7 @@ const defaultTeltonikaDecodeCode = `//==========================================
 // Endpoint 11 & Endpoint 238
 //====================================================
 
-let evt = msg.payload.packet_received_event || (msg.payload.wirepas && msg.payload.wirepas.packet_received_event);
-if (!evt) {
-    evt = msg.payload;
-}
+let evt = msg.payload.wirepas.packet_received_event;
 
 let ep = evt.source_endpoint;
 
@@ -64,86 +61,112 @@ function s32(b,o){
 }
 
 let out = {
-    gateway : evt.header ? evt.header.gw_id : null,
+    gateway : evt.header.gw_id,
     node     : evt.source_address,
     endpoint : ep,
     hop      : evt.hop_count,
     network  : evt.network_address
 };
 
+//====================================================
+// Endpoint 11
+//====================================================
 if(ep == 11){
+
     let bytes = b64ToBytes(evt.payload);
+
     let i=0;
+
     while(i<bytes.length){
+
         let type=bytes[i++];
         let len =bytes[i++];
+
         switch(type){
+
             case 0x01:
                 out.error_code=u16(bytes,i);
                 break;
+
             case 0x02:
                 out.temperature=Number((s32(bytes,i)/100).toFixed(2));
                 break;
+
             case 0x03:
                 out.humidity=Number((u32(bytes,i)/1024).toFixed(2));
                 break;
+
             case 0x05:
                 out.accel_x=s32(bytes,i);
                 break;
+
             case 0x06:
                 out.accel_y=s32(bytes,i);
                 break;
+
             case 0x07:
                 out.accel_z=s32(bytes,i);
                 break;
+
             case 0x08:
                 out.pitch=s16(bytes,i);
                 break;
+
             case 0x09:
                 out.roll=s16(bytes,i);
                 break;
+
             case 0x0A:
                 out.hall=(bytes[i]==1);
                 break;
         }
+
         i += len;
     }
+
 }
+
+//====================================================
+// Endpoint 238
+//====================================================
 else if(ep==238){
+
     let meas = evt.payload_json.measurements;
-    if (Array.isArray(meas)) {
-        let anchorCount = 1;
-        meas.forEach(m=>{
-            if(m.voltage!==undefined) {
-                out.voltage = m.voltage > 100 ? Number((m.voltage / 1000).toFixed(3)) : m.voltage;
-            }
-            if(m.node_info){
-                out.update_interval=m.node_info.update_s;
-                if (m.node_info.features) {
-                    out.motion=m.node_info.features.motion;
-                    out.is_static=m.node_info.features.is_static;
-                }
-                out.node_mode=m.node_info.node_mode;
-                out.node_class=m.node_info.node_class;
-            }
-            if(m.rss_sr_4byte_addr){
-                m.rss_sr_4byte_addr.forEach(r=>{
-                    if(r.addr==248) {
-                        out.gateway_rssi=r.rssi;
-                    } else {
-                        out["rssi_"+r.addr]=r.rssi;
-                        if (anchorCount <= 2) {
-                            out["rssi_anchor_" + anchorCount] = r.rssi;
-                            anchorCount++;
-                        }
-                    }
-                });
-            }
-        });
-    }
+
+    meas.forEach(m=>{
+
+        if(m.voltage!==undefined)
+            out.voltage=m.voltage;
+
+        if(m.node_info){
+
+            out.update_interval=m.node_info.update_s;
+            out.motion=m.node_info.features.motion;
+            out.is_static=m.node_info.features.is_static;
+            out.node_mode=m.node_info.node_mode;
+            out.node_class=m.node_info.node_class;
+
+        }
+
+        if(m.rss_sr_4byte_addr){
+
+            m.rss_sr_4byte_addr.forEach(r=>{
+
+                if(r.addr==248)
+                    out.gateway_rssi=r.rssi;
+                else
+                    out["rssi_"+r.addr]=r.rssi;
+
+            });
+
+        }
+
+    });
+
 }
 
 msg.payload=out;
+
 return msg;`;
 
 const defaultGenericAttributeCode = `//====================================================

@@ -379,10 +379,18 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         // Keep raw payload if not JSON
       }
 
+      // Safe Wrapper Guard: Ensure msg.payload.wirepas always exists if the root object has packet_received_event
+      let vmPayload = payload;
+      if (vmPayload && typeof vmPayload === 'object') {
+        if (!vmPayload.wirepas && vmPayload.packet_received_event) {
+          vmPayload = { wirepas: vmPayload };
+        }
+      }
+
       const sandbox = {
         msg: {
           topic,
-          payload
+          payload: vmPayload
         },
         Buffer: Buffer,
         console: {
