@@ -53,7 +53,60 @@ services:
       - timescaledb
     restart: always
 
+  # 5. NestJS Backend Application
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: geomesh-backend
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
+      - DB_HOST=timescaledb
+      - DB_PORT=5432
+      - DB_USER=geouser
+      - DB_PASSWORD=geopassword
+      - DB_NAME=geomesh
+      - DATABASE_URL=postgresql://geouser:geopassword@timescaledb:5432/geomesh?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MQTT_BROKER_URL=mqtt://emqx:1883
+      - MQTT_USERNAME=admin_geomesh
+      - MQTT_PASSWORD=admin_geomesh
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=geomesh
+      - KEYCLOAK_CLIENT_ID=geomesh-app
+      - KEYCLOAK_CLIENT_SECRET=change-me-on-production
+      - JWT_SECRET=super-secret-jwt-key-change-me
+    command: sh -c "npx prisma db push --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=apps/backend"
+    depends_on:
+      - timescaledb
+      - redis
+      - emqx
+    restart: always
+
+  # 6. Next.js Frontend Application
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:4000/api
+        - NEXT_PUBLIC_WS_URL=ws://localhost:4000
+        - NEXT_PUBLIC_KEYCLOAK_URL=http://localhost:8080
+        - NEXT_PUBLIC_KEYCLOAK_REALM=geomesh
+        - NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=geomesh-frontend
+    container_name: geomesh-frontend
+    ports:
+      - "3300:3300"
+    depends_on:
+      - backend
+    restart: always
+
 volumes:
   emqx-data:
   pg-data:
   redis-data:
+
