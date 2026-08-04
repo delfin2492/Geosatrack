@@ -27,11 +27,19 @@ import {
 
 // OpenRemote custom attributes mapping based on Agent/Asset type
 const attributeFieldsLookup: Record<string, { label: string; key: string; placeholder: string; type?: string; options?: string[] }[]> = {
-  AGENT_MQTT: [
+  AGENT_MQTT_TELTONIKA: [
     { label: 'MQTT Broker Host', key: 'host', placeholder: 'e.g. localhost' },
     { label: 'MQTT Port', key: 'port', placeholder: 'e.g. 1883', type: 'number' },
-    { label: 'Topic Prefix Filter', key: 'topicPrefix', placeholder: 'e.g. wirepas/gateway/#' },
-    { label: 'Client ID Prefix', key: 'clientId', placeholder: 'e.g. geomesh-receiver' }
+    { label: 'Topic Prefix Filter', key: 'topicPrefix', placeholder: 'e.g. json-gw-event/received_data/#' },
+    { label: 'Node ID JSON Path', key: 'nodeIdPath', placeholder: 'e.g. $.source_address' }
+  ],
+  AGENT_MQTT_GENERIC: [
+    { label: 'MQTT Broker Host', key: 'host', placeholder: 'e.g. localhost' },
+    { label: 'MQTT Port', key: 'port', placeholder: 'e.g. 1883', type: 'number' },
+    { label: 'Subscribe Topic', key: 'topic', placeholder: 'e.g. factory/temp/1' },
+    { label: 'Target Asset ID', key: 'targetAssetId', placeholder: 'Select target asset...', type: 'select_assets' },
+    { label: 'Target Attribute Key', key: 'attributeKey', placeholder: 'Select attribute...', type: 'select', options: ['temperature', 'humidity', 'battery', 'rssi'] },
+    { label: 'Value Extraction Path', key: 'valuePath', placeholder: 'e.g. $.val' }
   ],
   AGENT_HTTP: [
     { label: 'Endpoint Webhook URL', key: 'url', placeholder: 'e.g. http://localhost:4000/api/webhooks' },
@@ -107,7 +115,8 @@ const attributeFieldsLookup: Record<string, { label: string; key: string; placeh
 
 // OpenRemote type icon lookup
 const typeIconLookup: Record<string, React.ComponentType<any>> = {
-  AGENT_MQTT: Sliders,
+  AGENT_MQTT_TELTONIKA: Sliders,
+  AGENT_MQTT_GENERIC: HardDrive,
   AGENT_HTTP: Globe,
   AGENT_BLE: Activity,
   CITY: Globe,
@@ -195,7 +204,7 @@ export default function AssetsPage() {
   // Add Asset Popup modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalTab, setAddModalTab] = useState<'AGENT' | 'ASSET'>('AGENT');
-  const [addModalSelectedType, setAddModalSelectedType] = useState('AGENT_MQTT');
+  const [addModalSelectedType, setAddModalSelectedType] = useState('AGENT_MQTT_TELTONIKA');
 
   // Info/Message states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -274,7 +283,7 @@ export default function AssetsPage() {
     setLatitude('');
     setLongitude('');
     setCustomFields({});
-    setAddModalSelectedType('AGENT_MQTT');
+    setAddModalSelectedType('AGENT_MQTT_TELTONIKA');
     setAddModalTab('AGENT');
     setShowAddModal(true);
   };
@@ -533,7 +542,8 @@ export default function AssetsPage() {
 
   // Group list of agents vs assets in the popup modal
   const agentTypes = [
-    { key: 'AGENT_MQTT', label: 'MQTT Gateway', icon: Sliders },
+    { key: 'AGENT_MQTT_TELTONIKA', label: 'Teltonika Mesh Gateway', icon: Sliders },
+    { key: 'AGENT_MQTT_GENERIC', label: 'Generic MQTT Agent', icon: HardDrive },
     { key: 'AGENT_HTTP', label: 'HTTP Gateway', icon: Globe },
     { key: 'AGENT_BLE', label: 'Bluetooth Gateway', icon: Activity }
   ];
@@ -761,6 +771,21 @@ export default function AssetsPage() {
                                 {opt}
                               </option>
                             ))}
+                          </select>
+                        ) : field.type === 'select_assets' ? (
+                          <select
+                            value={customFields[field.key] || ''}
+                            onChange={(e) => handleCustomFieldChange(field.key, e.target.value)}
+                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                          >
+                            <option value="">Select target asset...</option>
+                            {assets
+                              .filter((a) => !a.type.startsWith('AGENT_'))
+                              .map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name} ({a.type})
+                                </option>
+                              ))}
                           </select>
                         ) : (
                           <Input
@@ -1100,7 +1125,7 @@ export default function AssetsPage() {
                     type="button"
                     onClick={() => {
                       setAddModalTab('AGENT');
-                      setAddModalSelectedType('AGENT_MQTT');
+                      setAddModalSelectedType('AGENT_MQTT_TELTONIKA');
                       setCustomFields({});
                     }}
                     className={`py-1.5 text-[10px] uppercase tracking-wider font-bold rounded border transition-all cursor-pointer ${
@@ -1251,6 +1276,21 @@ export default function AssetsPage() {
                                     {opt}
                                   </option>
                                 ))}
+                              </select>
+                            ) : field.type === 'select_assets' ? (
+                              <select
+                                value={customFields[field.key] || ''}
+                                onChange={(e) => handleCustomFieldChange(field.key, e.target.value)}
+                                className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                              >
+                                <option value="">Select target asset...</option>
+                                {assets
+                                  .filter((a) => !a.type.startsWith('AGENT_'))
+                                  .map((a) => (
+                                    <option key={a.id} value={a.id}>
+                                      {a.name} ({a.type})
+                                    </option>
+                                  ))}
                               </select>
                             ) : (
                               <Input

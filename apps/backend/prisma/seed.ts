@@ -149,6 +149,43 @@ async function main() {
 
   console.log(`*️⃣ Created anchors: ${anchor1.name}, ${anchor2.name}`);
 
+  // 8. Create Default Agents
+  const teltonikaAgent = await prisma.asset.create({
+    data: {
+      name: 'Teltonika Mesh Gateway 1',
+      type: 'AGENT_MQTT_TELTONIKA',
+      status: 'static',
+      tenantId: tenant1.id,
+      description: JSON.stringify({
+        host: 'emqx',
+        port: 1883,
+        topicPrefix: 'json-gw-event/received_data/#',
+        nodeIdPath: '$.source_address',
+        notes: 'Default Teltonika Wirepas Gateway Agent connected to central EMQX'
+      })
+    }
+  });
+
+  const genericAgent = await prisma.asset.create({
+    data: {
+      name: 'Generic Temperature Agent',
+      type: 'AGENT_MQTT_GENERIC',
+      status: 'static',
+      tenantId: tenant1.id,
+      description: JSON.stringify({
+        host: 'emqx',
+        port: 1883,
+        topic: 'factory/temperature',
+        targetAssetId: '',
+        attributeKey: 'temperature',
+        valuePath: '$.val',
+        notes: 'Generic MQTT subscriber for room temperature readings'
+      })
+    }
+  });
+
+  console.log(`🤖 Created default agents: ${teltonikaAgent.name}, ${genericAgent.name}`);
+
   console.log('🎉 Database seeding completed successfully!');
 }
 
