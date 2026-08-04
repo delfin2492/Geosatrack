@@ -305,7 +305,31 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
               if (attr.mqttDecodeFunctionCode) {
                 const outMsg = await this.runSandboxedScript(attr.mqttDecodeFunctionCode, topic, rawPayload);
                 if (outMsg && outMsg.payload !== undefined) {
-                  const formattedValue = this.castValue(outMsg.payload, attr.dataType);
+                  
+                  // Mesh Node Routing Guard: If payload contains a node address, ensure it matches the asset's tagId!
+                  const decodedNode = outMsg.payload.node || outMsg.payload.source_address;
+                  if (decodedNode && asset.tagId) {
+                    const matchNormal = asset.tagId === `node-${decodedNode}`;
+                    const matchRaw = asset.tagId === String(decodedNode);
+                    if (!matchNormal && !matchRaw) {
+                      continue; // Node address mismatch: This payload is for a different mesh node! Skip!
+                    }
+                  }
+
+                  // Extract value using mqttValuePath (e.g. $.temperature)
+                  let extractedVal = outMsg.payload;
+                  if (attr.mqttValuePath && typeof extractedVal === 'object' && extractedVal !== null) {
+                    if (attr.mqttValuePath.startsWith('$.')) {
+                      const prop = attr.mqttValuePath.slice(2);
+                      extractedVal = extractedVal[prop];
+                    }
+                  }
+
+                  if (extractedVal === undefined) {
+                    continue; // Property path not found in payload!
+                  }
+
+                  const formattedValue = this.castValue(extractedVal, attr.dataType);
                   updatedAttributes[i] = { 
                     ...attr, 
                     value: formattedValue,
