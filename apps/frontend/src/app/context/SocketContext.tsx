@@ -15,6 +15,7 @@ interface Asset {
   parentId?: string | null;
   tagId?: string | null;
   createdAt?: string;
+  updatedAt?: string;
   latitude?: number | null;
   longitude?: number | null;
   tag: {

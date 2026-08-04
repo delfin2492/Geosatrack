@@ -262,6 +262,7 @@ interface AssetAttribute {
   dataType: string; // 'Number' | 'String' | 'JSON' | 'Text' | 'Integer' | 'Boolean'
   unit: string;
   value?: any;
+  lastUpdated?: string;
   mqttAgentId?: string;
   mqttTopic?: string;
   mqttPublishTopic?: string;
@@ -279,6 +280,7 @@ interface TreeAsset {
   parentId?: string | null;
   tagId?: string | null;
   createdAt?: string;
+  updatedAt?: string;
   latitude?: number | null;
   longitude?: number | null;
   tag: any;
@@ -329,6 +331,18 @@ export default function AssetsPage() {
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [tagId, setTagId] = useState('');
+
+  // Custom Toasts and Confirm Dialog States
+  const [toasts, setToasts] = useState<{ id: string; type: 'success' | 'error' | 'info'; message: string }[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts((prev) => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  };
   
   // Dynamic parameters
   const [attributes, setAttributes] = useState<AssetAttribute[]>([]);
@@ -512,8 +526,9 @@ export default function AssetsPage() {
       setSelectedAssetId(created.id);
       setShowAddModal(false);
       setMode('view');
+      showToast('success', 'Asset successfully created.');
     } catch (err: any) {
-      alert(err.message || 'Error creating asset.');
+      showToast('error', err.message || 'Error creating asset.');
     } finally {
       setIsSubmitting(false);
     }
@@ -569,16 +584,22 @@ export default function AssetsPage() {
 
       await refreshAssets();
       setMode('view');
+      showToast('success', 'Configuration successfully saved.');
     } catch (err: any) {
-      alert(err.message || 'Error updating asset.');
+      showToast('error', err.message || 'Error updating asset.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeleteAsset = async () => {
+  const handleDeleteAsset = () => {
     if (!selectedAssetId || !tenantId || !selectedAsset) return;
-    if (!window.confirm(`Are you sure you want to delete asset "${selectedAsset.name}"?`)) return;
+    setShowDeleteConfirm(true);
+  };
+
+  const executeDeleteAsset = async () => {
+    if (!selectedAssetId || !tenantId || !selectedAsset) return;
+    setShowDeleteConfirm(false);
 
     try {
       const headers: Record<string, string> = { 'x-tenant-id': tenantId };
@@ -597,8 +618,9 @@ export default function AssetsPage() {
       await refreshAssets();
       setSelectedAssetId(null);
       setMode('view');
+      showToast('success', 'Asset successfully deleted.');
     } catch (err: any) {
-      alert(err.message || 'Error deleting asset.');
+      showToast('error', err.message || 'Error deleting asset.');
     }
   };
 
@@ -1377,15 +1399,34 @@ export default function AssetsPage() {
                             }
                           </Badge>
                         </div>
-                        <div className="flex items-center justify-between py-2 border-b border-border/40">
-                          <span className="text-muted-foreground">Active Status:</span>
-                          <Badge variant={selectedAsset.status === 'moving' ? 'success' : 'secondary'} className="capitalize">
-                            {selectedAsset.status}
-                          </Badge>
-                        </div>
-                        {selectedAsset.tagId && (
+                        {selectedAsset.type.startsWith('AGENT_') ? (
+                          <div className="flex items-center justify-between py-2 border-b border-border/40">
+                            <span className="text-muted-foreground">Active Status:</span>
+                            {(() => {
+                              const s = String(selectedAsset.status).toLowerCase();
+                              if (s === 'online' || s === 'connected' || s === 'active') {
+                                return <Badge variant="success">Connected</Badge>;
+                              }
+                              if (s === 'error') {
+                                return <Badge variant="destructive">Error</Badge>;
+                              }
+                              return <Badge variant="secondary">Disconnected</Badge>;
+                            })()}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between py-2 border-b border-border/40">
+                            <span className="text-muted-foreground">Last Update:</span>
+                            <span className="text-foreground font-bold">
+                              {selectedAsset.tag?.lastSeen 
+                                ? new Date(selectedAsset.tag.lastSeen).toLocaleString() 
+                                : (selectedAsset.updatedAt ? new Date(selectedAsset.updatedAt).toLocaleString() : '--')
+                              }
+                            </span>
+                          </div>
+                        )}
+                        {!selectedAsset.type.startsWith('AGENT_') && selectedAsset.tagId && (
                           <div className="flex items-center justify-between py-1">
-                            <span className="text-muted-foreground font-semibold">Device Eui / Linked Tag:</span>
+                            <span className="text-muted-foreground font-semibold">Device Address:</span>
                             <span className="font-mono text-foreground font-bold flex items-center gap-1.5">
                               <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
                               {selectedAsset.tagId}
@@ -1459,45 +1500,54 @@ export default function AssetsPage() {
                       </Card>
                     )}
 
-                    {/* DYNAMIC ASSET ATTRIBUTES VIEW CARD (For physical assets) */}
-                    {!selectedAsset.type.startsWith('AGENT_') && attributes.length > 0 && (
+                    {/* ATTRIBUTES VIEW CARD (For physical assets) */}
+                    {!selectedAsset.type.startsWith('AGENT_') && (
                       <Card className="border border-border/80">
                         <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
                           <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                            Dynamic Attributes
+                            Attributes
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45">
-                          {attributes.map((attr, idx) => {
-                            const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
-                            return (
-                              <div key={idx} className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
-                                <div>
-                                  <div className="flex items-center gap-1.5">
-                                    <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">{attr.name}</p>
-                                    <Badge variant="outline" className="text-[8px] px-1 py-0 font-normal border-border/50 text-muted-foreground/75">
-                                      {attr.dataType}
-                                    </Badge>
-                                    {linkedAgent && (
-                                      <Badge variant="outline" className="text-[8px] px-1 py-0 font-bold border-primary/20 text-primary bg-primary/5">
-                                        MQTT Link
+                          {attributes.length === 0 ? (
+                            <div className="p-6 text-center text-muted-foreground/65 italic font-normal">
+                              No attributes registered for this asset.
+                            </div>
+                          ) : (
+                            attributes.map((attr, idx) => {
+                              const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
+                              return (
+                                <div key={idx} className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">{attr.name}</p>
+                                      <Badge variant="outline" className="text-[8px] px-1 py-0 font-normal border-border/50 text-muted-foreground/75">
+                                        {attr.dataType}
                                       </Badge>
-                                    )}
+                                      {linkedAgent && (
+                                        <Badge variant="outline" className="text-[8px] px-1 py-0 font-bold border-primary/20 text-primary bg-primary/5">
+                                          MQTT Link
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-sm font-bold text-foreground mt-0.5">
+                                      {attr.value !== undefined && attr.value !== null && attr.value !== '' ? String(attr.value) : '--'}{' '}
+                                      {attr.unit && <span className="text-[10.5px] text-muted-foreground/80 font-normal">{attr.unit}</span>}
+                                    </p>
+                                    <p className="text-[9px] text-muted-foreground/75 mt-0.5 font-normal">
+                                      Last Update: {attr.lastUpdated ? new Date(attr.lastUpdated).toLocaleString() : '--'}
+                                    </p>
                                   </div>
-                                  <p className="text-sm font-bold text-foreground mt-0.5">
-                                    {attr.value !== undefined && attr.value !== null && attr.value !== '' ? String(attr.value) : '--'}{' '}
-                                    {attr.unit && <span className="text-[10.5px] text-muted-foreground/80 font-normal">{attr.unit}</span>}
-                                  </p>
+                                  {linkedAgent && (
+                                    <div className="text-[9px] text-muted-foreground font-mono text-right space-y-0.5">
+                                      <p className="max-w-[140px] truncate" title={attr.mqttTopic}>Topic: {attr.mqttTopic}</p>
+                                      {attr.mqttDecodeFunctionCode && <p className="text-primary flex items-center justify-end gap-1"><Code className="h-3 w-3" /> JS Decoder Active</p>}
+                                    </div>
+                                  )}
                                 </div>
-                                {linkedAgent && (
-                                  <div className="text-[9px] text-muted-foreground font-mono text-right space-y-0.5">
-                                    <p className="max-w-[140px] truncate" title={attr.mqttTopic}>Topic: {attr.mqttTopic}</p>
-                                    {attr.mqttDecodeFunctionCode && <p className="text-primary flex items-center justify-end gap-1"><Code className="h-3 w-3" /> JS Decoder Active</p>}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                              );
+                            })
+                          )}
                         </CardContent>
                       </Card>
                     )}
@@ -1540,7 +1590,7 @@ export default function AssetsPage() {
                     </Card>
 
                     {/* HISTORY Card */}
-                    {selectedAsset.type !== 'CITY' && selectedAsset.type !== 'BUILDING' && (
+                    {!selectedAsset.type.startsWith('AGENT_') && selectedAsset.type !== 'CITY' && selectedAsset.type !== 'BUILDING' && (
                       <Card className="border border-border/80">
                         <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50 flex flex-row items-center justify-between">
                           <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
@@ -1799,6 +1849,50 @@ export default function AssetsPage() {
             </div>
 
           </Card>
+        </div>
+      )}
+
+      {/* FLOATING TOAST NOTIFICATIONS */}
+      <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`p-3.5 rounded-xl border shadow-xl flex items-center justify-between text-xs font-semibold animate-in slide-in-from-bottom duration-300 ${
+              t.type === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : t.type === 'error'
+                ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+            }`}
+          >
+            <span>{t.message}</span>
+            <button
+              onClick={() => setToasts((prev) => prev.filter((toast) => toast.id !== t.id))}
+              className="ml-3 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* DELETE CONFIRMATION DIALOG MODAL */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl p-5 w-full max-w-sm shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-xs font-semibold">
+            <div className="text-sm font-bold text-foreground">Delete Asset</div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to delete asset <span className="font-bold text-foreground">"{selectedAsset?.name}"</span>? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={executeDeleteAsset}>
+                Delete
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

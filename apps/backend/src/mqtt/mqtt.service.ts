@@ -217,7 +217,11 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
                     const updatedAttrs = targetParsed.attributes.map((attr: any) => {
                       if (decoded[attr.name] !== undefined) {
                         targetUpdated = true;
-                        return { ...attr, value: decoded[attr.name] };
+                        return { 
+                          ...attr, 
+                          value: decoded[attr.name],
+                          lastUpdated: new Date().toISOString()
+                        };
                       }
                       return attr;
                     });
@@ -252,7 +256,11 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
                   const updatedAttrs = parsed.attributes.map((attr: any) => {
                     if (decoded[attr.name] !== undefined) {
                       assetUpdated = true;
-                      return { ...attr, value: decoded[attr.name] };
+                      return { 
+                        ...attr, 
+                        value: decoded[attr.name],
+                        lastUpdated: new Date().toISOString()
+                      };
                     }
                     return attr;
                   });
@@ -298,7 +306,11 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
                 const outMsg = await this.runSandboxedScript(attr.mqttDecodeFunctionCode, topic, rawPayload);
                 if (outMsg && outMsg.payload !== undefined) {
                   const formattedValue = this.castValue(outMsg.payload, attr.dataType);
-                  updatedAttributes[i] = { ...attr, value: formattedValue };
+                  updatedAttributes[i] = { 
+                    ...attr, 
+                    value: formattedValue,
+                    lastUpdated: new Date().toISOString()
+                  };
                   decodedObj[attr.name] = formattedValue;
                   hasUpdates = true;
                 }
