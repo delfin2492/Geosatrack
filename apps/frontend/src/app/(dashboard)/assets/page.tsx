@@ -118,11 +118,17 @@ else if(ep==238){
             out.node_class=m.node_info.node_class;
         }
         if(m.rss_sr_4byte_addr){
+            let anchorCount = 1;
             m.rss_sr_4byte_addr.forEach(r=>{
-                if(r.addr==248)
+                if(r.addr==248) {
                     out.gateway_rssi=r.rssi;
-                else
+                } else {
                     out["rssi_"+r.addr]=r.rssi;
+                    if (anchorCount <= 2) {
+                        out["rssi_anchor_" + anchorCount] = r.rssi;
+                        anchorCount++;
+                    }
+                }
             });
         }
     });
@@ -177,6 +183,23 @@ const defaultAttributesLookup: Record<string, { name: string; dataType: string; 
     { name: 'machineCode', dataType: 'String', unit: '' },
     { name: 'temperature', dataType: 'Number', unit: '°C' },
     { name: 'status', dataType: 'String', unit: '' }
+  ],
+  MESH_EYE_SENSOR: [
+    { name: 'temperature', dataType: 'Number', unit: '°C' },
+    { name: 'humidity', dataType: 'Number', unit: '%' },
+    { name: 'voltage', dataType: 'Number', unit: 'V' },
+    { name: 'accel_x', dataType: 'Number', unit: 'mg' },
+    { name: 'accel_y', dataType: 'Number', unit: 'mg' },
+    { name: 'accel_z', dataType: 'Number', unit: 'mg' },
+    { name: 'pitch', dataType: 'Number', unit: '°' },
+    { name: 'roll', dataType: 'Number', unit: '°' },
+    { name: 'hall', dataType: 'Boolean', unit: '' },
+    { name: 'motion', dataType: 'Boolean', unit: '' },
+    { name: 'is_static', dataType: 'Boolean', unit: '' },
+    { name: 'update_interval', dataType: 'Integer', unit: 's' },
+    { name: 'gateway_rssi', dataType: 'Integer', unit: 'dBm' },
+    { name: 'rssi_anchor_1', dataType: 'Integer', unit: 'dBm' },
+    { name: 'rssi_anchor_2', dataType: 'Integer', unit: 'dBm' }
   ]
 };
 
@@ -226,7 +249,8 @@ const typeIconLookup: Record<string, React.ComponentType<any>> = {
   DOOR: Folder,
   ROOM: Folder,
   TAG: HardDrive,
-  MACHINE: Sliders
+  MACHINE: Sliders,
+  MESH_EYE_SENSOR: Activity
 };
 
 const getTypeIcon = (type: string) => {
@@ -725,7 +749,8 @@ export default function AssetsPage() {
     { key: 'DOOR', label: 'Door', icon: Folder },
     { key: 'ROOM', label: 'Room Asset', icon: Folder },
     { key: 'TAG', label: 'Tag Card', icon: HardDrive },
-    { key: 'MACHINE', label: 'Machine', icon: Sliders }
+    { key: 'MACHINE', label: 'Machine', icon: Sliders },
+    { key: 'MESH_EYE_SENSOR', label: 'Mesh Eye Sensor', icon: Activity }
   ];
 
   const currentAddModalTypes = addModalTab === 'AGENT' ? agentTypes : assetTypes;
@@ -1135,7 +1160,8 @@ export default function AssetsPage() {
                                         return { 
                                           ...a, 
                                           mqttAgentId: val || undefined,
-                                          mqttTopic: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? 'json-gw-event/received_data/#' : '') : undefined,
+                                          mqttTopic: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? 'json-gw-event/received_data/#' : '') : '',
+                                          mqttValuePath: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? `$.${a.name}` : '') : '',
                                           mqttDecodeFunctionCode: val ? defaultCode : undefined
                                         };
                                       }

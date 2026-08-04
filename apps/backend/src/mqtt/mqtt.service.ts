@@ -206,9 +206,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
               const sourceNodeId = decoded.node || decoded.source_address;
 
               if (sourceNodeId) {
-                // Multi-node routing: Find target node asset in DB
+                // Multi-node routing: Find target node asset in DB (supports node-439201 and 439201 format)
                 const targetTagId = `node-${sourceNodeId}`;
-                const targetAsset = assets.find((a) => a.tagId === targetTagId);
+                const targetAsset = assets.find((a) => a.tagId === targetTagId || (a.tagId && a.tagId === String(sourceNodeId)));
 
                 if (targetAsset && targetAsset.description) {
                   const targetParsed = JSON.parse(targetAsset.description);
