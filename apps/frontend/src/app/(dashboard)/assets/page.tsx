@@ -625,7 +625,7 @@ export default function AssetsPage() {
   };
 
   return (
-    <div className="flex h-full w-full gap-5">
+    <div className="flex h-[calc(100vh-128px)] w-full gap-5 overflow-hidden">
       
       {/* LEFT COLUMN: ASSETS SIDEBAR TREE */}
       <Card className="w-80 flex flex-col shrink-0 overflow-hidden border border-border">
@@ -687,7 +687,7 @@ export default function AssetsPage() {
       <Card className="flex-1 flex flex-col overflow-hidden border border-border shadow-xl">
         {mode === 'edit' ? (
           /* ==================== EDIT FORM ==================== */
-          <form onSubmit={handleUpdateAsset} className="flex-1 flex flex-col justify-between">
+          <form onSubmit={handleUpdateAsset} className="flex-1 flex flex-col justify-between overflow-hidden">
             <CardHeader className="py-4 flex flex-row items-center justify-between border-b bg-secondary/15">
               <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                 {(() => {
@@ -708,7 +708,7 @@ export default function AssetsPage() {
             </CardHeader>
 
             <CardContent className="p-6 space-y-4 flex-1 overflow-y-auto pt-6 text-xs font-semibold">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-muted-foreground">Name *</label>
                   <Input
@@ -740,14 +740,14 @@ export default function AssetsPage() {
               </div>
 
               {/* Coordinates interactive leaflet selection map */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5 col-span-2">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-1.5">
                   <label className="text-muted-foreground flex items-center justify-between">
                     <span>Coordinates Selection *</span>
                     <span className="text-[10px] text-primary italic font-normal">Click on the map to select locations</span>
                   </label>
                   <div ref={formMapRef} className="h-44 w-full bg-secondary/15 rounded-xl border border-border overflow-hidden z-10"></div>
-                  <div className="grid grid-cols-2 gap-2 mt-1.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
                     <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
                       <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Latitude</span>
                       <span className="font-mono text-xs text-foreground font-extrabold">{latitude || '(Not Selected)'}</span>
@@ -764,7 +764,7 @@ export default function AssetsPage() {
               {type.startsWith('AGENT_') && currentEditFieldsConfig.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-border/60">
                   <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Required Connection Credentials</span>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {currentEditFieldsConfig.map((field) => (
                       <div key={field.key} className="space-y-1.5">
                         <label className="text-muted-foreground">{field.label}</label>
@@ -834,7 +834,7 @@ export default function AssetsPage() {
                               <X className="h-4 w-4" />
                             </button>
 
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div className="space-y-1">
                                 <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Attribute Name</label>
                                 <Input
@@ -882,7 +882,7 @@ export default function AssetsPage() {
                             </div>
 
                             {/* Agent Link selection */}
-                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/30">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/30">
                               <div className="space-y-1">
                                 <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Agent Link</label>
                                 <select
@@ -923,7 +923,7 @@ export default function AssetsPage() {
 
                             {/* Sub-parameters for Agent Ingestions */}
                             {attr.mqttAgentId && (
-                              <div className="grid grid-cols-3 gap-3 pt-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                                 {(() => {
                                   const agent = assets.find(a => a.id === attr.mqttAgentId);
                                   const isTeltonika = agent?.type === 'AGENT_MQTT_TELTONIKA';

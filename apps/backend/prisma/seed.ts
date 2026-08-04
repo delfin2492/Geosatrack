@@ -19,9 +19,10 @@ async function main() {
 
   console.log('🧹 Cleaned up existing database tables.');
 
-  // 2. Create Tenants
+  // 2. Create Tenants with static, persistent IDs to prevent session invalidations during re-seeding
   const tenant1 = await prisma.tenant.create({
     data: {
+      id: 'tenant_cmsdg43ah0000linokqkv0k9b',
       name: 'PT ABC Logistics',
       status: 'active',
       agentLimit: 10,
@@ -31,6 +32,7 @@ async function main() {
 
   const tenant2 = await prisma.tenant.create({
     data: {
+      id: 'tenant_xyz_manufacturing',
       name: 'PT XYZ Manufacturing',
       status: 'active',
       agentLimit: 5,
@@ -38,7 +40,7 @@ async function main() {
     },
   });
 
-  console.log(`🏢 Created tenants: ${tenant1.name}, ${tenant2.name}`);
+  console.log(`🏢 Created tenants: ${tenant1.name} (ID: ${tenant1.id}), ${tenant2.name} (ID: ${tenant2.id})`);
 
   // 3. Create Users
   const superadmin = await prisma.user.create({
