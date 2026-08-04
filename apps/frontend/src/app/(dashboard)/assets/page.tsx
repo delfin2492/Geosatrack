@@ -25,8 +25,49 @@ import {
   Cpu
 } from 'lucide-react';
 
-// OpenRemote custom attributes mapping based on Agent/Asset type
-const attributeFieldsLookup: Record<string, { label: string; key: string; placeholder: string; type?: string; options?: string[] }[]> = {
+// Default attributes for each asset type used for auto-initialization
+const defaultAttributesLookup: Record<string, { name: string; dataType: string; unit: string }[]> = {
+  CITY: [
+    { name: 'country', dataType: 'String', unit: '' },
+    { name: 'region', dataType: 'String', unit: '' }
+  ],
+  BUILDING: [
+    { name: 'address', dataType: 'String', unit: '' },
+    { name: 'floors', dataType: 'Integer', unit: 'floor(s)' }
+  ],
+  LIGHT: [
+    { name: 'switchMac', dataType: 'String', unit: '' },
+    { name: 'powerState', dataType: 'Boolean', unit: '' },
+    { name: 'brightness', dataType: 'Integer', unit: '%' }
+  ],
+  ENVIRONMENT: [
+    { name: 'temperature', dataType: 'Number', unit: '°C' },
+    { name: 'humidity', dataType: 'Number', unit: '%' }
+  ],
+  WEATHER: [
+    { name: 'windSpeed', dataType: 'Number', unit: 'm/s' },
+    { name: 'pressure', dataType: 'Number', unit: 'hPa' }
+  ],
+  ANCHOR: [
+    { name: 'anchorId', dataType: 'String', unit: '' },
+    { name: 'txPower', dataType: 'Integer', unit: 'dBm' }
+  ],
+  FORKLIFT: [
+    { name: 'vehicleCode', dataType: 'String', unit: '' },
+    { name: 'operator', dataType: 'String', unit: '' },
+    { name: 'temperature', dataType: 'Number', unit: '°C' },
+    { name: 'humidity', dataType: 'Number', unit: '%' },
+    { name: 'battery', dataType: 'Number', unit: 'V' }
+  ],
+  MACHINE: [
+    { name: 'machineCode', dataType: 'String', unit: '' },
+    { name: 'temperature', dataType: 'Number', unit: '°C' },
+    { name: 'status', dataType: 'String', unit: '' }
+  ]
+};
+
+// OpenRemote custom connection credentials mapping based on Agent type
+const agentConnectionFieldsLookup: Record<string, { label: string; key: string; placeholder: string; type?: string; options?: string[] }[]> = {
   AGENT_MQTT_TELTONIKA: [
     { label: 'MQTT Broker Host', key: 'host', placeholder: 'e.g. localhost' },
     { label: 'MQTT Port', key: 'port', placeholder: 'e.g. 1883', type: 'number' },
@@ -49,67 +90,6 @@ const attributeFieldsLookup: Record<string, { label: string; key: string; placeh
   AGENT_BLE: [
     { label: 'Bluetooth HCI Driver Interface', key: 'interface', placeholder: 'e.g. hci0' },
     { label: 'Scan Interval Range (seconds)', key: 'interval', placeholder: 'e.g. 5', type: 'number' }
-  ],
-  CITY: [
-    { label: 'Country Location', key: 'country', placeholder: 'e.g. Indonesia' },
-    { label: 'City Region / State', key: 'region', placeholder: 'e.g. DKI Jakarta' }
-  ],
-  BUILDING: [
-    { label: 'Street Address', key: 'address', placeholder: 'e.g. Jl. HR Rasuna Said No.X' },
-    { label: 'Total Floor Count', key: 'floors', placeholder: 'e.g. 3', type: 'number' }
-  ],
-  LIGHT: [
-    { label: 'Smart Light Switch MAC', key: 'switchMac', placeholder: 'e.g. sw-00:11:22' },
-    { label: 'Initial Power State', key: 'powerState', placeholder: 'OFF', type: 'select', options: ['OFF', 'ON'] },
-    { label: 'Target Brightness Level (%)', key: 'brightness', placeholder: '100', type: 'number' }
-  ],
-  ENVIRONMENT: [
-    { label: 'Target Temperature threshold (°C)', key: 'tempThreshold', placeholder: 'e.g. 24.5', type: 'number' },
-    { label: 'Target Humidity threshold (%)', key: 'humidityThreshold', placeholder: 'e.g. 50.0', type: 'number' }
-  ],
-  WEATHER: [
-    { label: 'Wind Speed Sensor Identifier', key: 'windSensor', placeholder: 'e.g. ws-01' },
-    { label: 'Barometric Target Pressure (hPa)', key: 'barometerTarget', placeholder: 'e.g. 1013.2', type: 'number' }
-  ],
-  ANCHOR: [
-    { label: 'Anchor Hardware Address', key: 'anchorId', placeholder: 'e.g. anchor-00:11:22:33:aa:01' },
-    { label: 'Signal Transmitter Power (dBm)', key: 'txPower', placeholder: 'e.g. -12', type: 'number' }
-  ],
-  THINGS: [
-    { label: 'Device Manufacturer Vendor', key: 'vendor', placeholder: 'e.g. STMicroelectronics' },
-    { label: 'Device Serial Number', key: 'serial', placeholder: 'e.g. SN-09948210' }
-  ],
-  FORKLIFT: [
-    { label: 'Vehicle Code / Fleet ID', key: 'vehicleCode', placeholder: 'e.g. TF-01' },
-    { label: 'Assigned Operator Name', key: 'operator', placeholder: 'e.g. Budi Santoso' },
-    { label: 'Battery Capacity Limit (V)', key: 'batteryLimit', placeholder: 'e.g. 3.6', type: 'number' }
-  ],
-  RACK: [
-    { label: 'Rack Section Code', key: 'rackCode', placeholder: 'e.g. R-ALPHA-1' },
-    { label: 'Total Shelf Levels Count', key: 'shelves', placeholder: 'e.g. 4', type: 'number' },
-    { label: 'Maximum Shelf Load Limit (kg)', key: 'maxLoad', placeholder: 'e.g. 1500', type: 'number' }
-  ],
-  SHIP: [
-    { label: 'IMO Registered Number', key: 'imo', placeholder: 'e.g. IMO 9238472' },
-    { label: 'Vessel Signal Callsign', key: 'callsign', placeholder: 'e.g. YB-812' },
-    { label: 'Primary Cargo Load Type', key: 'cargoType', placeholder: 'e.g. Dry Container / Refrigerator' }
-  ],
-  DOOR: [
-    { label: 'Logical Door Code ID', key: 'doorCode', placeholder: 'e.g. DOOR-W1' },
-    { label: 'Contact Sensor Node ID', key: 'sensorNodeId', placeholder: 'e.g. node-439202' },
-    { label: 'Initial State', key: 'initialState', placeholder: 'CLOSED', type: 'select', options: ['CLOSED', 'OPEN'] }
-  ],
-  ROOM: [
-    { label: 'Room Code Number', key: 'roomNumber', placeholder: 'e.g. 302' },
-    { label: 'Initial Occupancy Status', key: 'occupancy', placeholder: 'EMPTY', type: 'select', options: ['EMPTY', 'OCCUPIED'] }
-  ],
-  TAG: [
-    { label: 'Wirepas Node Identifier', key: 'nodeId', placeholder: 'e.g. node-439201' },
-    { label: 'Battery Limit (V)', key: 'batteryV', placeholder: 'e.g. 3.0', type: 'number' }
-  ],
-  MACHINE: [
-    { label: 'Factory Equipment Code', key: 'machineCode', placeholder: 'e.g. CNC-M01' },
-    { label: 'Initial Operational State', key: 'machineState', placeholder: 'STOPPED', type: 'select', options: ['STOPPED', 'RUNNING', 'MAINTENANCE'] }
   ]
 };
 
@@ -138,6 +118,18 @@ const typeIconLookup: Record<string, React.ComponentType<any>> = {
 const getTypeIcon = (type: string) => {
   return typeIconLookup[type] || Boxes;
 };
+
+interface AssetAttribute {
+  name: string;
+  dataType: string; // 'Number' | 'String' | 'JSON' | 'Text' | 'Integer' | 'Boolean'
+  unit: string;
+  value?: any;
+  mqttAgentId?: string;
+  mqttTopic?: string;
+  mqttPublishTopic?: string;
+  mqttValuePath?: string;
+  mqttDecodeFunction?: string;
+}
 
 interface TreeAsset {
   id: string;
@@ -196,9 +188,11 @@ export default function AssetsPage() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState('FORKLIFT');
   const [parentId, setParentId] = useState('');
-  const [tagId, setTagId] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
+  
+  // Dynamic parameters
+  const [attributes, setAttributes] = useState<AssetAttribute[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
   // Add Asset Popup modal states
@@ -254,23 +248,38 @@ export default function AssetsPage() {
     setName(asset.name);
     setType(asset.type || 'FORKLIFT');
     setParentId(asset.parentId || '');
-    setTagId(asset.tagId || '');
     setLatitude(asset.latitude !== null && asset.latitude !== undefined ? String(asset.latitude) : '');
     setLongitude(asset.longitude !== null && asset.longitude !== undefined ? String(asset.longitude) : '');
     
-    // Parse custom fields from description JSON
+    // Parse custom configurations
     try {
       if (asset.description && asset.description.startsWith('{')) {
         const parsed = JSON.parse(asset.description);
-        setCustomFields(parsed);
         setDescription(parsed.notes || '');
+        
+        if (asset.type.startsWith('AGENT_')) {
+          setCustomFields(parsed);
+          setAttributes([]);
+        } else {
+          setCustomFields({});
+          if (parsed.attributes && Array.isArray(parsed.attributes)) {
+            setAttributes(parsed.attributes);
+          } else {
+            const defaults = defaultAttributesLookup[asset.type] || [];
+            setAttributes(defaults.map(d => ({ ...d, value: '' })));
+          }
+        }
       } else {
-        setCustomFields({});
         setDescription(asset.description || '');
+        setCustomFields({});
+        const defaults = defaultAttributesLookup[asset.type] || [];
+        setAttributes(defaults.map(d => ({ ...d, value: '' })));
       }
     } catch (e) {
-      setCustomFields({});
       setDescription(asset.description || '');
+      setCustomFields({});
+      const defaults = defaultAttributesLookup[asset.type] || [];
+      setAttributes(defaults.map(d => ({ ...d, value: '' })));
     }
     setMode('view');
   };
@@ -279,10 +288,10 @@ export default function AssetsPage() {
     setName('');
     setDescription('');
     setParentId('');
-    setTagId('');
     setLatitude('');
     setLongitude('');
     setCustomFields({});
+    setAttributes([]);
     setAddModalSelectedType('AGENT_MQTT_TELTONIKA');
     setAddModalTab('AGENT');
     setShowAddModal(true);
@@ -300,11 +309,21 @@ export default function AssetsPage() {
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      // Package custom attributes with notes
-      const serializedDescription = JSON.stringify({
-        ...customFields,
-        notes: description
-      });
+      let serializedDescription = '';
+      if (addModalTab === 'AGENT') {
+        serializedDescription = JSON.stringify({
+          ...customFields,
+          notes: description
+        });
+      } else {
+        // Pre-populate with default attributes upon creation
+        const defaults = defaultAttributesLookup[addModalSelectedType] || [];
+        const initialAttributes = defaults.map(d => ({ ...d, value: '' }));
+        serializedDescription = JSON.stringify({
+          attributes: initialAttributes,
+          notes: description
+        });
+      }
 
       const res = await fetch(`http://localhost:4000/api/assets`, {
         method: 'POST',
@@ -313,7 +332,7 @@ export default function AssetsPage() {
           name,
           type: addModalSelectedType,
           parentId: parentId || null,
-          tagId: tagId || null,
+          tagId: null, // tagId binding is handled via dynamic attributes linking in edit
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
           description: serializedDescription
@@ -349,11 +368,18 @@ export default function AssetsPage() {
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      // Package custom attributes with notes
-      const serializedDescription = JSON.stringify({
-        ...customFields,
-        notes: description
-      });
+      let serializedDescription = '';
+      if (type.startsWith('AGENT_')) {
+        serializedDescription = JSON.stringify({
+          ...customFields,
+          notes: description
+        });
+      } else {
+        serializedDescription = JSON.stringify({
+          attributes,
+          notes: description
+        });
+      }
 
       const res = await fetch(`http://localhost:4000/api/assets/${selectedAssetId}`, {
         method: 'PATCH',
@@ -362,7 +388,7 @@ export default function AssetsPage() {
           name,
           type,
           parentId: parentId || null,
-          tagId: tagId || null,
+          tagId: null,
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
           description: serializedDescription
@@ -430,11 +456,9 @@ export default function AssetsPage() {
       (mapContainer as any)._leaflet_id = null;
     }
 
-    // Jakarta coordinate defaults
     const initialLat = latitude ? parseFloat(latitude) : -6.2444;
     const initialLng = longitude ? parseFloat(longitude) : 106.8505;
 
-    // Use custom icon created explicitly with CDN paths to prevent default asset 404s
     const customIcon = L.icon({
       iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
       iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
@@ -490,7 +514,6 @@ export default function AssetsPage() {
 
     const L = require('leaflet');
 
-    // Clean up potential left-over Leaflet ID to prevent reuse errors
     if ((mapContainer as any)._leaflet_id) {
       (mapContainer as any)._leaflet_id = null;
     }
@@ -498,7 +521,6 @@ export default function AssetsPage() {
     const lat = parseFloat(String(selectedAsset.latitude));
     const lng = parseFloat(String(selectedAsset.longitude));
 
-    // Custom Icon with CDN urls
     const customIcon = L.icon({
       iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
       iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
@@ -509,7 +531,6 @@ export default function AssetsPage() {
       shadowSize: [41, 41]
     });
 
-    // Initialize map in view-only mode (static preview with pan capability)
     const map = L.map(mapContainer, {
       zoomControl: true,
       scrollWheelZoom: false,
@@ -566,8 +587,8 @@ export default function AssetsPage() {
   ];
 
   const currentAddModalTypes = addModalTab === 'AGENT' ? agentTypes : assetTypes;
-  const currentFieldsConfig = attributeFieldsLookup[addModalSelectedType] || [];
-  const currentEditFieldsConfig = attributeFieldsLookup[type] || [];
+  const currentFieldsConfig = agentConnectionFieldsLookup[addModalSelectedType] || [];
+  const currentEditFieldsConfig = agentConnectionFieldsLookup[type] || [];
 
   // Recursive render function for the tree
   const renderAssetNode = (node: TreeAsset, level = 0) => {
@@ -606,7 +627,7 @@ export default function AssetsPage() {
   return (
     <div className="flex h-full w-full gap-5">
       
-      {/* LEFT COLUMN: ASSETS SIDEBAR TREE (OpenRemote Inspired) */}
+      {/* LEFT COLUMN: ASSETS SIDEBAR TREE */}
       <Card className="w-80 flex flex-col shrink-0 overflow-hidden border border-border">
         <div className="bg-secondary/40 border-b border-border p-3 flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
@@ -739,22 +760,10 @@ export default function AssetsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5 col-span-2">
-                  <label className="text-muted-foreground">Linked Sensor Node ID (Optional)</label>
-                  <Input
-                    type="text"
-                    value={tagId}
-                    onChange={(e) => setTagId(e.target.value)}
-                    placeholder="e.g. node-439201"
-                  />
-                </div>
-              </div>
-
-              {/* Dynamic Custom Attributes Forms */}
-              {currentEditFieldsConfig.length > 0 && (
+              {/* Dynamic Connection Credentials Form (For Agents) */}
+              {type.startsWith('AGENT_') && currentEditFieldsConfig.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-border/60">
-                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Required Type Attributes</span>
+                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Required Connection Credentials</span>
                   <div className="grid grid-cols-2 gap-4">
                     {currentEditFieldsConfig.map((field) => (
                       <div key={field.key} className="space-y-1.5">
@@ -772,21 +781,6 @@ export default function AssetsPage() {
                               </option>
                             ))}
                           </select>
-                        ) : field.type === 'select_assets' ? (
-                          <select
-                            value={customFields[field.key] || ''}
-                            onChange={(e) => handleCustomFieldChange(field.key, e.target.value)}
-                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                          >
-                            <option value="">Select target asset...</option>
-                            {assets
-                              .filter((a) => !a.type.startsWith('AGENT_'))
-                              .map((a) => (
-                                <option key={a.id} value={a.id}>
-                                  {a.name} ({a.type})
-                                </option>
-                              ))}
-                          </select>
                         ) : (
                           <Input
                             type={field.type || 'text'}
@@ -801,86 +795,197 @@ export default function AssetsPage() {
                 </div>
               )}
 
-              {/* MQTT Ingestion Configuration (Optional, for physical assets) */}
+              {/* Dynamic Metadata Attributes Editor (For physical assets) */}
               {!type.startsWith('AGENT_') && (
-                <div className="space-y-3 pt-3 border-t border-border/60">
-                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">MQTT Ingestion Configuration (Optional)</span>
-                  <div className="grid grid-cols-2 gap-3.5">
-                    
-                    <div className="space-y-1">
-                      <label className="text-muted-foreground">MQTT Agent Link</label>
-                      <select
-                        value={customFields['mqttAgentId'] || ''}
-                        onChange={(e) => handleCustomFieldChange('mqttAgentId', e.target.value)}
-                        className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                      >
-                        <option value="">Select MQTT Agent...</option>
-                        {assets
-                          .filter((a) => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
-                          .map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-muted-foreground">Subscribe Topic</label>
-                      <Input
-                        type="text"
-                        value={customFields['mqttTopic'] || ''}
-                        onChange={(e) => handleCustomFieldChange('mqttTopic', e.target.value)}
-                        placeholder="e.g. factory/temp/1 or json-gw-event/received_data/#"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-muted-foreground">Decode Mode</label>
-                      <select
-                        value={customFields['mqttDecodeMode'] || 'direct'}
-                        onChange={(e) => {
-                          handleCustomFieldChange('mqttDecodeMode', e.target.value);
-                          if (e.target.value === 'teltonika') {
-                            handleCustomFieldChange('mqttValuePath', '$.source_address');
-                          } else {
-                            handleCustomFieldChange('mqttValuePath', '$.val');
-                          }
-                        }}
-                        className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                      >
-                        <option value="direct">Direct Value Mapping</option>
-                        <option value="teltonika">Teltonika Mesh Ingestion</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-muted-foreground">Value Extraction Path</label>
-                      <Input
-                        type="text"
-                        value={customFields['mqttValuePath'] || ''}
-                        onChange={(e) => handleCustomFieldChange('mqttValuePath', e.target.value)}
-                        placeholder="e.g. $.val or $.source_address"
-                      />
-                    </div>
-
-                    {(customFields['mqttDecodeMode'] || 'direct') === 'direct' && (
-                      <div className="space-y-1 col-span-2">
-                        <label className="text-muted-foreground">Target Attribute Key</label>
-                        <select
-                          value={customFields['mqttTargetAttribute'] || 'temperature'}
-                          onChange={(e) => handleCustomFieldChange('mqttTargetAttribute', e.target.value)}
-                          className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                        >
-                          <option value="temperature">Temperature</option>
-                          <option value="humidity">Humidity</option>
-                          <option value="battery">Battery</option>
-                          <option value="rssi">RSSI</option>
-                        </select>
-                      </div>
-                    )}
-
+                <div className="space-y-4 pt-4 border-t border-border/60">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Dynamic Asset Attributes</span>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setAttributes(prev => [
+                          ...prev,
+                          { name: 'new_attribute', dataType: 'Number', unit: '', value: '' }
+                        ]);
+                      }}
+                      variant="outline"
+                      className="h-7 text-[10px] uppercase font-bold px-2 flex items-center gap-1.5"
+                    >
+                      <Plus className="h-3 w-3" />
+                      Add Attribute
+                    </Button>
                   </div>
+
+                  {attributes.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4 font-semibold text-xs italic">No attributes configured.</p>
+                  ) : (
+                    <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                      {attributes.map((attr, idx) => {
+                        return (
+                          <div key={idx} className="bg-secondary/15 border border-border p-4 rounded-xl space-y-3.5 relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAttributes(prev => prev.filter((_, i) => i !== idx));
+                              }}
+                              className="absolute right-3 top-3 text-muted-foreground hover:text-red-400 transition-colors cursor-pointer"
+                              title="Remove Attribute"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Attribute Name</label>
+                                <Input
+                                  type="text"
+                                  value={attr.name}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, name: val } : a));
+                                  }}
+                                  placeholder="e.g. temperature"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Data Type</label>
+                                <select
+                                  value={attr.dataType}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, dataType: val } : a));
+                                  }}
+                                  className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                                >
+                                  <option value="Number">Number</option>
+                                  <option value="String">String</option>
+                                  <option value="JSON">JSON</option>
+                                  <option value="Text">Text</option>
+                                  <option value="Integer">Integer</option>
+                                  <option value="Boolean">Boolean</option>
+                                </select>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Unit</label>
+                                <Input
+                                  type="text"
+                                  value={attr.unit}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, unit: val } : a));
+                                  }}
+                                  placeholder="e.g. °C"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Agent Link selection */}
+                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/30">
+                              <div className="space-y-1">
+                                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Agent Link</label>
+                                <select
+                                  value={attr.mqttAgentId || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttAgentId: val || undefined } : a));
+                                  }}
+                                  className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                                >
+                                  <option value="">(None / Static Attribute)</option>
+                                  {assets
+                                    .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
+                                    .map(a => (
+                                      <option key={a.id} value={a.id}>
+                                        {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
+                                      </option>
+                                    ))
+                                  }
+                                </select>
+                              </div>
+
+                              {attr.mqttAgentId && (
+                                <div className="space-y-1">
+                                  <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Subscribe Topic</label>
+                                  <Input
+                                    type="text"
+                                    value={attr.mqttTopic || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttTopic: val } : a));
+                                    }}
+                                    placeholder="e.g. factory/temp/1 or json-gw-event/received_data/#"
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Sub-parameters for Agent Ingestions */}
+                            {attr.mqttAgentId && (
+                              <div className="grid grid-cols-3 gap-3 pt-2">
+                                {(() => {
+                                  const agent = assets.find(a => a.id === attr.mqttAgentId);
+                                  const isTeltonika = agent?.type === 'AGENT_MQTT_TELTONIKA';
+
+                                  return (
+                                    <>
+                                      <div className="space-y-1">
+                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Publish Topic</label>
+                                        <Input
+                                          type="text"
+                                          value={attr.mqttPublishTopic || ''}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttPublishTopic: val } : a));
+                                          }}
+                                          placeholder="e.g. cmd/temp/1"
+                                        />
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Value Path</label>
+                                        <Input
+                                          type="text"
+                                          value={attr.mqttValuePath || ''}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttValuePath: val } : a));
+                                          }}
+                                          placeholder={isTeltonika ? 'e.g. $.source_address' : 'e.g. $.val'}
+                                        />
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Decode Function</label>
+                                        {isTeltonika ? (
+                                          <select
+                                            value={attr.mqttDecodeFunction || 'decodeTelemetry'}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttDecodeFunction: val } : a));
+                                            }}
+                                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                                          >
+                                            <option value="decodeTelemetry">decodeTelemetry (Mesh Ingestion)</option>
+                                            <option value="decodeStatus">decodeStatus (Node Status)</option>
+                                          </select>
+                                        ) : (
+                                          <div className="h-8 bg-secondary/25 border border-border flex items-center px-3 rounded-lg text-muted-foreground/50 text-[10.5px]">
+                                            N/A
+                                          </div>
+                                        )}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -928,7 +1033,6 @@ export default function AssetsPage() {
                       setName(selectedAsset.name);
                       setType(selectedAsset.type || 'FORKLIFT');
                       setParentId(selectedAsset.parentId || '');
-                      setTagId(selectedAsset.tagId || '');
                       setLatitude(selectedAsset.latitude !== null && selectedAsset.latitude !== undefined ? String(selectedAsset.latitude) : '');
                       setLongitude(selectedAsset.longitude !== null && selectedAsset.longitude !== undefined ? String(selectedAsset.longitude) : '');
                       
@@ -937,13 +1041,25 @@ export default function AssetsPage() {
                           const parsed = JSON.parse(selectedAsset.description);
                           setCustomFields(parsed);
                           setDescription(parsed.notes || '');
+                          if (!selectedAsset.type.startsWith('AGENT_')) {
+                            if (parsed.attributes && Array.isArray(parsed.attributes)) {
+                              setAttributes(parsed.attributes);
+                            } else {
+                              const defaults = defaultAttributesLookup[selectedAsset.type] || [];
+                              setAttributes(defaults.map(d => ({ ...d, value: '' })));
+                            }
+                          }
                         } else {
                           setCustomFields({});
                           setDescription(selectedAsset.description || '');
+                          const defaults = defaultAttributesLookup[selectedAsset.type] || [];
+                          setAttributes(defaults.map(d => ({ ...d, value: '' })));
                         }
                       } catch (e) {
                         setCustomFields({});
                         setDescription(selectedAsset.description || '');
+                        const defaults = defaultAttributesLookup[selectedAsset.type] || [];
+                        setAttributes(defaults.map(d => ({ ...d, value: '' })));
                       }
                       setMode('edit');
                     }}
@@ -956,7 +1072,7 @@ export default function AssetsPage() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-5 flex flex-col lg:flex-row gap-6">
-                  {/* Left Column: Info, Config & Custom Attributes */}
+                  {/* Left Column: Info, Connection Parameters & Dynamic Attributes */}
                   <div className="flex-1 space-y-5">
                     
                     {/* INFO Card */}
@@ -1008,130 +1124,73 @@ export default function AssetsPage() {
                       </CardContent>
                     </Card>
 
-                    {/* MQTT INGESTION CONFIG Card */}
-                    {selectedAsset.description && selectedAsset.description.includes('"mqttTopic"') && (
+                    {/* AGENT CONNECTION ATTRIBUTES (For Agents only) */}
+                    {selectedAsset.type.startsWith('AGENT_') && Object.keys(customFields).filter((k) => k !== 'notes').length > 0 && (
                       <Card className="border border-border/80">
                         <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
                           <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                            MQTT Ingestion Settings
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 text-xs font-semibold space-y-3">
-                          {(() => {
-                            try {
-                              const parsed = JSON.parse(selectedAsset.description);
-                              const linkedAgent = assets.find((a) => a.id === parsed.mqttAgentId);
-                              return (
-                                <>
-                                  <div className="flex items-center justify-between py-2 border-b border-border/40">
-                                    <span className="text-muted-foreground">Linked Agent:</span>
-                                    <span className="font-mono text-foreground">{linkedAgent ? linkedAgent.name : 'None'}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between py-2 border-b border-border/40">
-                                    <span className="text-muted-foreground">Topic:</span>
-                                    <span className="font-mono text-foreground">{parsed.mqttTopic || '--'}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between py-2 border-b border-border/40">
-                                    <span className="text-muted-foreground">Decode Mode:</span>
-                                    <Badge variant="outline" className="capitalize text-[10px]">{parsed.mqttDecodeMode || 'direct'}</Badge>
-                                  </div>
-                                  <div className="flex items-center justify-between py-2 border-b border-border/40">
-                                    <span className="text-muted-foreground">Extraction Path:</span>
-                                    <span className="font-mono text-foreground">{parsed.mqttValuePath || '--'}</span>
-                                  </div>
-                                  {parsed.mqttDecodeMode === 'direct' && (
-                                    <div className="flex items-center justify-between py-2 border-b border-border/40 last:border-0 last:pb-0">
-                                      <span className="text-muted-foreground">Target Attribute:</span>
-                                      <Badge variant="outline" className="capitalize text-[10px]">{parsed.mqttTargetAttribute || 'temperature'}</Badge>
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            } catch (e) {
-                              return null;
-                            }
-                          })()}
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* CUSTOM ATTRIBUTES (From serialized JSON description) */}
-                    {Object.keys(customFields).filter((k) => k !== 'notes' && !k.startsWith('mqtt')).length > 0 && (
-                      <Card className="border border-border/80">
-                        <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
-                          <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                            Configuration Attributes
+                            Connection Parameters
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 text-xs font-semibold space-y-3">
                           {Object.entries(customFields)
-                            .filter(([key]) => key !== 'notes' && !key.startsWith('mqtt'))
+                            .filter(([key]) => key !== 'notes')
                             .map(([key, value]) => (
                               <div key={key} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0 last:pb-0">
                                 <span className="text-muted-foreground capitalize font-bold">
                                   {key.replace(/([A-Z])/g, ' $1').trim()}
                                 </span>
-                                <span className="font-mono text-foreground text-right">{String(value)}</span>
+                                <span className="font-mono text-foreground text-right">
+                                  {key === 'password' ? '••••••••' : String(value)}
+                                </span>
                               </div>
                             ))}
                         </CardContent>
                       </Card>
                     )}
 
-                    {/* LIVE TELEMETRY ATTRIBUTES Card (Only if tag is linked) */}
-                    <Card className="border border-border/80">
-                      <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
-                        <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                          Live Attributes
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45">
-                        {selectedAsset.tag ? (
-                          <>
-                            <div className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
-                              <div>
-                                <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Temperature</p>
-                                <p className="text-sm font-bold text-foreground mt-0.5">{selectedAsset.tag.temperature ?? '--'} °C</p>
+                    {/* DYNAMIC ASSET ATTRIBUTES VIEW CARD (For physical assets) */}
+                    {!selectedAsset.type.startsWith('AGENT_') && attributes.length > 0 && (
+                      <Card className="border border-border/80">
+                        <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
+                          <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                            Dynamic Attributes
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45">
+                          {attributes.map((attr, idx) => {
+                            const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
+                            return (
+                              <div key={idx} className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">{attr.name}</p>
+                                    <Badge variant="outline" className="text-[8px] px-1 py-0 font-normal border-border/50 text-muted-foreground/75">
+                                      {attr.dataType}
+                                    </Badge>
+                                    {linkedAgent && (
+                                      <Badge variant="outline" className="text-[8px] px-1 py-0 font-bold border-primary/20 text-primary bg-primary/5">
+                                        MQTT
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm font-bold text-foreground mt-0.5">
+                                    {attr.value !== undefined && attr.value !== null && attr.value !== '' ? String(attr.value) : '--'}{' '}
+                                    {attr.unit && <span className="text-[10.5px] text-muted-foreground/80 font-normal">{attr.unit}</span>}
+                                  </p>
+                                </div>
+                                {linkedAgent && (
+                                  <div className="text-[9px] text-muted-foreground font-mono text-right space-y-0.5">
+                                    <p className="max-w-[140px] truncate" title={attr.mqttTopic}>Topic: {attr.mqttTopic}</p>
+                                    {attr.mqttDecodeFunction && <p>Func: {attr.mqttDecodeFunction}</p>}
+                                  </div>
+                                )}
                               </div>
-                              <div className="text-[10px] text-muted-foreground font-mono">
-                                Updated: {selectedAsset.tag.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : 'Now'}
-                              </div>
-                            </div>
-                            <div className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
-                              <div>
-                                <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Humidity</p>
-                                <p className="text-sm font-bold text-foreground mt-0.5">{selectedAsset.tag.humidity ?? '--'} %</p>
-                              </div>
-                              <div className="text-[10px] text-muted-foreground font-mono">
-                                Updated: {selectedAsset.tag.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : 'Now'}
-                              </div>
-                            </div>
-                            <div className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
-                              <div>
-                                <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Battery Voltage</p>
-                                <p className="text-sm font-bold text-foreground mt-0.5">{selectedAsset.tag.battery ?? '--'} V</p>
-                              </div>
-                              <div className="text-[10px] text-muted-foreground font-mono">
-                                Updated: {selectedAsset.tag.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : 'Now'}
-                              </div>
-                            </div>
-                            <div className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
-                              <div>
-                                <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Link Signal RSSI</p>
-                                <p className="text-sm font-bold text-foreground mt-0.5">{selectedAsset.tag.rssi ?? '--'} dBm</p>
-                              </div>
-                              <div className="text-[10px] text-muted-foreground font-mono">
-                                Updated: {selectedAsset.tag.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : 'Now'}
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="p-8 text-center text-muted-foreground font-medium">
-                            No active telemetry feed. Link an IoT sensor tag to fetch live attributes.
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    )}
                   </div>
 
                   {/* Right Column: Location, History */}
@@ -1159,7 +1218,6 @@ export default function AssetsPage() {
                                 </p>
                               </div>
                             </div>
-                            {/* Live view map centered on coordinates */}
                             <div ref={viewMapRef} className="h-44 w-full bg-secondary/15 rounded-xl border border-border overflow-hidden z-10"></div>
                           </>
                         ) : (
@@ -1171,7 +1229,7 @@ export default function AssetsPage() {
                       </CardContent>
                     </Card>
 
-                    {/* HISTORY Card (Hidden for CITY and BUILDING categories) */}
+                    {/* HISTORY Card */}
                     {selectedAsset.type !== 'CITY' && selectedAsset.type !== 'BUILDING' && (
                       <Card className="border border-border/80">
                         <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50 flex flex-row items-center justify-between">
@@ -1372,24 +1430,10 @@ export default function AssetsPage() {
                     </div>
                   </div>
 
-                  {addModalTab === 'ASSET' && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5 col-span-2">
-                        <label className="text-muted-foreground">Linked Sensor Node ID (Optional)</label>
-                        <Input
-                          type="text"
-                          value={tagId}
-                          onChange={(e) => setTagId(e.target.value)}
-                          placeholder="e.g. node-439201"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Required Type Attributes Fields */}
-                  {currentFieldsConfig.length > 0 && (
+                  {/* Dynamic Connection Credentials Form (For Agents inside creation modal) */}
+                  {addModalTab === 'AGENT' && currentFieldsConfig.length > 0 && (
                     <div className="space-y-3 pt-3 border-t border-border/60">
-                      <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Required Minimum Attributes</span>
+                      <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Required Connection Credentials</span>
                       <div className="grid grid-cols-2 gap-3.5">
                         {currentFieldsConfig.map((field) => (
                           <div key={field.key} className="space-y-1">
@@ -1407,21 +1451,6 @@ export default function AssetsPage() {
                                   </option>
                                 ))}
                               </select>
-                            ) : field.type === 'select_assets' ? (
-                              <select
-                                value={customFields[field.key] || ''}
-                                onChange={(e) => handleCustomFieldChange(field.key, e.target.value)}
-                                className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                              >
-                                <option value="">Select target asset...</option>
-                                {assets
-                                  .filter((a) => !a.type.startsWith('AGENT_'))
-                                  .map((a) => (
-                                    <option key={a.id} value={a.id}>
-                                      {a.name} ({a.type})
-                                    </option>
-                                  ))}
-                              </select>
                             ) : (
                               <Input
                                 type={field.type || 'text'}
@@ -1436,99 +1465,6 @@ export default function AssetsPage() {
                     </div>
                   )}
 
-                  {/* MQTT Ingestion Configuration (Optional, for physical assets inside creation modal) */}
-                  {addModalTab === 'ASSET' && (
-                    <div className="space-y-3 pt-3 border-t border-border/60">
-                      <span className="text-[10px] text-primary uppercase font-bold tracking-wider">MQTT Ingestion Configuration (Optional)</span>
-                      <div className="grid grid-cols-2 gap-3.5">
-                        
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground">MQTT Agent Link</label>
-                          <select
-                            value={customFields['mqttAgentId'] || ''}
-                            onChange={(e) => handleCustomFieldChange('mqttAgentId', e.target.value)}
-                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                          >
-                            <option value="">Select MQTT Agent...</option>
-                            {assets
-                              .filter((a) => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
-                              .map((a) => (
-                                <option key={a.id} value={a.id}>
-                                  {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground">Subscribe Topic</label>
-                          <Input
-                            type="text"
-                            value={customFields['mqttTopic'] || ''}
-                            onChange={(e) => handleCustomFieldChange('mqttTopic', e.target.value)}
-                            placeholder="e.g. factory/temp/1 or json-gw-event/received_data/#"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground">Decode Mode</label>
-                          <select
-                            value={customFields['mqttDecodeMode'] || 'direct'}
-                            onChange={(e) => {
-                              handleCustomFieldChange('mqttDecodeMode', e.target.value);
-                              if (e.target.value === 'teltonika') {
-                                handleCustomFieldChange('mqttValuePath', '$.source_address');
-                              } else {
-                                handleCustomFieldChange('mqttValuePath', '$.val');
-                              }
-                            }}
-                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                          >
-                            <option value="direct">Direct Value Mapping</option>
-                            <option value="teltonika">Teltonika Mesh Ingestion</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground">Value Extraction Path</label>
-                          <Input
-                            type="text"
-                            value={customFields['mqttValuePath'] || ''}
-                            onChange={(e) => handleCustomFieldChange('mqttValuePath', e.target.value)}
-                            placeholder="e.g. $.val or $.source_address"
-                          />
-                        </div>
-
-                        {(customFields['mqttDecodeMode'] || 'direct') === 'direct' && (
-                          <div className="space-y-1 col-span-2">
-                            <label className="text-muted-foreground">Target Attribute Key</label>
-                            <select
-                              value={customFields['mqttTargetAttribute'] || 'temperature'}
-                              onChange={(e) => handleCustomFieldChange('mqttTargetAttribute', e.target.value)}
-                              className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                            >
-                              <option value="temperature">Temperature</option>
-                              <option value="humidity">Humidity</option>
-                              <option value="battery">Battery</option>
-                              <option value="rssi">RSSI</option>
-                            </select>
-                          </div>
-                        )}
-
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5 pt-2">
-                    <label className="text-muted-foreground">Notes / General Description</label>
-                    <textarea
-                      rows={2}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Enter asset description or configuration notes..."
-                      className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary resize-none text-xs font-semibold"
-                    />
-                  </div>
                 </div>
 
                 {/* Footer buttons */}

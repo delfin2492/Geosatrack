@@ -187,14 +187,14 @@ async function main() {
   console.log(`🤖 Created default agents: ${teltonikaAgent.name}, ${genericAgent.name}`);
 
   // 9. Create Default Tags
-  const tag1 = await prisma.tag.create({
+  await prisma.tag.create({
     data: {
       id: 'node-439201',
       name: 'Mock Tag node-439201'
     }
   });
 
-  // 10. Create Default Assets pre-configured with MQTT Ingestion attributes
+  // 10. Create Default Assets pre-configured with dynamic attributes
   const forklift = await prisma.asset.create({
     data: {
       name: 'Forklift Teltonika Test',
@@ -203,11 +203,32 @@ async function main() {
       tagId: 'node-439201',
       tenantId: tenant1.id,
       description: JSON.stringify({
-        mqttAgentId: teltonikaAgent.id,
-        mqttTopic: 'json-gw-event/received_data/#',
-        mqttDecodeMode: 'teltonika',
-        mqttValuePath: '$.source_address',
-        notes: 'Mock Forklift Asset configured with dynamic Teltonika Mesh Ingestion'
+        attributes: [
+          { name: 'vehicleCode', dataType: 'String', unit: '', value: 'TF-01' },
+          { name: 'operator', dataType: 'String', unit: '', value: 'Budi Santoso' },
+          { 
+            name: 'temperature', 
+            dataType: 'Number', 
+            unit: '°C', 
+            value: '', 
+            mqttAgentId: teltonikaAgent.id,
+            mqttTopic: 'json-gw-event/received_data/#',
+            mqttValuePath: '$.source_address',
+            mqttDecodeFunction: 'decodeTelemetry'
+          },
+          { 
+            name: 'humidity', 
+            dataType: 'Number', 
+            unit: '%', 
+            value: '',
+            mqttAgentId: teltonikaAgent.id,
+            mqttTopic: 'json-gw-event/received_data/#',
+            mqttValuePath: '$.source_address',
+            mqttDecodeFunction: 'decodeTelemetry'
+          },
+          { name: 'battery', dataType: 'Number', unit: 'V', value: '' }
+        ],
+        notes: 'Mock Forklift Asset configured with dynamic Teltonika Mesh attributes'
       })
     }
   });
@@ -219,11 +240,19 @@ async function main() {
       status: 'static',
       tenantId: tenant1.id,
       description: JSON.stringify({
-        mqttAgentId: genericAgent.id,
-        mqttTopic: 'factory/temperature',
-        mqttDecodeMode: 'direct',
-        mqttValuePath: '$.val',
-        mqttTargetAttribute: 'temperature',
+        attributes: [
+          { name: 'machineCode', dataType: 'String', unit: '', value: 'CNC-M01' },
+          { 
+            name: 'temperature', 
+            dataType: 'Number', 
+            unit: '°C', 
+            value: '',
+            mqttAgentId: genericAgent.id,
+            mqttTopic: 'factory/temperature',
+            mqttValuePath: '$.val'
+          },
+          { name: 'status', dataType: 'String', unit: '', value: 'RUNNING' }
+        ],
         notes: 'Mock Machine Asset configured with direct MQTT value mapping'
       })
     }

@@ -81,7 +81,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     this.client.on('connect', async () => {
       this.logger.log('Successfully connected to MQTT Broker!');
       
-      // 1. Subscribe to standard Wirepas pattern (for backward compatibility)
+      // 1. Subscribe to standard Wirepas pattern
       const defaultPattern = 'wirepas/gateway/+/node/+/endpoint/+';
       this.client.subscribe(defaultPattern, (err) => {
         if (err) {
@@ -113,20 +113,25 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     if (!this.client || !this.client.connected) return;
 
     try {
-      // Query all assets from database
       const assets = await this.prisma.asset.findMany({});
 
       for (const asset of assets) {
         try {
           if (!asset.description) continue;
-          const config = JSON.parse(asset.description);
+          const parsed = JSON.parse(asset.description);
 
-          if (config.mqttTopic) {
-            this.logger.log(`Subscribing to dynamic Asset MQTT topic: ${config.mqttTopic} (Asset: ${asset.name})`);
-            this.client.subscribe(config.mqttTopic);
+          if (parsed.attributes && Array.isArray(parsed.attributes)) {
+            for (const attr of parsed.attributes) {
+              if (attr.mqttTopic && attr.mqttAgentId) {
+                this.logger.log(
+                  `Subscribing to dynamic Asset Attribute MQTT topic: ${attr.mqttTopic} (Asset: ${asset.name}, Attribute: ${attr.name})`,
+                );
+                this.client.subscribe(attr.mqttTopic);
+              }
+            }
           }
         } catch (e) {
-          // Description is not JSON string, skip
+          // Skip if description is not a valid JSON string
         }
       }
     } catch (e) {
@@ -155,14 +160,54 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
       for (const asset of assets) {
         if (!asset.description) continue;
-        const config = JSON.parse(asset.description);
+        const parsed = JSON.parse(asset.description);
 
-        if (config.mqttTopic && mqttTopicMatch(config.mqttTopic, topic)) {
-          // Asset topic matches
-          if (config.mqttDecodeMode === 'teltonika') {
-            await this.handleTeltonikaAssetMessage(asset, config, topic, rawPayload);
-          } else if (config.mqttDecodeMode === 'direct') {
-            await this.handleDirectAssetMessage(asset, config, rawPayload);
+        if (parsed.attributes && Array.isArray(parsed.attributes)) {
+          let updatedAttributes = [...parsed.attributes];
+          let hasUpdates = false;
+
+          for (let i = 0; i < updatedAttributes.length; i++) {
+            const attr = updatedAttributes[i];
+
+            if (attr.mqttTopic && attr.mqttAgentId && mqttTopicMatch(attr.mqttTopic, topic)) {
+              const agent = assets.find((a) => a.id === attr.mqttAgentId);
+              const isTeltonika = agent?.type === 'AGENT_MQTT_TELTONIKA';
+
+              if (isTeltonika) {
+                const value = await this.processTeltonikaAttributeMessage(asset, attr, topic, rawPayload);
+                if (value !== undefined) {
+                  updatedAttributes[i] = { ...attr, value };
+                  hasUpdates = true;
+                }
+              } else {
+                const value = await this.processDirectAttributeMessage(asset, attr, rawPayload);
+                if (value !== undefined) {
+                  updatedAttributes[i] = { ...attr, value };
+                  hasUpdates = true;
+                }
+              }
+            }
+          }
+
+          if (hasUpdates) {
+            const updatedDescription = JSON.stringify({
+              ...parsed,
+              attributes: updatedAttributes
+            });
+
+            await this.prisma.asset.update({
+              where: { id: asset.id },
+              data: { description: updatedDescription }
+            });
+
+            const updatedAsset = await this.prisma.asset.findUnique({
+              where: { id: asset.id },
+              include: { tag: true }
+            });
+
+            if (updatedAsset) {
+              this.websocketGateway.sendToTenant(asset.tenantId, 'assetUpdate', updatedAsset);
+            }
           }
         }
       }
@@ -198,15 +243,14 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async handleTeltonikaAssetMessage(asset: any, config: any, topic: string, rawPayload: string) {
+  private async processTeltonikaAttributeMessage(asset: any, attr: any, topic: string, rawPayload: string): Promise<any> {
     try {
       const parsedJson = JSON.parse(rawPayload);
       
-      // Extract Node ID using nodeIdPath
-      const nodeId = getValueByJsonPath(parsedJson, config.mqttValuePath || '$.source_address') || parsedJson.source_address;
+      const nodeId = getValueByJsonPath(parsedJson, attr.mqttValuePath || '$.source_address') || parsedJson.source_address;
       if (!nodeId) {
-        this.logger.warn(`Rejected Teltonika message: Node ID not found at path "${config.mqttValuePath || '$.source_address'}"`);
-        return;
+        this.logger.warn(`Rejected Teltonika message: Node ID not found at path "${attr.mqttValuePath || '$.source_address'}"`);
+        return undefined;
       }
 
       const tagId = `node-${nodeId}`;
@@ -217,33 +261,55 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       if (endpointId === 11) {
         const telemetry = this.decoder.decodeTelemetry(parsedJson);
         await this.processTelemetry(asset.tenantId, tagId, telemetry);
+
+        if (asset.tagId === tagId) {
+          if (attr.name === 'temperature' || attr.name === 'temp') return telemetry.temperature;
+          if (attr.name === 'humidity' || attr.name === 'hum') return telemetry.humidity;
+        }
       } else if (endpointId === 238) {
         const status = this.decoder.decodeStatus(parsedJson);
         await this.processStatus(asset.tenantId, tagId, status);
+
+        if (asset.tagId === tagId) {
+          if (attr.name === 'battery') return status.battery_voltage;
+          if (attr.name === 'rssi') return status.rssi;
+        }
       }
     } catch (err) {
       this.logger.error('Failed to parse Teltonika payload:', err);
     }
+    return undefined;
   }
 
-  private async handleDirectAssetMessage(asset: any, config: any, rawPayload: string) {
+  private async processDirectAttributeMessage(asset: any, attr: any, rawPayload: string): Promise<any> {
     try {
       const parsedJson = JSON.parse(rawPayload);
-      const val = getValueByJsonPath(parsedJson, config.mqttValuePath || '$.val') ?? parsedJson.val;
+      const val = getValueByJsonPath(parsedJson, attr.mqttValuePath || '$.val') ?? parsedJson.val;
 
       if (val === undefined || val === null) {
-        this.logger.warn(`Rejected Generic MQTT message: Value not found at path "${config.mqttValuePath || '$.val'}"`);
-        return;
+        this.logger.warn(`Rejected Generic MQTT message: Value not found at path "${attr.mqttValuePath || '$.val'}"`);
+        return undefined;
       }
 
-      const attributeKey = config.mqttTargetAttribute || 'temperature';
+      // Convert value according to dataType
+      let formattedValue: any = val;
+      if (attr.dataType === 'Number') formattedValue = parseFloat(String(val));
+      else if (attr.dataType === 'Integer') formattedValue = parseInt(String(val), 10);
+      else if (attr.dataType === 'Boolean') formattedValue = String(val).toLowerCase() === 'true' || val === true || val === 1;
+      else if (attr.dataType === 'String' || attr.dataType === 'Text') formattedValue = String(val);
+      else if (attr.dataType === 'JSON') {
+        try {
+          formattedValue = typeof val === 'string' ? JSON.parse(val) : val;
+        } catch (e) {
+          formattedValue = val;
+        }
+      }
 
-      // Ensure asset has a linked tag record
+      // Ensure asset has a linked tag record to preserve UI backwards-compatibility
       let tagId = asset.tagId;
       if (!tagId) {
         tagId = `tag-asset-${asset.id}`;
         
-        // Create the tag record first to satisfy foreign key constraints
         await this.prisma.tag.create({
           data: {
             id: tagId,
@@ -258,12 +324,12 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       }
 
       const updateData: any = { lastSeen: new Date() };
-      const valNum = parseFloat(String(val));
+      const valNum = parseFloat(String(formattedValue));
       
-      if (attributeKey === 'temperature') updateData.temperature = valNum;
-      else if (attributeKey === 'humidity') updateData.humidity = valNum;
-      else if (attributeKey === 'battery') updateData.battery = valNum;
-      else if (attributeKey === 'rssi') updateData.rssi = parseInt(String(val), 10);
+      if (attr.name === 'temperature') updateData.temperature = valNum;
+      else if (attr.name === 'humidity') updateData.humidity = valNum;
+      else if (attr.name === 'battery') updateData.battery = valNum;
+      else if (attr.name === 'rssi') updateData.rssi = parseInt(String(formattedValue), 10);
 
       // Save live attributes
       const tag = await this.prisma.tag.upsert({
@@ -278,32 +344,23 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
       this.websocketGateway.sendToTenant(asset.tenantId, 'tagUpdate', tag);
 
-      const updatedAsset = await this.prisma.asset.findUnique({
-        where: { id: asset.id },
-        include: { tag: true }
-      });
-
-      if (updatedAsset) {
-        this.websocketGateway.sendToTenant(asset.tenantId, 'assetUpdate', updatedAsset);
-      }
-
       // Write historical trend to TimescaleDB
-      const rawTelemetry = await this.prisma.telemetry.create({
+      await this.prisma.telemetry.create({
         data: {
           timestamp: new Date(),
           tagId,
-          temperature: attributeKey === 'temperature' ? valNum : null,
-          humidity: attributeKey === 'humidity' ? valNum : null,
-          battery: attributeKey === 'battery' ? valNum : null,
-          rssi: attributeKey === 'rssi' ? parseInt(String(val), 10) : null,
+          temperature: attr.name === 'temperature' ? valNum : null,
+          humidity: attr.name === 'humidity' ? valNum : null,
+          battery: attr.name === 'battery' ? valNum : null,
+          rssi: attr.name === 'rssi' ? parseInt(String(formattedValue), 10) : null,
         }
       });
 
-      this.websocketGateway.sendToTenant(asset.tenantId, 'telemetryNew', rawTelemetry);
-
+      return formattedValue;
     } catch (e) {
       this.logger.error('Failed to parse Generic MQTT message payload:', e);
     }
+    return undefined;
   }
 
   private async processTelemetry(tenantId: string, tagId: string, telemetry: TelemetryPayload) {
