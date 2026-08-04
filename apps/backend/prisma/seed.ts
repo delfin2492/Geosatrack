@@ -7,7 +7,11 @@ const defaultTeltonikaDecodeCode = `//==========================================
 // Endpoint 11 & Endpoint 238
 //====================================================
 
-let evt = msg.payload.wirepas.packet_received_event;
+let evt = msg.payload.packet_received_event || (msg.payload.wirepas && msg.payload.wirepas.packet_received_event);
+if (!evt) {
+    evt = msg.payload;
+}
+
 let ep = evt.source_endpoint;
 
 function b64ToBytes(b64){
@@ -37,7 +41,7 @@ function s32(b,o){
 }
 
 let out = {
-    gateway : evt.header.gw_id,
+    gateway : evt.header ? evt.header.gw_id : null,
     node     : evt.source_address,
     endpoint : ep,
     hop      : evt.hop_count,
@@ -84,25 +88,36 @@ if(ep == 11){
 }
 else if(ep==238){
     let meas = evt.payload_json.measurements;
-    meas.forEach(m=>{
-        if(m.voltage!==undefined)
-            out.voltage=m.voltage;
-        if(m.node_info){
-            out.update_interval=m.node_info.update_s;
-            out.motion=m.node_info.features.motion;
-            out.is_static=m.node_info.features.is_static;
-            out.node_mode=m.node_info.node_mode;
-            out.node_class=m.node_info.node_class;
-        }
-        if(m.rss_sr_4byte_addr){
-            m.rss_sr_4byte_addr.forEach(r=>{
-                if(r.addr==248)
-                    out.gateway_rssi=r.rssi;
-                else
-                    out["rssi_"+r.addr]=r.rssi;
-            });
-        }
-    });
+    if (Array.isArray(meas)) {
+        let anchorCount = 1;
+        meas.forEach(m=>{
+            if(m.voltage!==undefined) {
+                out.voltage = m.voltage > 100 ? Number((m.voltage / 1000).toFixed(3)) : m.voltage;
+            }
+            if(m.node_info){
+                out.update_interval=m.node_info.update_s;
+                if (m.node_info.features) {
+                    out.motion=m.node_info.features.motion;
+                    out.is_static=m.node_info.features.is_static;
+                }
+                out.node_mode=m.node_info.node_mode;
+                out.node_class=m.node_info.node_class;
+            }
+            if(m.rss_sr_4byte_addr){
+                m.rss_sr_4byte_addr.forEach(r=>{
+                    if(r.addr==248) {
+                        out.gateway_rssi=r.rssi;
+                    } else {
+                        out["rssi_"+r.addr]=r.rssi;
+                        if (anchorCount <= 2) {
+                            out["rssi_anchor_" + anchorCount] = r.rssi;
+                            anchorCount++;
+                        }
+                    }
+                });
+            }
+        });
+    }
 }
 
 msg.payload=out;
