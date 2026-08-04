@@ -149,7 +149,7 @@ async function main() {
 
   console.log(`*️⃣ Created anchors: ${anchor1.name}, ${anchor2.name}`);
 
-  // 8. Create Default Agents
+  // 8. Create Default MQTT Agents (Simplified connection-only parameters)
   const teltonikaAgent = await prisma.asset.create({
     data: {
       name: 'Teltonika Mesh Gateway 1',
@@ -159,9 +159,10 @@ async function main() {
       description: JSON.stringify({
         host: 'emqx',
         port: 1883,
-        topicPrefix: 'json-gw-event/received_data/#',
-        nodeIdPath: '$.source_address',
-        notes: 'Default Teltonika Wirepas Gateway Agent connected to central EMQX'
+        clientId: 'default-teltonika-mesh-gw',
+        username: '',
+        password: '',
+        notes: 'Default Teltonika Wirepas Gateway Broker connection'
       })
     }
   });
@@ -175,17 +176,60 @@ async function main() {
       description: JSON.stringify({
         host: 'emqx',
         port: 1883,
-        topic: 'factory/temperature',
-        targetAssetId: '',
-        attributeKey: 'temperature',
-        valuePath: '$.val',
-        notes: 'Generic MQTT subscriber for room temperature readings'
+        clientId: 'default-generic-subscriber',
+        username: '',
+        password: '',
+        notes: 'Generic MQTT Broker connection'
       })
     }
   });
 
   console.log(`🤖 Created default agents: ${teltonikaAgent.name}, ${genericAgent.name}`);
 
+  // 9. Create Default Tags
+  const tag1 = await prisma.tag.create({
+    data: {
+      id: 'node-439201',
+      name: 'Mock Tag node-439201'
+    }
+  });
+
+  // 10. Create Default Assets pre-configured with MQTT Ingestion attributes
+  const forklift = await prisma.asset.create({
+    data: {
+      name: 'Forklift Teltonika Test',
+      type: 'FORKLIFT',
+      status: 'static',
+      tagId: 'node-439201',
+      tenantId: tenant1.id,
+      description: JSON.stringify({
+        mqttAgentId: teltonikaAgent.id,
+        mqttTopic: 'json-gw-event/received_data/#',
+        mqttDecodeMode: 'teltonika',
+        mqttValuePath: '$.source_address',
+        notes: 'Mock Forklift Asset configured with dynamic Teltonika Mesh Ingestion'
+      })
+    }
+  });
+
+  const machine = await prisma.asset.create({
+    data: {
+      name: 'Machine Generic Test',
+      type: 'MACHINE',
+      status: 'static',
+      tenantId: tenant1.id,
+      description: JSON.stringify({
+        mqttAgentId: genericAgent.id,
+        mqttTopic: 'factory/temperature',
+        mqttDecodeMode: 'direct',
+        mqttValuePath: '$.val',
+        mqttTargetAttribute: 'temperature',
+        notes: 'Mock Machine Asset configured with direct MQTT value mapping'
+      })
+    }
+  });
+
+  console.log(`📦 Created pre-configured ingestion assets: ${forklift.name}, ${machine.name}`);
   console.log('🎉 Database seeding completed successfully!');
 }
 

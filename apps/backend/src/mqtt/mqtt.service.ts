@@ -81,7 +81,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     this.client.on('connect', async () => {
       this.logger.log('Successfully connected to MQTT Broker!');
       
-      // 1. Subscribe to standard Wirepas pattern
+      // 1. Subscribe to standard Wirepas pattern (for backward compatibility)
       const defaultPattern = 'wirepas/gateway/+/node/+/endpoint/+';
       this.client.subscribe(defaultPattern, (err) => {
         if (err) {
@@ -91,7 +91,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         }
       });
 
-      // 2. Load dynamic topics from database
+      // 2. Load dynamic topics from all assets in the DB and subscribe
       await this.subscribeToDynamicAgentTopics();
     });
 
@@ -103,7 +103,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       await this.handleIncomingMessage(topic, payload.toString());
     });
 
-    // Periodically sync topics to catch newly added dynamic agents
+    // Periodically sync topics to catch newly added/updated assets
     this.syncInterval = setInterval(() => {
       this.subscribeToDynamicAgentTopics();
     }, 30000);
@@ -113,32 +113,24 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     if (!this.client || !this.client.connected) return;
 
     try {
-      const agents = await this.prisma.asset.findMany({
-        where: {
-          type: {
-            in: ['AGENT_MQTT_TELTONIKA', 'AGENT_MQTT_GENERIC']
-          }
-        }
-      });
+      // Query all assets from database
+      const assets = await this.prisma.asset.findMany({});
 
-      for (const agent of agents) {
+      for (const asset of assets) {
         try {
-          if (!agent.description) continue;
-          const config = JSON.parse(agent.description);
+          if (!asset.description) continue;
+          const config = JSON.parse(asset.description);
 
-          if (agent.type === 'AGENT_MQTT_TELTONIKA' && config.topicPrefix) {
-            this.logger.log(`Subscribing to dynamic Teltonika topic: ${config.topicPrefix}`);
-            this.client.subscribe(config.topicPrefix);
-          } else if (agent.type === 'AGENT_MQTT_GENERIC' && config.topic) {
-            this.logger.log(`Subscribing to dynamic Generic topic: ${config.topic}`);
-            this.client.subscribe(config.topic);
+          if (config.mqttTopic) {
+            this.logger.log(`Subscribing to dynamic Asset MQTT topic: ${config.mqttTopic} (Asset: ${asset.name})`);
+            this.client.subscribe(config.mqttTopic);
           }
         } catch (e) {
-          this.logger.error(`Failed to parse config for agent ID: ${agent.id}`, e);
+          // Description is not JSON string, skip
         }
       }
     } catch (e) {
-      this.logger.error('Failed to sync dynamic agent subscriptions:', e);
+      this.logger.error('Failed to sync dynamic asset MQTT subscriptions:', e);
     }
   }
 
@@ -157,29 +149,20 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // 2. Check dynamic agents in the database
+    // 2. Check dynamic assets in the database to see which ones subscribe to this topic
     try {
-      const agents = await this.prisma.asset.findMany({
-        where: {
-          type: {
-            in: ['AGENT_MQTT_TELTONIKA', 'AGENT_MQTT_GENERIC']
-          }
-        }
-      });
+      const assets = await this.prisma.asset.findMany({});
 
-      for (const agent of agents) {
-        if (!agent.description) continue;
-        const config = JSON.parse(agent.description);
+      for (const asset of assets) {
+        if (!asset.description) continue;
+        const config = JSON.parse(asset.description);
 
-        if (agent.type === 'AGENT_MQTT_TELTONIKA' && config.topicPrefix) {
-          if (mqttTopicMatch(config.topicPrefix, topic)) {
-            await this.handleTeltonikaMessage(agent, config, topic, rawPayload);
-            return;
-          }
-        } else if (agent.type === 'AGENT_MQTT_GENERIC' && config.topic) {
-          if (mqttTopicMatch(config.topic, topic)) {
-            await this.handleGenericMessage(agent, config, rawPayload);
-            return;
+        if (config.mqttTopic && mqttTopicMatch(config.mqttTopic, topic)) {
+          // Asset topic matches
+          if (config.mqttDecodeMode === 'teltonika') {
+            await this.handleTeltonikaAssetMessage(asset, config, topic, rawPayload);
+          } else if (config.mqttDecodeMode === 'direct') {
+            await this.handleDirectAssetMessage(asset, config, rawPayload);
           }
         }
       }
@@ -215,14 +198,14 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async handleTeltonikaMessage(agent: any, config: any, topic: string, rawPayload: string) {
+  private async handleTeltonikaAssetMessage(asset: any, config: any, topic: string, rawPayload: string) {
     try {
       const parsedJson = JSON.parse(rawPayload);
       
       // Extract Node ID using nodeIdPath
-      const nodeId = getValueByJsonPath(parsedJson, config.nodeIdPath || '$.source_address') || parsedJson.source_address;
+      const nodeId = getValueByJsonPath(parsedJson, config.mqttValuePath || '$.source_address') || parsedJson.source_address;
       if (!nodeId) {
-        this.logger.warn(`Rejected Teltonika message: Node ID not found at path "${config.nodeIdPath || '$.source_address'}"`);
+        this.logger.warn(`Rejected Teltonika message: Node ID not found at path "${config.mqttValuePath || '$.source_address'}"`);
         return;
       }
 
@@ -233,52 +216,43 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
       if (endpointId === 11) {
         const telemetry = this.decoder.decodeTelemetry(parsedJson);
-        await this.processTelemetry(agent.tenantId, tagId, telemetry);
+        await this.processTelemetry(asset.tenantId, tagId, telemetry);
       } else if (endpointId === 238) {
         const status = this.decoder.decodeStatus(parsedJson);
-        await this.processStatus(agent.tenantId, tagId, status);
+        await this.processStatus(asset.tenantId, tagId, status);
       }
     } catch (err) {
       this.logger.error('Failed to parse Teltonika payload:', err);
     }
   }
 
-  private async handleGenericMessage(agent: any, config: any, rawPayload: string) {
+  private async handleDirectAssetMessage(asset: any, config: any, rawPayload: string) {
     try {
       const parsedJson = JSON.parse(rawPayload);
-      const val = getValueByJsonPath(parsedJson, config.valuePath || '$.val') ?? parsedJson.val;
+      const val = getValueByJsonPath(parsedJson, config.mqttValuePath || '$.val') ?? parsedJson.val;
 
       if (val === undefined || val === null) {
-        this.logger.warn(`Rejected Generic MQTT message: Value not found at path "${config.valuePath || '$.val'}"`);
+        this.logger.warn(`Rejected Generic MQTT message: Value not found at path "${config.mqttValuePath || '$.val'}"`);
         return;
       }
 
-      const targetAssetId = config.targetAssetId;
-      const attributeKey = config.attributeKey || 'temperature';
+      const attributeKey = config.mqttTargetAttribute || 'temperature';
 
-      if (!targetAssetId) return;
-
-      const targetAsset = await this.prisma.asset.findUnique({
-        where: { id: targetAssetId },
-        include: { tag: true }
-      });
-
-      if (!targetAsset) return;
-
-      // Ensure target asset has a linked tag record
-      let tagId = targetAsset.tagId;
+      // Ensure asset has a linked tag record
+      let tagId = asset.tagId;
       if (!tagId) {
-        tagId = `tag-asset-${targetAsset.id}`;
+        tagId = `tag-asset-${asset.id}`;
+        
         // Create the tag record first to satisfy foreign key constraints
         await this.prisma.tag.create({
           data: {
             id: tagId,
-            name: `Tag for ${targetAsset.name}`
+            name: `Tag for ${asset.name}`
           }
         });
 
         await this.prisma.asset.update({
-          where: { id: targetAsset.id },
+          where: { id: asset.id },
           data: { tagId }
         });
       }
@@ -297,20 +271,20 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         update: updateData,
         create: {
           id: tagId,
-          name: `Tag for ${targetAsset.name}`,
+          name: `Tag for ${asset.name}`,
           ...updateData
         }
       });
 
-      this.websocketGateway.sendToTenant(agent.tenantId, 'tagUpdate', tag);
+      this.websocketGateway.sendToTenant(asset.tenantId, 'tagUpdate', tag);
 
       const updatedAsset = await this.prisma.asset.findUnique({
-        where: { id: targetAsset.id },
+        where: { id: asset.id },
         include: { tag: true }
       });
 
       if (updatedAsset) {
-        this.websocketGateway.sendToTenant(agent.tenantId, 'assetUpdate', updatedAsset);
+        this.websocketGateway.sendToTenant(asset.tenantId, 'assetUpdate', updatedAsset);
       }
 
       // Write historical trend to TimescaleDB
@@ -325,7 +299,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         }
       });
 
-      this.websocketGateway.sendToTenant(agent.tenantId, 'telemetryNew', rawTelemetry);
+      this.websocketGateway.sendToTenant(asset.tenantId, 'telemetryNew', rawTelemetry);
 
     } catch (e) {
       this.logger.error('Failed to parse Generic MQTT message payload:', e);

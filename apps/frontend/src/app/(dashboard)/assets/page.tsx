@@ -30,16 +30,16 @@ const attributeFieldsLookup: Record<string, { label: string; key: string; placeh
   AGENT_MQTT_TELTONIKA: [
     { label: 'MQTT Broker Host', key: 'host', placeholder: 'e.g. localhost' },
     { label: 'MQTT Port', key: 'port', placeholder: 'e.g. 1883', type: 'number' },
-    { label: 'Topic Prefix Filter', key: 'topicPrefix', placeholder: 'e.g. json-gw-event/received_data/#' },
-    { label: 'Node ID JSON Path', key: 'nodeIdPath', placeholder: 'e.g. $.source_address' }
+    { label: 'Client ID', key: 'clientId', placeholder: 'e.g. teltonika-mesh-gw' },
+    { label: 'Username', key: 'username', placeholder: 'e.g. admin' },
+    { label: 'Password', key: 'password', placeholder: 'password', type: 'password' }
   ],
   AGENT_MQTT_GENERIC: [
     { label: 'MQTT Broker Host', key: 'host', placeholder: 'e.g. localhost' },
     { label: 'MQTT Port', key: 'port', placeholder: 'e.g. 1883', type: 'number' },
-    { label: 'Subscribe Topic', key: 'topic', placeholder: 'e.g. factory/temp/1' },
-    { label: 'Target Asset ID', key: 'targetAssetId', placeholder: 'Select target asset...', type: 'select_assets' },
-    { label: 'Target Attribute Key', key: 'attributeKey', placeholder: 'Select attribute...', type: 'select', options: ['temperature', 'humidity', 'battery', 'rssi'] },
-    { label: 'Value Extraction Path', key: 'valuePath', placeholder: 'e.g. $.val' }
+    { label: 'Client ID', key: 'clientId', placeholder: 'e.g. generic-subscriber' },
+    { label: 'Username', key: 'username', placeholder: 'e.g. admin' },
+    { label: 'Password', key: 'password', placeholder: 'password', type: 'password' }
   ],
   AGENT_HTTP: [
     { label: 'Endpoint Webhook URL', key: 'url', placeholder: 'e.g. http://localhost:4000/api/webhooks' },
@@ -72,7 +72,7 @@ const attributeFieldsLookup: Record<string, { label: string; key: string; placeh
     { label: 'Barometric Target Pressure (hPa)', key: 'barometerTarget', placeholder: 'e.g. 1013.2', type: 'number' }
   ],
   ANCHOR: [
-    { label: 'Anchor Hardware Address', key: 'anchorId', placeholder: 'e.g. anchor-00:11:22' },
+    { label: 'Anchor Hardware Address', key: 'anchorId', placeholder: 'e.g. anchor-00:11:22:33:aa:01' },
     { label: 'Signal Transmitter Power (dBm)', key: 'txPower', placeholder: 'e.g. -12', type: 'number' }
   ],
   THINGS: [
@@ -801,6 +801,89 @@ export default function AssetsPage() {
                 </div>
               )}
 
+              {/* MQTT Ingestion Configuration (Optional, for physical assets) */}
+              {!type.startsWith('AGENT_') && (
+                <div className="space-y-3 pt-3 border-t border-border/60">
+                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">MQTT Ingestion Configuration (Optional)</span>
+                  <div className="grid grid-cols-2 gap-3.5">
+                    
+                    <div className="space-y-1">
+                      <label className="text-muted-foreground">MQTT Agent Link</label>
+                      <select
+                        value={customFields['mqttAgentId'] || ''}
+                        onChange={(e) => handleCustomFieldChange('mqttAgentId', e.target.value)}
+                        className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                      >
+                        <option value="">Select MQTT Agent...</option>
+                        {assets
+                          .filter((a) => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
+                          .map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-muted-foreground">Subscribe Topic</label>
+                      <Input
+                        type="text"
+                        value={customFields['mqttTopic'] || ''}
+                        onChange={(e) => handleCustomFieldChange('mqttTopic', e.target.value)}
+                        placeholder="e.g. factory/temp/1 or json-gw-event/received_data/#"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-muted-foreground">Decode Mode</label>
+                      <select
+                        value={customFields['mqttDecodeMode'] || 'direct'}
+                        onChange={(e) => {
+                          handleCustomFieldChange('mqttDecodeMode', e.target.value);
+                          if (e.target.value === 'teltonika') {
+                            handleCustomFieldChange('mqttValuePath', '$.source_address');
+                          } else {
+                            handleCustomFieldChange('mqttValuePath', '$.val');
+                          }
+                        }}
+                        className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                      >
+                        <option value="direct">Direct Value Mapping</option>
+                        <option value="teltonika">Teltonika Mesh Ingestion</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-muted-foreground">Value Extraction Path</label>
+                      <Input
+                        type="text"
+                        value={customFields['mqttValuePath'] || ''}
+                        onChange={(e) => handleCustomFieldChange('mqttValuePath', e.target.value)}
+                        placeholder="e.g. $.val or $.source_address"
+                      />
+                    </div>
+
+                    {(customFields['mqttDecodeMode'] || 'direct') === 'direct' && (
+                      <div className="space-y-1 col-span-2">
+                        <label className="text-muted-foreground">Target Attribute Key</label>
+                        <select
+                          value={customFields['mqttTargetAttribute'] || 'temperature'}
+                          onChange={(e) => handleCustomFieldChange('mqttTargetAttribute', e.target.value)}
+                          className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                        >
+                          <option value="temperature">Temperature</option>
+                          <option value="humidity">Humidity</option>
+                          <option value="battery">Battery</option>
+                          <option value="rssi">RSSI</option>
+                        </select>
+                      </div>
+                    )}
+
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1.5 pt-3">
                 <label className="text-muted-foreground">Notes / General Description</label>
                 <textarea
@@ -925,8 +1008,55 @@ export default function AssetsPage() {
                       </CardContent>
                     </Card>
 
+                    {/* MQTT INGESTION CONFIG Card */}
+                    {selectedAsset.description && selectedAsset.description.includes('"mqttTopic"') && (
+                      <Card className="border border-border/80">
+                        <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
+                          <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                            MQTT Ingestion Settings
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 text-xs font-semibold space-y-3">
+                          {(() => {
+                            try {
+                              const parsed = JSON.parse(selectedAsset.description);
+                              const linkedAgent = assets.find((a) => a.id === parsed.mqttAgentId);
+                              return (
+                                <>
+                                  <div className="flex items-center justify-between py-2 border-b border-border/40">
+                                    <span className="text-muted-foreground">Linked Agent:</span>
+                                    <span className="font-mono text-foreground">{linkedAgent ? linkedAgent.name : 'None'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between py-2 border-b border-border/40">
+                                    <span className="text-muted-foreground">Topic:</span>
+                                    <span className="font-mono text-foreground">{parsed.mqttTopic || '--'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between py-2 border-b border-border/40">
+                                    <span className="text-muted-foreground">Decode Mode:</span>
+                                    <Badge variant="outline" className="capitalize text-[10px]">{parsed.mqttDecodeMode || 'direct'}</Badge>
+                                  </div>
+                                  <div className="flex items-center justify-between py-2 border-b border-border/40">
+                                    <span className="text-muted-foreground">Extraction Path:</span>
+                                    <span className="font-mono text-foreground">{parsed.mqttValuePath || '--'}</span>
+                                  </div>
+                                  {parsed.mqttDecodeMode === 'direct' && (
+                                    <div className="flex items-center justify-between py-2 border-b border-border/40 last:border-0 last:pb-0">
+                                      <span className="text-muted-foreground">Target Attribute:</span>
+                                      <Badge variant="outline" className="capitalize text-[10px]">{parsed.mqttTargetAttribute || 'temperature'}</Badge>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            } catch (e) {
+                              return null;
+                            }
+                          })()}
+                        </CardContent>
+                      </Card>
+                    )}
+
                     {/* CUSTOM ATTRIBUTES (From serialized JSON description) */}
-                    {Object.keys(customFields).filter((k) => k !== 'notes').length > 0 && (
+                    {Object.keys(customFields).filter((k) => k !== 'notes' && !k.startsWith('mqtt')).length > 0 && (
                       <Card className="border border-border/80">
                         <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
                           <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
@@ -935,7 +1065,7 @@ export default function AssetsPage() {
                         </CardHeader>
                         <CardContent className="p-4 text-xs font-semibold space-y-3">
                           {Object.entries(customFields)
-                            .filter(([key]) => key !== 'notes')
+                            .filter(([key]) => key !== 'notes' && !key.startsWith('mqtt'))
                             .map(([key, value]) => (
                               <div key={key} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0 last:pb-0">
                                 <span className="text-muted-foreground capitalize font-bold">
@@ -1302,6 +1432,89 @@ export default function AssetsPage() {
                             )}
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* MQTT Ingestion Configuration (Optional, for physical assets inside creation modal) */}
+                  {addModalTab === 'ASSET' && (
+                    <div className="space-y-3 pt-3 border-t border-border/60">
+                      <span className="text-[10px] text-primary uppercase font-bold tracking-wider">MQTT Ingestion Configuration (Optional)</span>
+                      <div className="grid grid-cols-2 gap-3.5">
+                        
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground">MQTT Agent Link</label>
+                          <select
+                            value={customFields['mqttAgentId'] || ''}
+                            onChange={(e) => handleCustomFieldChange('mqttAgentId', e.target.value)}
+                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                          >
+                            <option value="">Select MQTT Agent...</option>
+                            {assets
+                              .filter((a) => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
+                              .map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground">Subscribe Topic</label>
+                          <Input
+                            type="text"
+                            value={customFields['mqttTopic'] || ''}
+                            onChange={(e) => handleCustomFieldChange('mqttTopic', e.target.value)}
+                            placeholder="e.g. factory/temp/1 or json-gw-event/received_data/#"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground">Decode Mode</label>
+                          <select
+                            value={customFields['mqttDecodeMode'] || 'direct'}
+                            onChange={(e) => {
+                              handleCustomFieldChange('mqttDecodeMode', e.target.value);
+                              if (e.target.value === 'teltonika') {
+                                handleCustomFieldChange('mqttValuePath', '$.source_address');
+                              } else {
+                                handleCustomFieldChange('mqttValuePath', '$.val');
+                              }
+                            }}
+                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                          >
+                            <option value="direct">Direct Value Mapping</option>
+                            <option value="teltonika">Teltonika Mesh Ingestion</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground">Value Extraction Path</label>
+                          <Input
+                            type="text"
+                            value={customFields['mqttValuePath'] || ''}
+                            onChange={(e) => handleCustomFieldChange('mqttValuePath', e.target.value)}
+                            placeholder="e.g. $.val or $.source_address"
+                          />
+                        </div>
+
+                        {(customFields['mqttDecodeMode'] || 'direct') === 'direct' && (
+                          <div className="space-y-1 col-span-2">
+                            <label className="text-muted-foreground">Target Attribute Key</label>
+                            <select
+                              value={customFields['mqttTargetAttribute'] || 'temperature'}
+                              onChange={(e) => handleCustomFieldChange('mqttTargetAttribute', e.target.value)}
+                              className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                            >
+                              <option value="temperature">Temperature</option>
+                              <option value="humidity">Humidity</option>
+                              <option value="battery">Battery</option>
+                              <option value="rssi">RSSI</option>
+                            </select>
+                          </div>
+                        )}
+
                       </div>
                     </div>
                   )}
