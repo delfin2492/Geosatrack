@@ -428,9 +428,16 @@ export default function AssetsPage() {
           setCustomFields({});
           if (parsed.attributes && Array.isArray(parsed.attributes)) {
             setAttributes(parsed.attributes);
+            if (parsed.attributes.length > 0) {
+              setSelectedHistoryAttr(parsed.attributes[0].name);
+            }
           } else {
             const defaults = defaultAttributesLookup[asset.type] || [];
-            setAttributes(defaults.map(d => ({ ...d, value: '' })));
+            const mapped = defaults.map(d => ({ ...d, value: '' }));
+            setAttributes(mapped);
+            if (mapped.length > 0) {
+              setSelectedHistoryAttr(mapped[0].name);
+            }
           }
         }
       } else {
@@ -441,7 +448,11 @@ export default function AssetsPage() {
         setMqttPublishTopic('');
         setMqttDecodeFunctionCode('');
         const defaults = defaultAttributesLookup[asset.type] || [];
-        setAttributes(defaults.map(d => ({ ...d, value: '' })));
+        const mapped = defaults.map(d => ({ ...d, value: '' }));
+        setAttributes(mapped);
+        if (mapped.length > 0) {
+          setSelectedHistoryAttr(mapped[0].name);
+        }
       }
     } catch (e) {
       setDescription(asset.description || '');
@@ -451,7 +462,11 @@ export default function AssetsPage() {
       setMqttPublishTopic('');
       setMqttDecodeFunctionCode('');
       const defaults = defaultAttributesLookup[asset.type] || [];
-      setAttributes(defaults.map(d => ({ ...d, value: '' })));
+      const mapped = defaults.map(d => ({ ...d, value: '' }));
+      setAttributes(mapped);
+      if (mapped.length > 0) {
+        setSelectedHistoryAttr(mapped[0].name);
+      }
     }
     setMode('view');
   };
@@ -1508,7 +1523,7 @@ export default function AssetsPage() {
                             Attributes
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45">
+                        <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45 max-h-[350px] overflow-y-auto pr-1 select-text scrollbar-thin">
                           {attributes.length === 0 ? (
                             <div className="p-6 text-center text-muted-foreground/65 italic font-normal">
                               No attributes registered for this asset.
@@ -1599,11 +1614,13 @@ export default function AssetsPage() {
                           <select
                             value={selectedHistoryAttr}
                             onChange={(e) => setSelectedHistoryAttr(e.target.value)}
-                            className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
+                            className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer capitalize"
                           >
-                            <option value="Temperature">Temperature</option>
-                            <option value="Battery">Battery</option>
-                            <option value="RSSI">RSSI</option>
+                            {attributes.map((attr) => (
+                              <option key={attr.name} value={attr.name} className="bg-background text-foreground">
+                                {attr.name}
+                              </option>
+                            ))}
                           </select>
                         </CardHeader>
                         <CardContent className="p-4 text-xs font-semibold">
