@@ -365,6 +365,20 @@ export default function AssetsPage() {
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
 
+  const activeAttributes = (() => {
+    if (!selectedAsset) return [];
+    if (!selectedAsset.description || !selectedAsset.description.startsWith('{')) return [];
+    try {
+      const parsed = JSON.parse(selectedAsset.description);
+      if (parsed.attributes && Array.isArray(parsed.attributes)) {
+        return parsed.attributes;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
+  })();
+
   // Leaflet form map ref
   const formMapRef = useRef<HTMLDivElement | null>(null);
 
@@ -1523,45 +1537,49 @@ export default function AssetsPage() {
                             Attributes
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45 max-h-[350px] overflow-y-auto pr-1 select-text scrollbar-thin">
-                          {attributes.length === 0 ? (
+                        <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45 max-h-[350px] overflow-y-auto pr-1 select-text scrollbar-thin pb-4">
+                          {activeAttributes.length === 0 ? (
                             <div className="p-6 text-center text-muted-foreground/65 italic font-normal">
                               No attributes registered for this asset.
                             </div>
                           ) : (
-                            attributes.map((attr, idx) => {
-                              const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
-                              return (
-                                <div key={idx} className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
-                                  <div>
-                                    <div className="flex items-center gap-1.5">
-                                      <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">{attr.name}</p>
-                                      <Badge variant="outline" className="text-[8px] px-1 py-0 font-normal border-border/50 text-muted-foreground/75">
-                                        {attr.dataType}
-                                      </Badge>
-                                      {linkedAgent && (
-                                        <Badge variant="outline" className="text-[8px] px-1 py-0 font-bold border-primary/20 text-primary bg-primary/5">
-                                          MQTT Link
+                            <>
+                              {activeAttributes.map((attr: any, idx: number) => {
+                                const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
+                                return (
+                                  <div key={idx} className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
+                                    <div>
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">{attr.name}</p>
+                                        <Badge variant="outline" className="text-[8px] px-1 py-0 font-normal border-border/50 text-muted-foreground/75">
+                                          {attr.dataType}
                                         </Badge>
-                                      )}
+                                        {linkedAgent && (
+                                          <Badge variant="outline" className="text-[8px] px-1 py-0 font-bold border-primary/20 text-primary bg-primary/5">
+                                            MQTT Link
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-sm font-bold text-foreground mt-0.5">
+                                        {attr.value !== undefined && attr.value !== null && attr.value !== '' ? String(attr.value) : '--'}{' '}
+                                        {attr.unit && <span className="text-[10.5px] text-muted-foreground/80 font-normal">{attr.unit}</span>}
+                                      </p>
+                                      <p className="text-[9px] text-muted-foreground/75 mt-0.5 font-normal">
+                                        Last Update: {attr.lastUpdated ? new Date(attr.lastUpdated).toLocaleString() : '--'}
+                                      </p>
                                     </div>
-                                    <p className="text-sm font-bold text-foreground mt-0.5">
-                                      {attr.value !== undefined && attr.value !== null && attr.value !== '' ? String(attr.value) : '--'}{' '}
-                                      {attr.unit && <span className="text-[10.5px] text-muted-foreground/80 font-normal">{attr.unit}</span>}
-                                    </p>
-                                    <p className="text-[9px] text-muted-foreground/75 mt-0.5 font-normal">
-                                      Last Update: {attr.lastUpdated ? new Date(attr.lastUpdated).toLocaleString() : '--'}
-                                    </p>
+                                    {linkedAgent && (
+                                      <div className="text-[9px] text-muted-foreground font-mono text-right space-y-0.5">
+                                        <p className="max-w-[140px] truncate" title={attr.mqttTopic}>Topic: {attr.mqttTopic}</p>
+                                        {attr.mqttDecodeFunctionCode && <p className="text-primary flex items-center justify-end gap-1"><Code className="h-3 w-3" /> JS Decoder Active</p>}
+                                      </div>
+                                    )}
                                   </div>
-                                  {linkedAgent && (
-                                    <div className="text-[9px] text-muted-foreground font-mono text-right space-y-0.5">
-                                      <p className="max-w-[140px] truncate" title={attr.mqttTopic}>Topic: {attr.mqttTopic}</p>
-                                      {attr.mqttDecodeFunctionCode && <p className="text-primary flex items-center justify-end gap-1"><Code className="h-3 w-3" /> JS Decoder Active</p>}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })
+                                );
+                              })}
+                              {/* Spacing element at the bottom to prevent list element cutoff */}
+                              <div className="h-10 bg-transparent w-full" />
+                            </>
                           )}
                         </CardContent>
                       </Card>
@@ -1616,7 +1634,7 @@ export default function AssetsPage() {
                             onChange={(e) => setSelectedHistoryAttr(e.target.value)}
                             className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer capitalize"
                           >
-                            {attributes.map((attr) => (
+                            {activeAttributes.map((attr: any) => (
                               <option key={attr.name} value={attr.name} className="bg-background text-foreground">
                                 {attr.name}
                               </option>

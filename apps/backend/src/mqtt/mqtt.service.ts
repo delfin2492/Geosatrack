@@ -29,7 +29,8 @@ function mqttTopicMatch(filter: string, topic: string): boolean {
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MqttService.name);
-  private client: mqtt.MqttClient;
+  private defaultClient: mqtt.MqttClient;
+  private clients = new Map<string, mqtt.MqttClient>();
   private syncInterval: NodeJS.Timeout;
 
   constructor(
@@ -40,98 +41,332 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    this.connectBroker();
+    this.connectDefaultBroker();
+    this.syncAgentConnections();
+    
+    // Periodically sync connections to catch newly created/updated agents
+    this.syncInterval = setInterval(() => {
+      this.syncAgentConnections();
+    }, 15000);
   }
 
   onModuleDestroy() {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
     }
-    if (this.client) {
-      this.client.end();
-      this.logger.log('Disconnected from MQTT Broker.');
+    if (this.defaultClient) {
+      this.defaultClient.end();
     }
+    for (const client of this.clients.values()) {
+      client.end();
+    }
+    this.logger.log('Disconnected all MQTT clients.');
   }
 
-  private connectBroker() {
+  private connectDefaultBroker() {
     const brokerUrl = this.configService.get<string>('MQTT_BROKER_URL') || 'mqtt://localhost:1883';
     const username = this.configService.get<string>('MQTT_USERNAME');
     const password = this.configService.get<string>('MQTT_PASSWORD');
 
-    this.logger.log(`Connecting to MQTT Broker at ${brokerUrl}...`);
+    this.logger.log(`Connecting default Wirepas MQTT Client to ${brokerUrl}...`);
 
-    this.client = mqtt.connect(brokerUrl, {
+    this.defaultClient = mqtt.connect(brokerUrl, {
       username,
       password,
       clean: true,
       reconnectPeriod: 5000,
     });
 
-    this.client.on('connect', async () => {
-      this.logger.log('Successfully connected to MQTT Broker!');
-      
-      // 1. Subscribe to standard Wirepas pattern
+    this.defaultClient.on('connect', () => {
+      this.logger.log('Default Wirepas MQTT Client successfully connected!');
       const defaultPattern = 'wirepas/gateway/+/node/+/endpoint/+';
-      this.client.subscribe(defaultPattern, (err) => {
+      this.defaultClient.subscribe(defaultPattern, (err) => {
         if (err) {
-          this.logger.error(`Failed to subscribe to default topic: ${defaultPattern}`, err);
+          this.logger.error(`Failed to subscribe default topic: ${defaultPattern}`, err);
         } else {
-          this.logger.log(`Subscribed to default topic: ${defaultPattern}`);
+          this.logger.log(`Subscribed default topic: ${defaultPattern}`);
         }
       });
-
-      // 2. Load dynamic topics from all assets in the DB and subscribe
-      await this.subscribeToDynamicAgentTopics();
     });
 
-    this.client.on('error', (err) => {
-      this.logger.error('MQTT Broker connection error:', err);
+    this.defaultClient.on('message', async (topic, payload) => {
+      // Ingest standard Wirepas
+      const standardRegex = /^wirepas\/gateway\/([^/]+)\/node\/([^/]+)\/endpoint\/(\d+)$/;
+      const standardMatch = topic.match(standardRegex);
+      if (standardMatch) {
+        const [, gatewayId, nodeId, endpointStr] = standardMatch;
+        const endpointId = parseInt(endpointStr, 10);
+        const tagId = `node-${nodeId}`;
+        await this.ingestWirepasMessage(gatewayId, tagId, endpointId, payload.toString());
+      }
     });
 
-    this.client.on('message', async (topic, payload) => {
-      await this.handleIncomingMessage(topic, payload.toString());
+    this.defaultClient.on('error', (err) => {
+      this.logger.error('Default Wirepas MQTT Client connection error:', err);
     });
-
-    // Periodically sync topics to catch newly added/updated assets
-    this.syncInterval = setInterval(() => {
-      this.subscribeToDynamicAgentTopics();
-    }, 30000);
   }
 
-  async subscribeToDynamicAgentTopics() {
-    if (!this.client || !this.client.connected) return;
+  async syncAgentConnections() {
+    try {
+      const assets = await this.prisma.asset.findMany({});
+      const agents = assets.filter((a) => a.type.startsWith('AGENT_'));
+      const currentAgentIds = new Set<string>();
 
+      for (const agent of agents) {
+        currentAgentIds.add(agent.id);
+        if (!agent.description) continue;
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(agent.description);
+        } catch (e) {
+          continue;
+        }
+
+        const { host, port, username, password, clientId } = parsed;
+        if (!host || !port) continue;
+
+        const brokerUrl = `mqtt://${host}:${port}`;
+        const connectionKey = `${agent.id}::${brokerUrl}::${username || ''}::${clientId || ''}`;
+
+        const existing = this.clients.get(agent.id);
+        if (existing) {
+          if ((existing as any).connectionKey !== connectionKey) {
+            this.logger.log(`Connection parameters changed for Agent "${agent.name}". Reconnecting...`);
+            existing.end();
+            this.clients.delete(agent.id);
+          } else {
+            // Re-subscribe to topics in case new assets were linked
+            if (existing.connected) {
+              await this.subscribeToAgentTopics(agent.id, existing);
+            }
+            continue;
+          }
+        }
+
+        this.logger.log(`Connecting Agent "${agent.name}" to broker: ${brokerUrl}...`);
+
+        const client = mqtt.connect(brokerUrl, {
+          username: username || undefined,
+          password: password || undefined,
+          clientId: clientId || undefined,
+          clean: true,
+          reconnectPeriod: 5000,
+        });
+        (client as any).connectionKey = connectionKey;
+
+        client.on('connect', async () => {
+          this.logger.log(`Agent "${agent.name}" (${agent.id}) successfully connected to ${brokerUrl}!`);
+          await this.updateAgentStatus(agent.id, 'connected');
+          await this.subscribeToAgentTopics(agent.id, client);
+        });
+
+        client.on('message', async (topic, payload) => {
+          await this.handleAgentIncomingMessage(agent.id, topic, payload.toString());
+        });
+
+        client.on('error', async (err) => {
+          this.logger.error(`Agent "${agent.name}" connection error:`, err);
+          await this.updateAgentStatus(agent.id, 'error');
+        });
+
+        client.on('close', async () => {
+          await this.updateAgentStatus(agent.id, 'disconnected');
+        });
+
+        this.clients.set(agent.id, client);
+      }
+
+      // Close clients for deleted agents
+      for (const [agentId, client] of this.clients.entries()) {
+        if (!currentAgentIds.has(agentId)) {
+          this.logger.log(`Agent ${agentId} was deleted. Closing connection...`);
+          client.end();
+          this.clients.delete(agentId);
+        }
+      }
+    } catch (e) {
+      this.logger.error('Failed to sync dynamic agent connections:', e);
+    }
+  }
+
+  private async updateAgentStatus(agentId: string, status: string) {
+    try {
+      const agent = await this.prisma.asset.findUnique({
+        where: { id: agentId },
+      });
+      if (agent && agent.status !== status) {
+        const updated = await this.prisma.asset.update({
+          where: { id: agentId },
+          data: { status },
+        });
+        this.websocketGateway.sendToTenant(agent.tenantId, 'assetUpdate', updated);
+      }
+    } catch (e) {
+      this.logger.error(`Failed to update status for agent ${agentId}:`, e);
+    }
+  }
+
+  private async subscribeToAgentTopics(agentId: string, client: mqtt.MqttClient) {
+    try {
+      const assets = await this.prisma.asset.findMany({});
+      for (const asset of assets) {
+        if (!asset.description) continue;
+        let parsed: any;
+        try {
+          parsed = JSON.parse(asset.description);
+        } catch (e) {
+          continue;
+        }
+
+        // A. Asset-level subscriptions
+        if (parsed.mqttTopic && parsed.mqttAgentId === agentId) {
+          client.subscribe(parsed.mqttTopic);
+        }
+
+        // B. Attribute-level subscriptions
+        if (parsed.attributes && Array.isArray(parsed.attributes)) {
+          for (const attr of parsed.attributes) {
+            if (attr.mqttTopic && attr.mqttAgentId === agentId) {
+              client.subscribe(attr.mqttTopic);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.error(`Failed to subscribe topics for agent ${agentId}:`, e);
+    }
+  }
+
+  private async handleAgentIncomingMessage(agentId: string, topic: string, rawPayload: string) {
+    this.logger.log(`[Agent ${agentId}] Received message on topic: "${topic}", payload: ${rawPayload.substring(0, 150)}`);
+    
     try {
       const assets = await this.prisma.asset.findMany({});
 
       for (const asset of assets) {
-        try {
-          if (!asset.description) continue;
-          const parsed = JSON.parse(asset.description);
+        if (!asset.description) continue;
+        const parsed = JSON.parse(asset.description);
 
-          // A. Subscribe to Asset-level topic
-          if (parsed.mqttTopic && parsed.mqttAgentId) {
-            this.logger.log(`Subscribing to dynamic Asset MQTT topic: ${parsed.mqttTopic} (Asset: ${asset.name})`);
-            this.client.subscribe(parsed.mqttTopic);
-          }
+        // A. Asset-Level Ingestion
+        if (parsed.mqttTopic && parsed.mqttAgentId === agentId && mqttTopicMatch(parsed.mqttTopic, topic)) {
+          if (parsed.mqttDecodeFunctionCode) {
+            const outMsg = await this.runSandboxedScript(parsed.mqttDecodeFunctionCode, topic, rawPayload);
+            if (outMsg && outMsg.payload) {
+              const decoded = outMsg.payload;
+              const sourceNodeId = decoded.node || decoded.source_address;
 
-          // B. Subscribe to Attribute-level topics
-          if (parsed.attributes && Array.isArray(parsed.attributes)) {
-            for (const attr of parsed.attributes) {
-              if (attr.mqttTopic && attr.mqttAgentId) {
-                this.logger.log(
-                  `Subscribing to dynamic Asset Attribute MQTT topic: ${attr.mqttTopic} (Asset: ${asset.name}, Attribute: ${attr.name})`,
-                );
-                this.client.subscribe(attr.mqttTopic);
+              if (sourceNodeId) {
+                const targetTagId = `node-${sourceNodeId}`;
+                const targetAsset = assets.find((a) => a.tagId === targetTagId || (a.tagId && a.tagId === String(sourceNodeId)));
+
+                if (targetAsset && targetAsset.description) {
+                  const targetParsed = JSON.parse(targetAsset.description);
+                  if (targetParsed.attributes && Array.isArray(targetParsed.attributes)) {
+                    let targetUpdated = false;
+                    const updatedAttrs = targetParsed.attributes.map((attr: any) => {
+                      if (decoded[attr.name] !== undefined) {
+                        targetUpdated = true;
+                        return { 
+                          ...attr, 
+                          value: decoded[attr.name],
+                          lastUpdated: new Date().toISOString()
+                        };
+                      }
+                      return attr;
+                    });
+
+                    if (targetUpdated) {
+                      await this.prisma.asset.update({
+                        where: { id: targetAsset.id },
+                        data: {
+                          description: JSON.stringify({ ...targetParsed, attributes: updatedAttrs }),
+                        },
+                      });
+                      await this.syncLegacyTag(targetAsset, decoded);
+                      const updatedTarget = await this.prisma.asset.findUnique({
+                        where: { id: targetAsset.id },
+                        include: { tag: true },
+                      });
+                      if (updatedTarget) {
+                        this.websocketGateway.sendToTenant(targetAsset.tenantId, 'assetUpdate', updatedTarget);
+                      }
+                    }
+                  }
+                }
               }
             }
           }
-        } catch (e) {
-          // Skip if description is not a valid JSON string
+        }
+
+        // B. Attribute-Level Ingestion
+        if (parsed.attributes && Array.isArray(parsed.attributes)) {
+          let updatedAttributes = [...parsed.attributes];
+          let hasUpdates = false;
+          const decodedObj: any = {};
+
+          for (let i = 0; i < updatedAttributes.length; i++) {
+            const attr = updatedAttributes[i];
+
+            if (attr.mqttTopic && attr.mqttAgentId === agentId && mqttTopicMatch(attr.mqttTopic, topic)) {
+              if (attr.mqttDecodeFunctionCode) {
+                const outMsg = await this.runSandboxedScript(attr.mqttDecodeFunctionCode, topic, rawPayload);
+                if (outMsg && outMsg.payload !== undefined) {
+                  
+                  const decodedNode = outMsg.payload.node || outMsg.payload.source_address;
+                  if (decodedNode && asset.tagId) {
+                    const matchNormal = asset.tagId === `node-${decodedNode}`;
+                    const matchRaw = asset.tagId === String(decodedNode);
+                    if (!matchNormal && !matchRaw) {
+                      continue;
+                    }
+                  }
+
+                  let extractedVal = outMsg.payload;
+                  if (attr.mqttValuePath && typeof extractedVal === 'object' && extractedVal !== null) {
+                    if (attr.mqttValuePath.startsWith('$.')) {
+                      const prop = attr.mqttValuePath.slice(2);
+                      extractedVal = extractedVal[prop];
+                    }
+                  }
+
+                  if (extractedVal === undefined) {
+                    continue;
+                  }
+
+                  const formattedValue = this.castValue(extractedVal, attr.dataType);
+                  updatedAttributes[i] = { 
+                    ...attr, 
+                    value: formattedValue,
+                    lastUpdated: new Date().toISOString()
+                  };
+                  decodedObj[attr.name] = formattedValue;
+                  hasUpdates = true;
+                }
+              }
+            }
+          }
+
+          if (hasUpdates) {
+            await this.prisma.asset.update({
+              where: { id: asset.id },
+              data: {
+                description: JSON.stringify({ ...parsed, attributes: updatedAttributes }),
+              },
+            });
+            await this.syncLegacyTag(asset, decodedObj);
+            const updatedAsset = await this.prisma.asset.findUnique({
+              where: { id: asset.id },
+              include: { tag: true },
+            });
+            if (updatedAsset) {
+              this.websocketGateway.sendToTenant(asset.tenantId, 'assetUpdate', updatedAsset);
+            }
+          }
         }
       }
     } catch (e) {
-      this.logger.error('Failed to sync dynamic asset MQTT subscriptions:', e);
+      this.logger.error('Failed to process message on agent:', e);
     }
   }
 
@@ -158,7 +393,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
       vm.createContext(sandbox);
 
-      // Wrap code in an IIFE so "return" is syntactically correct at top-level
       const wrappedCode = `(function() {
         ${code}
       })()`;
@@ -170,203 +404,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.error('Failed to execute sandboxed JS function:', err);
       return null;
-    }
-  }
-
-  private async handleIncomingMessage(topic: string, rawPayload: string) {
-    // 1. Check for standard Wirepas topic format
-    const standardRegex = /^wirepas\/gateway\/([^/]+)\/node\/([^/]+)\/endpoint\/(\d+)$/;
-    const standardMatch = topic.match(standardRegex);
-
-    if (standardMatch) {
-      const [, gatewayId, nodeId, endpointStr] = standardMatch;
-      const endpointId = parseInt(endpointStr, 10);
-      const tagId = `node-${nodeId}`;
-
-      // Ingest standard Wirepas
-      await this.ingestWirepasMessage(gatewayId, tagId, endpointId, rawPayload);
-      return;
-    }
-
-    // 2. Check dynamic assets in the database
-    try {
-      const assets = await this.prisma.asset.findMany({});
-
-      for (const asset of assets) {
-        if (!asset.description) continue;
-        const parsed = JSON.parse(asset.description);
-
-        // A. Asset-Level Ingestion
-        if (parsed.mqttTopic && parsed.mqttAgentId && mqttTopicMatch(parsed.mqttTopic, topic)) {
-          if (parsed.mqttDecodeFunctionCode) {
-            const outMsg = await this.runSandboxedScript(parsed.mqttDecodeFunctionCode, topic, rawPayload);
-
-            if (outMsg && outMsg.payload) {
-              const decoded = outMsg.payload;
-              const sourceNodeId = decoded.node || decoded.source_address;
-
-              if (sourceNodeId) {
-                // Multi-node routing: Find target node asset in DB (supports node-439201 and 439201 format)
-                const targetTagId = `node-${sourceNodeId}`;
-                const targetAsset = assets.find((a) => a.tagId === targetTagId || (a.tagId && a.tagId === String(sourceNodeId)));
-
-                if (targetAsset && targetAsset.description) {
-                  const targetParsed = JSON.parse(targetAsset.description);
-                  if (targetParsed.attributes && Array.isArray(targetParsed.attributes)) {
-                    let targetUpdated = false;
-                    const updatedAttrs = targetParsed.attributes.map((attr: any) => {
-                      if (decoded[attr.name] !== undefined) {
-                        targetUpdated = true;
-                        return { 
-                          ...attr, 
-                          value: decoded[attr.name],
-                          lastUpdated: new Date().toISOString()
-                        };
-                      }
-                      return attr;
-                    });
-
-                    if (targetUpdated) {
-                      await this.prisma.asset.update({
-                        where: { id: targetAsset.id },
-                        data: {
-                          description: JSON.stringify({
-                            ...targetParsed,
-                            attributes: updatedAttrs,
-                          }),
-                        },
-                      });
-
-                      await this.syncLegacyTag(targetAsset, decoded);
-
-                      const updatedTarget = await this.prisma.asset.findUnique({
-                        where: { id: targetAsset.id },
-                        include: { tag: true },
-                      });
-                      if (updatedTarget) {
-                        this.websocketGateway.sendToTenant(targetAsset.tenantId, 'assetUpdate', updatedTarget);
-                      }
-                    }
-                  }
-                }
-              } else {
-                // Single-node routing: Update current asset directly
-                if (parsed.attributes && Array.isArray(parsed.attributes)) {
-                  let assetUpdated = false;
-                  const updatedAttrs = parsed.attributes.map((attr: any) => {
-                    if (decoded[attr.name] !== undefined) {
-                      assetUpdated = true;
-                      return { 
-                        ...attr, 
-                        value: decoded[attr.name],
-                        lastUpdated: new Date().toISOString()
-                      };
-                    }
-                    return attr;
-                  });
-
-                  if (assetUpdated) {
-                    await this.prisma.asset.update({
-                      where: { id: asset.id },
-                      data: {
-                        description: JSON.stringify({
-                          ...parsed,
-                          attributes: updatedAttrs,
-                        }),
-                      },
-                    });
-
-                    await this.syncLegacyTag(asset, decoded);
-
-                    const updatedCurrent = await this.prisma.asset.findUnique({
-                      where: { id: asset.id },
-                      include: { tag: true },
-                    });
-                    if (updatedCurrent) {
-                      this.websocketGateway.sendToTenant(asset.tenantId, 'assetUpdate', updatedCurrent);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // B. Attribute-Level Ingestion
-        if (parsed.attributes && Array.isArray(parsed.attributes)) {
-          let updatedAttributes = [...parsed.attributes];
-          let hasUpdates = false;
-          const decodedObj: any = {};
-
-          for (let i = 0; i < updatedAttributes.length; i++) {
-            const attr = updatedAttributes[i];
-
-            if (attr.mqttTopic && attr.mqttAgentId && mqttTopicMatch(attr.mqttTopic, topic)) {
-              if (attr.mqttDecodeFunctionCode) {
-                const outMsg = await this.runSandboxedScript(attr.mqttDecodeFunctionCode, topic, rawPayload);
-                if (outMsg && outMsg.payload !== undefined) {
-                  
-                  // Mesh Node Routing Guard: If payload contains a node address, ensure it matches the asset's tagId!
-                  const decodedNode = outMsg.payload.node || outMsg.payload.source_address;
-                  if (decodedNode && asset.tagId) {
-                    const matchNormal = asset.tagId === `node-${decodedNode}`;
-                    const matchRaw = asset.tagId === String(decodedNode);
-                    if (!matchNormal && !matchRaw) {
-                      continue; // Node address mismatch: This payload is for a different mesh node! Skip!
-                    }
-                  }
-
-                  // Extract value using mqttValuePath (e.g. $.temperature)
-                  let extractedVal = outMsg.payload;
-                  if (attr.mqttValuePath && typeof extractedVal === 'object' && extractedVal !== null) {
-                    if (attr.mqttValuePath.startsWith('$.')) {
-                      const prop = attr.mqttValuePath.slice(2);
-                      extractedVal = extractedVal[prop];
-                    }
-                  }
-
-                  if (extractedVal === undefined) {
-                    continue; // Property path not found in payload!
-                  }
-
-                  const formattedValue = this.castValue(extractedVal, attr.dataType);
-                  updatedAttributes[i] = { 
-                    ...attr, 
-                    value: formattedValue,
-                    lastUpdated: new Date().toISOString()
-                  };
-                  decodedObj[attr.name] = formattedValue;
-                  hasUpdates = true;
-                }
-              }
-            }
-          }
-
-          if (hasUpdates) {
-            await this.prisma.asset.update({
-              where: { id: asset.id },
-              data: {
-                description: JSON.stringify({
-                  ...parsed,
-                  attributes: updatedAttributes,
-                }),
-              },
-            });
-
-            await this.syncLegacyTag(asset, decodedObj);
-
-            const updatedAsset = await this.prisma.asset.findUnique({
-              where: { id: asset.id },
-              include: { tag: true },
-            });
-            if (updatedAsset) {
-              this.websocketGateway.sendToTenant(asset.tenantId, 'assetUpdate', updatedAsset);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      this.logger.error(`Failed to process message on topic: ${topic}`, e);
     }
   }
 
