@@ -312,7 +312,7 @@ export default function MapPage() {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
             </span>
             <span className="text-xs text-muted-foreground">
-              Connected Assets: <strong className="text-foreground ml-1">{assets.filter((a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.tagId !== null).length}</strong> / {assets.filter((a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR').length}
+              Connected Assets: <strong className="text-foreground ml-1">{assets.filter((a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING' && a.tagId !== null).length}</strong> / {assets.filter((a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING').length}
             </span>
           </div>
         </div>
