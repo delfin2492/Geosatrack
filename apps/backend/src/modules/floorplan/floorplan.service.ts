@@ -57,6 +57,78 @@ export class FloorplanService {
     return zone;
   }
 
+  // ─── Get All Anchors for Tenant (placed + unplaced) ─────────────────
+  async getAllAnchors(tenantId: string) {
+    return this.prisma.anchor.findMany({
+      where: { tenantId },
+      include: { zone: { select: { id: true, name: true } } },
+    });
+  }
+
+  // ─── Assign Anchor to Zone ──────────────────────────────────────────
+  async assignAnchorToZone(
+    tenantId: string,
+    zoneId: string,
+    anchorId: string,
+    x?: number,
+    y?: number,
+  ) {
+    // Verify zone belongs to tenant
+    const zone = await this.prisma.zone.findFirst({
+      where: { id: zoneId, site: { tenantId } },
+    });
+    if (!zone) {
+      throw new NotFoundException(`Zone "${zoneId}" not found for this tenant.`);
+    }
+
+    // Verify anchor belongs to tenant
+    const anchor = await this.prisma.anchor.findFirst({
+      where: { id: anchorId, tenantId },
+    });
+    if (!anchor) {
+      throw new NotFoundException(`Anchor "${anchorId}" not found for this tenant.`);
+    }
+
+    return this.prisma.anchor.update({
+      where: { id: anchorId },
+      data: {
+        zoneId,
+        x: x ?? zone.width / 2,  // Default to center of the floor plan
+        y: y ?? zone.height / 2,
+      },
+    });
+  }
+
+  // ─── Unassign Anchor from Zone ──────────────────────────────────────
+  async unassignAnchorFromZone(tenantId: string, anchorId: string) {
+    const anchor = await this.prisma.anchor.findFirst({
+      where: { id: anchorId, tenantId },
+    });
+    if (!anchor) {
+      throw new NotFoundException(`Anchor "${anchorId}" not found for this tenant.`);
+    }
+
+    return this.prisma.anchor.update({
+      where: { id: anchorId },
+      data: { zoneId: null },
+    });
+  }
+
+  // ─── Update Anchor Position on Floor Plan ───────────────────────────
+  async updateAnchorPosition(tenantId: string, anchorId: string, x: number, y: number) {
+    const anchor = await this.prisma.anchor.findFirst({
+      where: { id: anchorId, tenantId },
+    });
+    if (!anchor) {
+      throw new NotFoundException(`Anchor "${anchorId}" not found for this tenant.`);
+    }
+
+    return this.prisma.anchor.update({
+      where: { id: anchorId },
+      data: { x, y },
+    });
+  }
+
   // ─── Update Zone Dimensions & Anchor GPS Reference ──────────────────
   async updateZoneCalibration(
     tenantId: string,

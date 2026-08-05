@@ -15,15 +15,12 @@ import {
   Save,
   MapPin,
   Radio,
-  Wifi,
-  Tag,
   Plus,
   X,
-  Maximize2,
   Layers,
-  AlertTriangle,
-  ShieldCheck,
-  ShieldAlert,
+  Tag,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -35,9 +32,19 @@ interface ZoneData {
   height: number;
   siteId: string;
   site?: { name: string };
-  anchors?: any[];
+  anchors?: AnchorData[];
   assets?: any[];
   geofences?: GeofenceData[];
+}
+
+interface AnchorData {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  status: string;
+  zoneId?: string | null;
+  zone?: { id: string; name: string } | null;
 }
 
 interface GeofenceData {
@@ -56,6 +63,7 @@ export default function PlannerPage() {
   const [zones, setZones] = useState<ZoneData[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [selectedZone, setSelectedZone] = useState<ZoneData | null>(null);
+  const [allTenantAnchors, setAllTenantAnchors] = useState<AnchorData[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Geofence draw state
@@ -79,45 +87,62 @@ export default function PlannerPage() {
   }, [tenantId, token]);
 
   // ─── Fetch Sites & Zones ───────────────────────────────────────────
-  useEffect(() => {
+  const fetchZones = useCallback(async () => {
     if (!tenantId) return;
-    const fetchZones = async () => {
-      try {
-        const res = await fetch('http://localhost:4000/api/zones', { headers: apiHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          setZones(data);
-        }
-      } catch (e) {
-        console.error('Failed to fetch zones:', e);
+    try {
+      const res = await fetch('http://localhost:4000/api/zones', { headers: apiHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setZones(data);
       }
-    };
-    fetchZones();
+    } catch (e) {
+      console.error('Failed to fetch zones:', e);
+    }
   }, [tenantId, apiHeaders]);
 
-  // ─── Fetch Selected Zone Details ───────────────────────────────────
-  useEffect(() => {
-    if (!selectedZoneId || !tenantId) {
-      setSelectedZone(null);
-      return;
-    }
-    const fetchZoneDetails = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`http://localhost:4000/api/floorplan/zones/${selectedZoneId}`, {
-          headers: apiHeaders(),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setSelectedZone(data);
-        }
-      } catch (e) {
-        console.error('Failed to fetch zone details:', e);
+  // ─── Fetch All Tenant Anchors ──────────────────────────────────────
+  const fetchAllAnchors = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      const res = await fetch('http://localhost:4000/api/floorplan/anchors', { headers: apiHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setAllTenantAnchors(data);
       }
-      setLoading(false);
-    };
-    fetchZoneDetails();
-  }, [selectedZoneId, tenantId, apiHeaders]);
+    } catch (e) {
+      console.error('Failed to fetch anchors:', e);
+    }
+  }, [tenantId, apiHeaders]);
+
+  useEffect(() => {
+    fetchZones();
+    fetchAllAnchors();
+  }, [fetchZones, fetchAllAnchors]);
+
+  // ─── Fetch Selected Zone Details ───────────────────────────────────
+  const fetchZoneDetails = useCallback(async (zoneId: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`http://localhost:4000/api/floorplan/zones/${zoneId}`, {
+        headers: apiHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedZone(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch zone details:', e);
+    }
+    setLoading(false);
+  }, [apiHeaders]);
+
+  useEffect(() => {
+    if (selectedZoneId) {
+      fetchZoneDetails(selectedZoneId);
+    } else {
+      setSelectedZone(null);
+    }
+  }, [selectedZoneId, fetchZoneDetails]);
 
   // ─── Initialize Leaflet Map ────────────────────────────────────────
   useEffect(() => {
@@ -150,7 +175,7 @@ export default function PlannerPage() {
     };
   }, []);
 
-  // ─── Render Floor Plan Overlay & Geofences ─────────────────────────
+  // ─── Render Floor Plan Overlay, Anchors & Geofences ───────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -203,29 +228,37 @@ export default function PlannerPage() {
       });
     }
 
-    // Draw anchor markers
+    // Draw anchor markers (interactive drag & update)
     if (selectedZone.anchors) {
-      selectedZone.anchors.forEach((anchor: any) => {
+      selectedZone.anchors.forEach((anchor: AnchorData) => {
         const icon = L.divIcon({
           className: 'custom-anchor-icon',
           html: `
             <div style="display:flex;flex-direction:column;align-items:center;">
-              <div style="background:#1e293b;color:#38bdf8;border:1px solid #334155;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;">${anchor.name}</div>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#38bdf8" width="24" height="24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+              <div style="background:#0f172a;color:#38bdf8;border:1px solid #334155;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 4px rgba(0,0,0,0.5);">
+                ⚓ ${anchor.name}
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#38bdf8" width="28" height="28" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" stroke="#ffffff" stroke-width="1"/>
+              </svg>
             </div>`,
-          iconSize: [50, 40],
-          iconAnchor: [25, 40],
+          iconSize: [60, 48],
+          iconAnchor: [30, 44],
         });
+
         L.marker([anchor.y, anchor.x], { icon, draggable: true })
           .addTo(markerLayerRef.current)
           .on('dragend', async function (e: any) {
             const pos = e.target.getLatLng();
+            const newX = Number(pos.lng.toFixed(2));
+            const newY = Number(pos.lat.toFixed(2));
             try {
-              await fetch(`http://localhost:4000/api/assets/${anchor.id}`, {
+              await fetch(`http://localhost:4000/api/floorplan/anchors/${anchor.id}/position`, {
                 method: 'PATCH',
                 headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ latitude: pos.lng, longitude: pos.lat }),
+                body: JSON.stringify({ x: newX, y: newY }),
               });
+              fetchAllAnchors();
             } catch (err) {
               console.error('Failed to update anchor position:', err);
             }
@@ -242,11 +275,15 @@ export default function PlannerPage() {
           className: 'custom-asset-icon',
           html: `
             <div style="display:flex;flex-direction:column;align-items:center;">
-              <div style="background:#1e293b;color:#22c55e;border:1px solid #334155;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;">${asset.name}</div>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#22c55e" width="20" height="20"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+              <div style="background:#0f172a;color:#22c55e;border:1px solid #334155;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 4px rgba(0,0,0,0.5);">
+                ${asset.name}
+              </div>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#22c55e" width="24" height="24" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" stroke="#ffffff" stroke-width="1"/>
+              </svg>
             </div>`,
-          iconSize: [50, 36],
-          iconAnchor: [25, 36],
+          iconSize: [50, 40],
+          iconAnchor: [25, 40],
         });
         L.marker([y, x], { icon, draggable: true })
           .addTo(markerLayerRef.current)
@@ -264,7 +301,44 @@ export default function PlannerPage() {
           });
       });
     }
-  }, [selectedZone, apiHeaders]);
+  }, [selectedZone, apiHeaders, fetchAllAnchors]);
+
+  // ─── Assign Anchor to Selected Zone ───────────────────────────────
+  const handleAssignAnchor = async (anchorId: string) => {
+    if (!selectedZoneId || !selectedZone) return;
+    try {
+      const res = await fetch(`http://localhost:4000/api/floorplan/zones/${selectedZoneId}/anchors/${anchorId}`, {
+        method: 'POST',
+        headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          x: selectedZone.width / 2,
+          y: selectedZone.height / 2,
+        }),
+      });
+      if (res.ok) {
+        fetchZoneDetails(selectedZoneId);
+        fetchAllAnchors();
+      }
+    } catch (err) {
+      console.error('Failed to assign anchor:', err);
+    }
+  };
+
+  // ─── Unassign Anchor from Zone ────────────────────────────────────
+  const handleUnassignAnchor = async (anchorId: string) => {
+    try {
+      const res = await fetch(`http://localhost:4000/api/floorplan/anchors/${anchorId}`, {
+        method: 'DELETE',
+        headers: apiHeaders(),
+      });
+      if (res.ok) {
+        if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+        fetchAllAnchors();
+      }
+    } catch (err) {
+      console.error('Failed to unassign anchor:', err);
+    }
+  };
 
   // ─── Handle Floor Plan Upload ──────────────────────────────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -280,11 +354,7 @@ export default function PlannerPage() {
         body: formData,
       });
       if (res.ok) {
-        const updated = await res.json();
-        setSelectedZone((prev) => (prev ? { ...prev, floorPlanUrl: updated.floorPlanUrl } : prev));
-        // Re-fetch full zone details
-        setSelectedZoneId((id) => id); // force re-render
-        window.location.reload();
+        fetchZoneDetails(selectedZoneId);
       }
     } catch (err) {
       console.error('Upload failed:', err);
@@ -314,11 +384,7 @@ export default function PlannerPage() {
         setNewGeofenceName('');
         setShowNewGeofenceForm(false);
         setDrawMode('pointer');
-        // Re-fetch zone
-        const updated = await fetch(`http://localhost:4000/api/floorplan/zones/${selectedZoneId}`, {
-          headers: apiHeaders(),
-        });
-        if (updated.ok) setSelectedZone(await updated.json());
+        fetchZoneDetails(selectedZoneId);
       }
     } catch (err) {
       console.error('Failed to save geofence:', err);
@@ -332,13 +398,7 @@ export default function PlannerPage() {
         method: 'DELETE',
         headers: apiHeaders(),
       });
-      // Re-fetch zone
-      if (selectedZoneId) {
-        const updated = await fetch(`http://localhost:4000/api/floorplan/zones/${selectedZoneId}`, {
-          headers: apiHeaders(),
-        });
-        if (updated.ok) setSelectedZone(await updated.json());
-      }
+      if (selectedZoneId) fetchZoneDetails(selectedZoneId);
     } catch (err) {
       console.error('Failed to delete geofence:', err);
     }
@@ -351,7 +411,7 @@ export default function PlannerPage() {
 
     const onClick = (e: any) => {
       if (drawMode !== 'draw_zone') return;
-      setDrawingPoints((prev) => [...prev, { x: e.latlng.lng, y: e.latlng.lat }]);
+      setDrawingPoints((prev) => [...prev, { x: Number(e.latlng.lng.toFixed(2)), y: Number(e.latlng.lat.toFixed(2)) }]);
     };
 
     map.on('click', onClick);
@@ -366,7 +426,7 @@ export default function PlannerPage() {
     if (!map || !geofenceLayerRef.current) return;
     const L = require('leaflet');
 
-    // Remove any existing preview polygon
+    // Remove preview polygons
     geofenceLayerRef.current.eachLayer((layer: any) => {
       if (layer.options?.className === 'preview-polygon') {
         geofenceLayerRef.current.removeLayer(layer);
@@ -386,7 +446,6 @@ export default function PlannerPage() {
       }).addTo(geofenceLayerRef.current);
     }
 
-    // Draw point markers
     drawingPoints.forEach((p, i) => {
       L.circleMarker([p.y, p.x], {
         radius: 5,
@@ -400,6 +459,8 @@ export default function PlannerPage() {
         .bindTooltip(`P${i + 1}`, { permanent: true, direction: 'top', className: 'point-tooltip' });
     });
   }, [drawingPoints, newGeofenceType]);
+
+  const placedAnchorIds = new Set(selectedZone?.anchors?.map((a) => a.id) || []);
 
   return (
     <div className="flex h-full gap-4">
@@ -469,13 +530,95 @@ export default function PlannerPage() {
           </Card>
         )}
 
+        {/* ─── ANCHOR PLACEMENT & INVENTORY PANEL ─────────────────── */}
+        {selectedZoneId && (
+          <Card className="rounded-2xl border-border shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-bold flex items-center justify-between text-foreground">
+                <span className="flex items-center gap-2">
+                  <Radio className="h-4 w-4 text-cyan-400" />
+                  Penempatan Anchor
+                </span>
+                <Badge variant="secondary" className="text-[10px]">
+                  {selectedZone?.anchors?.length || 0} Placed
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-[10px] text-muted-foreground">
+                Pilih Anchor di bawah ini untuk ditempatkan pada denah, atau geser marker di peta.
+              </p>
+
+              {/* Anchors List */}
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                {allTenantAnchors.map((an) => {
+                  const isPlacedOnCurrent = an.zoneId === selectedZoneId;
+                  const isPlacedElsewhere = an.zoneId && !isPlacedOnCurrent;
+
+                  return (
+                    <div
+                      key={an.id}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${
+                        isPlacedOnCurrent
+                          ? 'bg-cyan-950/20 border-cyan-500/30 text-cyan-300'
+                          : 'bg-secondary/40 border-border text-foreground'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate mr-2">
+                        <Radio className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-cyan-400' : 'text-muted-foreground'}`} />
+                        <div className="truncate">
+                          <div className="font-bold text-[11px] truncate">{an.name}</div>
+                          <div className="text-[9px] text-muted-foreground font-mono">
+                            {isPlacedOnCurrent
+                              ? `Pos: (${an.x}m, ${an.y}m)`
+                              : isPlacedElsewhere
+                              ? `On ${an.zone?.name || 'Other Zone'}`
+                              : 'Unplaced'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {isPlacedOnCurrent ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
+                          onClick={() => handleUnassignAnchor(an.id)}
+                          title="Hapus dari denah"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 cursor-pointer flex-shrink-0"
+                          onClick={() => handleAssignAnchor(an.id)}
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Place
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {allTenantAnchors.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground italic">
+                    Belum ada Anchor terdaftar pada tenant ini.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Geofence Zones List */}
         {selectedZone && (
           <Card className="rounded-2xl border-border shadow-md">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold flex items-center justify-between text-foreground">
                 <span className="flex items-center gap-2">
-                  <Hexagon className="h-4 w-4 text-primary" />
+                  <Hexagon className="h-4 w-4 text-amber-400" />
                   Geofence Zones
                 </span>
                 <Button
@@ -600,44 +743,6 @@ export default function PlannerPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* Placed Elements Summary */}
-        {selectedZone && (
-          <Card className="rounded-2xl border-border shadow-md">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-bold flex items-center gap-2 text-foreground">
-                <MapPin className="h-4 w-4 text-primary" />
-                Placed Elements
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Radio className="h-3.5 w-3.5 text-cyan-400" /> Anchors
-                </span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {selectedZone.anchors?.length || 0}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Tag className="h-3.5 w-3.5 text-emerald-400" /> Assets / Mesh
-                </span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {selectedZone.assets?.length || 0}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <Hexagon className="h-3.5 w-3.5 text-amber-400" /> Geofences
-                </span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {selectedZone.geofences?.length || 0}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* ─── RIGHT CANVAS (LEAFLET MAP EDITOR) ────────────────────── */}
@@ -661,7 +766,7 @@ export default function PlannerPage() {
                   ? 'bg-primary/10 text-primary border border-primary/30'
                   : 'bg-secondary/50 text-muted-foreground border border-border hover:bg-secondary'
               }`}
-              title="Pointer / Select"
+              title="Pointer / Move Elements"
             >
               <MousePointer className="h-4 w-4" />
             </button>
@@ -688,9 +793,9 @@ export default function PlannerPage() {
           {!selectedZoneId && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-card/95 backdrop-blur-sm">
               <Layers className="h-10 w-10 text-muted-foreground/40 mb-3" />
-              <p className="text-sm text-muted-foreground font-bold">Select a Zone</p>
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Choose a zone from the left panel to begin editing.
+              <p className="text-sm text-muted-foreground font-bold font-sans">Select a Zone</p>
+              <p className="text-[11px] text-muted-foreground mt-1 font-sans">
+                Choose a zone from the left panel to begin editing floor plan and placing anchors.
               </p>
             </div>
           )}

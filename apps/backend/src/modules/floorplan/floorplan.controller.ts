@@ -53,6 +53,39 @@ export class FloorplanController {
     return this.floorplanService.getZoneWithGeofences(tenantId, zoneId);
   }
 
+  // ─── Anchor Management on Floor Plan ──────────────────────────────
+  @Get('anchors')
+  getAllAnchors(@GetTenantId() tenantId: string) {
+    return this.floorplanService.getAllAnchors(tenantId);
+  }
+
+  @Post('zones/:zoneId/anchors/:anchorId')
+  assignAnchorToZone(
+    @GetTenantId() tenantId: string,
+    @Param('zoneId') zoneId: string,
+    @Param('anchorId') anchorId: string,
+    @Body() body: { x?: number; y?: number },
+  ) {
+    return this.floorplanService.assignAnchorToZone(tenantId, zoneId, anchorId, body?.x, body?.y);
+  }
+
+  @Delete('anchors/:anchorId')
+  unassignAnchorFromZone(
+    @GetTenantId() tenantId: string,
+    @Param('anchorId') anchorId: string,
+  ) {
+    return this.floorplanService.unassignAnchorFromZone(tenantId, anchorId);
+  }
+
+  @Patch('anchors/:anchorId/position')
+  updateAnchorPosition(
+    @GetTenantId() tenantId: string,
+    @Param('anchorId') anchorId: string,
+    @Body() body: { x: number; y: number },
+  ) {
+    return this.floorplanService.updateAnchorPosition(tenantId, anchorId, body.x, body.y);
+  }
+
   // ─── Update Zone Calibration (Dimensions) ──────────────────────────
   @Patch('zones/:zoneId/calibrate')
   updateZoneCalibration(
