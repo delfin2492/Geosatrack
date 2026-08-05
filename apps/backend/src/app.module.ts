@@ -10,6 +10,7 @@ import { TenantModule } from './modules/tenant/tenant.module';
 import { SiteModule } from './modules/site/site.module';
 import { ZoneModule } from './modules/zone/zone.module';
 import { AssetModule } from './modules/asset/asset.module';
+import { FloorplanModule } from './modules/floorplan/floorplan.module';
 import {
   KeycloakConnectModule,
   TokenValidation,
@@ -39,6 +40,7 @@ import { AuthModule } from './modules/auth/auth.module';
     SiteModule,
     ZoneModule,
     AssetModule,
+    FloorplanModule,
   ],
   controllers: [AppController],
   providers: [AppService],

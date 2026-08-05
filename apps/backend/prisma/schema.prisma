@@ -68,6 +68,7 @@ model Zone {
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   anchors      Anchor[]
   assets       Asset[]
+  geofences    Geofence[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -154,7 +155,23 @@ model Alert {
 }
 
 // ------------------------------------------------------------------------------
-// 5. TIMESCALEDB TELEMETRY RAW DATA
+// 5. GEOFENCE ZONES (Indoor Polygon Boundaries)
+// ------------------------------------------------------------------------------
+
+model Geofence {
+  id        String   @id @default(cuid())
+  name      String
+  points    String   // JSON array of {x, y} coordinates (meters relative to Zone floor plan)
+  color     String   @default("#ef4444")
+  type      String   @default("RESTRICTED") // RESTRICTED, SAFE, WARNING
+  zoneId    String
+  zone      Zone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ------------------------------------------------------------------------------
+// 6. TIMESCALEDB TELEMETRY RAW DATA
 // Catatan: Kunci primer komposit digunakan untuk kompatibilitas TimescaleDB.
 // ------------------------------------------------------------------------------
 

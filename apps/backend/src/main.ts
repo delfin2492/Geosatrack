@@ -2,16 +2,23 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import * as path from 'path';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Set global prefix
   app.setGlobalPrefix('api');
 
   // Enable CORS
   app.enableCors();
+
+  // Serve uploaded floor plan images statically at /uploads/*
+  app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
+    prefix: '/uploads/',
+  });
 
   // Swagger Setup
   const config = new DocumentBuilder()

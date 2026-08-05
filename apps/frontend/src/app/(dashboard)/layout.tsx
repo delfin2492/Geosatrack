@@ -17,6 +17,7 @@ import {
   Sun,
   Moon,
   Building2,
+  PenTool,
   ChevronRight,
   X,
   Loader2
@@ -80,6 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const baseNavigation = [
     { name: 'Map View', href: '/map', icon: Map },
     { name: 'Assets', href: '/assets', icon: Boxes },
+    { name: 'RTLS Planner', href: '/planner', icon: PenTool },
     { name: 'Automation Rules', href: '/rules', icon: ShieldAlert },
     { name: 'Insights', href: '/insights', icon: Activity },
   ];
