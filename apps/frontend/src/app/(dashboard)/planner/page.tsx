@@ -393,13 +393,14 @@ export default function PlannerPage() {
 
     let hasChanges = false;
     
-    // 1. Sync coordinates / status changes for assets in current zone
+    // 1. Sync coordinates / status / signals changes for assets in current zone
     const updatedAssets = selectedZone.assets?.map((za) => {
       const match = assets.find((sa) => sa.id === za.id);
       if (match) {
         const planX = match.planX !== null && match.planX !== undefined ? Number(match.planX) : za.planX;
         const planY = match.planY !== null && match.planY !== undefined ? Number(match.planY) : za.planY;
-        if (planX !== za.planX || planY !== za.planY || match.status !== za.status || match.zoneId !== za.zoneId) {
+        const signalsChanged = match.tag?.signals !== za.tag?.signals;
+        if (planX !== za.planX || planY !== za.planY || match.status !== za.status || match.zoneId !== za.zoneId || signalsChanged) {
           hasChanges = true;
           return { ...za, ...match, planX, planY };
         }
@@ -1178,15 +1179,6 @@ export default function PlannerPage() {
                         <div className="flex items-center gap-1">
                           <Button
                             size="sm"
-                            variant="outline"
-                            className="h-6 px-1.5 text-[9px] border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
-                            onClick={() => handleSimulateRssi(ms.id)}
-                            title="Hitung Posisi & Zone Otomatis dari Sinyal RSSI Anchor Asli yang Masuk"
-                          >
-                            ⚡ RSSI Real
-                          </Button>
-                          <Button
-                            size="sm"
                             variant="ghost"
                             className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
                             onClick={() => handleUnassignMesh(ms.id)}
@@ -1197,15 +1189,6 @@ export default function PlannerPage() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 px-1.5 text-[9px] border-amber-500/40 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
-                            onClick={() => handleSimulateRssi(ms.id)}
-                            title="Hitung Zone berbasis Sinyal RSSI Anchor Terkuat yang Masuk"
-                          >
-                            ⚡ RSSI Real
-                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
