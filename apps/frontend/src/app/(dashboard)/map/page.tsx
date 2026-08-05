@@ -288,10 +288,10 @@ export default function MapPage() {
   const selectedAsset = mapAssets.find((a) => a.id === selectedAssetId) || (mapAssets.length > 0 ? mapAssets[0] : null);
 
   return (
-    <div className="flex h-full w-full gap-4 relative">
+    <div className="h-full w-full relative">
       
       {/* LEFT CONTENT: OPENSTREETMAP CANVAS */}
-      <div className="flex-1 flex flex-col min-w-0 h-full relative">
+      <div className="w-full h-full relative">
         {/* Title Header Bar */}
         <div className="flex items-center justify-between p-3.5 mb-3 rounded-2xl bg-card border border-border">
           <div>
@@ -303,121 +303,139 @@ export default function MapPage() {
               Original OpenStreetMap Indonesia (Jakarta, Surabaya, Balikpapan/IKN, Medan) & Indoor Floor Plan layout.
             </p>
           </div>
-          
-          <Button
-            onClick={() => setSimulationActive(!simulationActive)}
-            variant={simulationActive ? "default" : "outline"}
-            className="flex items-center gap-1.5 text-xs py-1.5 px-3 h-8"
-          >
-            <Play className={`h-3 w-3 ${simulationActive ? 'animate-spin' : ''}`} />
-            {simulationActive ? 'Simulation Active' : 'Start Simulator'}
-          </Button>
         </div>
 
         {/* OpenStreetMap Canvas Area */}
-        <div className="flex-1 min-h-[580px]">
+        <div className="w-full h-full relative min-h-[580px]">
           <FloorMap
             assets={mapAssets}
             anchors={currentAnchors}
             onSelectAsset={(asset) => setSelectedAssetId(asset.id)}
             onAnchorUpdate={handleAnchorUpdate}
           />
-        </div>
-      </div>
 
-      {/* RIGHT SIDE PANEL: COMPACT TELEMETRY INSPECTOR (w-64) */}
-      <Card className="w-64 flex flex-col shrink-0 overflow-hidden h-full rounded-2xl border border-border shadow-xl">
-        <CardHeader className="py-3 px-4 border-b border-border bg-card/60">
-          <CardTitle className="flex items-center gap-1.5 text-xs">
-            <Radio className="h-3.5 w-3.5 text-primary" />
-            Telemetry Inspector
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="flex-1 flex flex-col justify-between overflow-y-auto space-y-4 p-4 text-xs">
-          {selectedAsset ? (
-            <>
-              {/* Header info */}
-              <div className="space-y-1.5 border-b border-border pb-3">
-                <div className="flex items-center justify-between">
-                  <Badge variant={selectedAsset.status === 'tilt_warning' ? 'destructive' : 'default'} className="text-[10px] px-2 py-0.5">
-                    {selectedAsset.meshLabel}
-                  </Badge>
-                  <span className="text-[10px] font-mono text-muted-foreground">{selectedAsset.type}</span>
-                </div>
-                <h4 className="text-xs font-bold text-foreground truncate">{selectedAsset.name}</h4>
-                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <MapPin className="h-3 w-3 text-primary shrink-0" />
-                  Site Jakarta (Warehouse Cawang)
-                </p>
-              </div>
-
-              {/* Status alerts */}
-              {(selectedAsset.status === 'tilt_warning' || selectedAsset.status === 'fall_detected') && (
-                <div className="p-2.5 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl text-[11px] flex gap-2 items-start">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold">Tilt Alert</p>
-                    <p className="text-[9px] opacity-90 mt-0.5">Pitch/roll exceeded threshold.</p>
+          {/* Floating Telemetry Inspector Popup Card (over map) */}
+          {selectedAsset && (
+            <Card className="absolute top-4 right-4 z-20 w-80 flex flex-col overflow-hidden rounded-xl border border-border shadow-2xl bg-card/95 backdrop-blur-md max-h-[500px]">
+              {/* Header */}
+              <div className={`p-3 text-white flex items-center justify-between font-sans ${
+                selectedAsset.status === 'tilt_warning' || selectedAsset.status === 'fall_detected'
+                  ? 'bg-gradient-to-r from-orange-500 to-red-600'
+                  : selectedAsset.status === 'moving'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600'
+                  : 'bg-gradient-to-r from-slate-700 to-slate-900'
+              }`}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Radio className="h-4 w-4 animate-pulse shrink-0" />
+                  <div className="min-w-0">
+                    <h4 className="text-[9px] font-bold tracking-wider uppercase opacity-90">{selectedAsset.type}</h4>
+                    <h3 className="text-xs font-black truncate max-w-[180px]">{selectedAsset.name}</h3>
                   </div>
                 </div>
-              )}
-
-              {/* Compact Attributes List */}
-              <div className="space-y-2.5">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Live Measurements
-                </div>
-
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <Thermometer className="h-3.5 w-3.5 text-cyan-400" />
-                    Temp
-                  </span>
-                  <span className="font-bold font-mono text-foreground">{selectedAsset.tag?.temperature ?? '--'} °C</span>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <Battery className="h-3.5 w-3.5 text-emerald-400" />
-                    Battery
-                  </span>
-                  <span className="font-bold font-mono text-emerald-400">{selectedAsset.tag?.battery ?? '--'} V</span>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <Activity className="h-3.5 w-3.5 text-amber-400" />
-                    RSSI
-                  </span>
-                  <span className="font-bold font-mono text-amber-400">{selectedAsset.tag?.rssi ?? '--'} dBm</span>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5 text-primary" />
-                    Pos (X,Y)
-                  </span>
-                  <span className="font-bold font-mono text-foreground">{selectedAsset.x.toFixed(1)}m, {selectedAsset.y.toFixed(1)}m</span>
-                </div>
+                <button 
+                  onClick={() => setSelectedAssetId(null)}
+                  className="p-1 hover:bg-white/10 rounded transition-all text-white/80 hover:text-white"
+                >
+                  <span className="text-xs font-mono">✕</span>
+                </button>
               </div>
 
-              {/* Compact Meta details */}
-              <div className="pt-3 border-t border-border text-[9px] text-muted-foreground font-mono space-y-1">
-                <div>Node: {selectedAsset.meshLabel}</div>
-                <div>Tag: {selectedAsset.tag?.id || 'N/A'}</div>
-                <div>Map Engine: OpenStreetMap</div>
-                <div>Region: Indonesia (ID)</div>
-                <div>Updated: {new Date().toLocaleTimeString()}</div>
+              {/* Content */}
+              <div className="p-4 space-y-4 overflow-y-auto max-h-[380px] text-xs">
+                {/* Location name and node ID info */}
+                <div className="flex justify-between items-center text-[10px] text-muted-foreground border-b border-border/60 pb-2">
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3 text-primary shrink-0" />
+                    Site Jakarta (Warehouse)
+                  </span>
+                  <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-[9px]">
+                    {selectedAsset.meshLabel}
+                  </span>
+                </div>
+
+                {/* Alerts */}
+                {(selectedAsset.status === 'tilt_warning' || selectedAsset.status === 'fall_detected') && (
+                  <div className="p-2 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg text-[10px] flex gap-1.5 items-start">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Tilt Alert Active</p>
+                      <p className="text-[8.5px] opacity-90 mt-0.5">Device pitch/roll exceeded safety threshold.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dynamic Attributes Grid */}
+                <div className="space-y-2">
+                  <div className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider">
+                    Device Attributes
+                  </div>
+
+                  {(() => {
+                    const originalAsset = assets.find(as => as.id === selectedAsset.id);
+                    let customAttrs: any[] = [];
+                    if (originalAsset && originalAsset.description) {
+                      try {
+                        const parsed = JSON.parse(originalAsset.description);
+                        customAttrs = parsed.attributes || [];
+                      } catch(e) {}
+                    }
+
+                    const itemsToRender = [
+                      { label: 'CO2 Level (ppm)', value: customAttrs.find((a: any) => a.name === 'co2')?.value || '--' },
+                      { label: 'CO Level (ppm)', value: customAttrs.find((a: any) => a.name === 'co')?.value || '--' },
+                      { label: 'Temperature', value: selectedAsset.tag && selectedAsset.tag.temperature !== null ? `${selectedAsset.tag.temperature} °C` : '--' },
+                      { label: 'Humidity', value: selectedAsset.tag && selectedAsset.tag.humidity !== null ? `${selectedAsset.tag.humidity} %` : '--' },
+                      { label: 'Battery/Voltage', value: selectedAsset.tag && selectedAsset.tag.battery !== null ? `${selectedAsset.tag.battery} V` : '--' },
+                      { label: 'RSSI', value: selectedAsset.tag && selectedAsset.tag.rssi !== null ? `${selectedAsset.tag.rssi} dBm` : '--' },
+                      { label: 'Position (X, Y)', value: `${selectedAsset.x.toFixed(1)}m, ${selectedAsset.y.toFixed(1)}m` },
+                    ];
+
+                    customAttrs.forEach((attr: any) => {
+                      const isDuplicate = ['temperature', 'humidity', 'voltage', 'battery', 'gateway_rssi', 'rssi', 'co2', 'co'].includes(attr.name);
+                      if (!isDuplicate && attr.value !== undefined && attr.value !== null && attr.value !== '') {
+                        let displayName = attr.name;
+                        displayName = attr.name
+                          .replace(/_/g, ' ')
+                          .replace(/([A-Z])/g, ' $1')
+                          .replace(/^./, (str: string) => str.toUpperCase());
+                          
+                        itemsToRender.push({
+                          label: displayName,
+                          value: String(attr.value) + (attr.unit ? ` ${attr.unit}` : '')
+                        });
+                      }
+                    });
+
+                    const filteredItems = itemsToRender.filter(item => item.value !== '--' && item.value !== '');
+
+                    if (filteredItems.length === 0) {
+                      return <p className="text-[10px] text-muted-foreground">No attributes found</p>;
+                    }
+
+                    return filteredItems.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center py-1 border-b border-border/30 text-[11px] last:border-0">
+                        <span className="text-muted-foreground">{item.label}</span>
+                        <span className="font-mono font-bold text-foreground">{item.value}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                {/* Meta info */}
+                <div className="pt-2 border-t border-border/60 flex justify-between items-center text-[9px] text-muted-foreground/80 font-mono">
+                  <span>Updated: {new Date().toLocaleTimeString()}</span>
+                  <a 
+                    href={`/assets?id=${selectedAsset.id}`}
+                    className="text-primary hover:underline font-bold text-[10px] tracking-wider transition-all uppercase"
+                  >
+                    VIEW
+                  </a>
+                </div>
               </div>
-            </>
-          ) : (
-            <p className="text-center text-xs text-muted-foreground py-8">
-              Select a Mesh Node on the map.
-            </p>
+            </Card>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

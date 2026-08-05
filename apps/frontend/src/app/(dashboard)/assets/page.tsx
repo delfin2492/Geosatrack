@@ -355,6 +355,16 @@ export default function AssetsPage() {
   // Selection states
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const queryId = params.get('id');
+      if (queryId && assets.some(a => a.id === queryId)) {
+        setSelectedAssetId(queryId);
+      }
+    }
+  }, [assets]);
+
   // Form states
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
