@@ -491,6 +491,34 @@ export default function PlannerPage() {
     }
   };
 
+  // ─── Delete Anchor Permanently from Database ──────────────────────
+  const handleDeleteAnchor = async (anchorId: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus Anchor ini secara permanen dari database?')) return;
+    try {
+      // Since anchors are registered as assets (type: ANCHOR)
+      const res = await fetch(`http://localhost:4000/api/assets/${anchorId}`, {
+        method: 'DELETE',
+        headers: apiHeaders(),
+      });
+      if (res.ok) {
+        fetchAllAnchors();
+        if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+      } else {
+        // Fallback for table anchors
+        const res2 = await fetch(`http://localhost:4000/api/floorplan/anchors/${anchorId}`, {
+          method: 'DELETE',
+          headers: apiHeaders(),
+        });
+        if (res2.ok) {
+          fetchAllAnchors();
+          if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete anchor:', err);
+    }
+  };
+
   // ─── Assign Mesh/Asset to Selected Zone ───────────────────────────
   const handleAssignMesh = async (assetId: string) => {
     if (!selectedZoneId || !selectedZone) return;
@@ -1002,14 +1030,25 @@ export default function PlannerPage() {
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2 text-[10px] border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 cursor-pointer flex-shrink-0"
-                          onClick={() => handleAssignAnchor(an.id)}
-                        >
-                          <Plus className="h-3 w-3 mr-1" /> Place
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
+                            onClick={() => handleDeleteAnchor(an.id)}
+                            title="Hapus Anchor secara permanen"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-[10px] border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 cursor-pointer flex-shrink-0"
+                            onClick={() => handleAssignAnchor(an.id)}
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Place
+                          </Button>
+                        </div>
                       )}
                     </div>
                   );

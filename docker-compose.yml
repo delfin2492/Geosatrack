@@ -81,6 +81,8 @@ services:
       - KEYCLOAK_CLIENT_SECRET=change-me-on-production
       - JWT_SECRET=super-secret-jwt-key-change-me
     command: sh -c "npx prisma db push --schema=apps/backend/prisma/schema.prisma && npm run start:prod --workspace=apps/backend"
+    volumes:
+      - ./apps/backend/uploads:/app/apps/backend/uploads
     depends_on:
       - timescaledb
       - redis
