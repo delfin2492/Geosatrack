@@ -400,6 +400,7 @@ export default function PlannerPage() {
         const planX = match.planX !== null && match.planX !== undefined ? Number(match.planX) : za.planX;
         const planY = match.planY !== null && match.planY !== undefined ? Number(match.planY) : za.planY;
         const signalsChanged = match.tag?.signals !== za.tag?.signals;
+        console.log(`[Sync] Match found for ${za.name}: planX=${planX} (prev=${za.planX}), planY=${planY} (prev=${za.planY}), signalsChanged=${signalsChanged}`);
         if (planX !== za.planX || planY !== za.planY || match.status !== za.status || match.zoneId !== za.zoneId || signalsChanged) {
           hasChanges = true;
           return { ...za, ...match, planX, planY };

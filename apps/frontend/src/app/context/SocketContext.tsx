@@ -27,6 +27,7 @@ interface Asset {
     humidity: number | null;
     battery: number | null;
     rssi: number | null;
+    signals?: string | null;
     lastSeen?: string | Date | null;
   } | null;
   zone?: {
@@ -143,6 +144,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     socketIo.on('assetUpdate', (updatedAsset: Asset) => {
+      console.log('🔌 WebSocket assetUpdate received:', updatedAsset);
       setAssets((prev) => 
         prev.map((a) => (a.id === updatedAsset.id ? { ...a, ...updatedAsset } : a))
       );
