@@ -304,7 +304,7 @@ export default function MapPage() {
   const mapAssets = getMapAssets();
   const selectedAsset = mapAssets.find((a) => a.id === selectedAssetId) || null;
 
-  // Calculate online/offline assets count based on lastSeen timestamp (active in the last 2 minutes)
+  // Calculate online/offline assets count based on lastSeen timestamp (active in the last 5 minutes)
   const filteredAssetsOnly = assets.filter(
     (a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING'
   );
@@ -312,7 +312,7 @@ export default function MapPage() {
     if (!a.tag?.lastSeen) return false;
     const lastSeenDate = new Date(a.tag.lastSeen);
     const diffMs = Date.now() - lastSeenDate.getTime();
-    return diffMs < 120000; // 2 minutes threshold
+    return diffMs < 300000; // 5 minutes threshold
   }).length;
   const offlineAssetsCount = filteredAssetsOnly.length - onlineAssetsCount;
 
