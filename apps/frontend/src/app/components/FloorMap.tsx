@@ -54,7 +54,7 @@ export default function FloorMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
-  const [mapStyle, setMapStyle] = useState<'google_roadmap' | 'google_satellite'>('google_roadmap');
+  const [mapStyle, setMapStyle] = useState<'google_roadmap' | 'osm_standard'>('google_roadmap');
 
   const centerLat = -6.2088;
   const centerLon = 106.8456;
@@ -69,12 +69,9 @@ export default function FloorMap({
     const map = L.map(mapContainerRef.current, {
       center: [centerLat, centerLon],
       zoom: 16,
-      zoomControl: false,
+      zoomControl: false, // Zoom controls hidden
     });
     mapRef.current = map;
-
-    // Add default Leaflet Zoom Control
-    L.control.zoom({ position: 'topleft' }).addTo(map);
 
     // Set up default Google Roadmap Layer
     const defaultLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
@@ -100,12 +97,12 @@ export default function FloorMap({
       map.removeLayer((map as any)._tileLayer);
     }
 
-    const url = mapStyle === 'google_satellite'
-      ? 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}' // Google Satellite
+    const url = mapStyle === 'osm_standard'
+      ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' // OSM Standard (Leaflet default)
       : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'; // Google Roadmap
 
     const newLayer = L.tileLayer(url, {
-      attribution: '© Google Maps',
+      attribution: mapStyle === 'osm_standard' ? '© OpenStreetMap contributors' : '© Google Maps',
       maxZoom: 20,
     }).addTo(map);
 
@@ -144,27 +141,28 @@ export default function FloorMap({
         pulseClass = 'animate-pulse';
       }
 
+      // Vector Map Pin teardrop icon shape
       const customIcon = L.divIcon({
         className: 'custom-asset-icon',
         html: `
           <div style="display: flex; flex-direction: column; align-items: center; position: relative;">
             <!-- Pulsing outer ring -->
             ${(asset.status === 'moving' || asset.status === 'tilt_warning' || asset.status === 'fall_detected') ? `
-              <div class="absolute -top-1 w-8 h-8 rounded-full ${pulseClass}" style="background-color: ${markerColor}44;"></div>
+              <div class="absolute -top-1 w-10 h-10 rounded-full ${pulseClass}" style="background-color: ${markerColor}44; margin-top: -6px;"></div>
             ` : ''}
             
-            <!-- Pin label badge -->
+            <!-- Pin label badge (using actual asset display name) -->
             <div class="bg-slate-900/95 text-white border border-slate-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-md whitespace-nowrap mb-1">
-              ${asset.meshLabel || asset.name}
+              ${asset.name}
             </div>
             
-            <!-- Inner marker circle -->
-            <div class="w-5 h-5 rounded-full bg-slate-950 flex items-center justify-center shadow-lg" style="border: 2px solid ${markerColor};">
-              <div class="w-1.5 h-1.5 rounded-full" style="background-color: ${markerColor};"></div>
-            </div>
+            <!-- Map Pin SVG -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${markerColor}" width="32" height="32" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" stroke="#ffffff" stroke-width="1"/>
+            </svg>
           </div>
         `,
-        iconSize: [60, 50],
+        iconSize: [60, 60],
         iconAnchor: [30, 45],
       });
 
@@ -175,6 +173,8 @@ export default function FloorMap({
       } else {
         const marker = L.marker([lat, lon], { icon: customIcon }).addTo(map);
         marker.on('click', () => {
+          // Smooth flyTo zoom animation when clicked
+          map.flyTo([lat, lon], 18, { duration: 1.2 });
           if (onSelectAsset) onSelectAsset(asset);
         });
         markersRef.current.set(asset.id, marker);
@@ -199,12 +199,12 @@ export default function FloorMap({
         <div className="flex items-center gap-1.5 bg-card/95 border border-border px-2.5 py-1 rounded-xl shadow-lg backdrop-blur-md">
           {/* Switcher */}
           <button
-            onClick={() => setMapStyle(mapStyle === 'google_roadmap' ? 'google_satellite' : 'google_roadmap')}
+            onClick={() => setMapStyle(mapStyle === 'google_roadmap' ? 'osm_standard' : 'google_roadmap')}
             className="p-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 bg-secondary text-foreground border border-border cursor-pointer hover:bg-secondary/80"
-            title="Ganti Tampilan Google Maps (Roadmap / Satelit)"
+            title="Ganti Tampilan Peta (Google Maps / OpenStreetMap)"
           >
             <Globe className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[10px] font-mono">{mapStyle === 'google_roadmap' ? 'Google Roadmap' : 'Google Satellite'}</span>
+            <span className="text-[10px] font-mono">{mapStyle === 'google_roadmap' ? 'Google Roadmap' : 'Leaflet OSM'}</span>
           </button>
           
           <button

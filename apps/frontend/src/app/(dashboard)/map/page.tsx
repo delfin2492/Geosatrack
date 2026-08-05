@@ -294,16 +294,26 @@ export default function MapPage() {
       
       {/* LEFT CONTENT: OPENSTREETMAP CANVAS */}
       <div className="w-full h-full relative">
-        {/* Title Header Bar */}
-        <div className="flex items-center justify-between p-3.5 mb-3 rounded-2xl bg-card border border-border">
-          <div>
-            <h2 className="text-xs font-bold flex items-center gap-2 text-foreground">
-              <Globe className="h-4 w-4 text-primary" />
-              OpenStreetMap Indonesia & Wirepas Mesh Visualizer
-            </h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Original OpenStreetMap Indonesia (Jakarta, Surabaya, Balikpapan/IKN, Medan) & Indoor Floor Plan layout.
-            </p>
+        {/* Stats Row Banner (Agents and Assets count info) */}
+        <div className="flex flex-wrap items-center gap-3 mb-3.5">
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-card border border-border shadow-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Connected Agents: <strong className="text-foreground ml-1">{assets.filter((a) => a.type.startsWith('AGENT_') && a.status === 'connected').length}</strong> / {assets.filter((a) => a.type.startsWith('AGENT_')).length}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-card border border-border shadow-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Connected Assets: <strong className="text-foreground ml-1">{assets.filter((a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.tagId !== null).length}</strong> / {assets.filter((a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR').length}
+            </span>
           </div>
         </div>
 
