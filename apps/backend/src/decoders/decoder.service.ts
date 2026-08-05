@@ -32,16 +32,56 @@ export class DecoderService {
     try {
       const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
 
+      const evt = parsed.wirepas?.packet_received_event;
+      const measurements = evt?.payload_json?.measurements ?? evt?.measurements ?? parsed.payload_json?.measurements ?? parsed.measurements;
+      const extractedSignals: any[] = [];
+      if (Array.isArray(measurements)) {
+        measurements.forEach((m: any) => {
+          if (Array.isArray(m.rss_sr_4byte_addr)) {
+            m.rss_sr_4byte_addr.forEach((r: any) => {
+              if (r.addr && r.addr !== 248) {
+                extractedSignals.push({
+                  anchorId: String(r.addr),
+                  rssi: Number(r.rssi),
+                });
+              }
+            });
+          } else if (m.addr && m.rssi !== undefined) {
+            extractedSignals.push({
+              anchorId: String(m.addr),
+              rssi: Number(m.rssi),
+            });
+          }
+        });
+      }
+
+      // Extract from raw root keys (e.g. rssi_9023206)
+      const targetObj = evt?.payload_json ?? evt ?? parsed;
+      for (const key of Object.keys(targetObj)) {
+        if (key.startsWith('rssi_') && key !== 'rssi_gateway' && key !== 'gateway_rssi') {
+          const addr = key.replace('rssi_', '');
+          const rssiVal = Number(targetObj[key]);
+          if (!isNaN(rssiVal)) {
+            extractedSignals.push({
+              anchorId: addr,
+              rssi: rssiVal,
+            });
+          }
+        }
+      }
+
+      const finalSignals = targetObj.signals ?? targetObj.attributes ?? targetObj.rssi_anchors ?? targetObj.rssiAnchors ?? (extractedSignals.length > 0 ? extractedSignals : null);
+
       return {
-        temperature: parsed.temperature ?? parsed.temp,
-        humidity: parsed.humidity ?? parsed.hum,
-        accel_x: parsed.accel_x ?? parsed.acc_x ?? 0,
-        accel_y: parsed.accel_y ?? parsed.acc_y ?? 0,
-        accel_z: parsed.accel_z ?? parsed.acc_z ?? 1.0,
-        pitch: parsed.pitch ?? 0,
-        roll: parsed.roll ?? 0,
-        hall_sensor: parsed.hall_sensor ?? parsed.hall ?? 0,
-        signals: parsed.signals ?? parsed.attributes ?? parsed.rssi_anchors ?? parsed.rssiAnchors ?? null,
+        temperature: parsed.temperature ?? parsed.temp ?? targetObj.temperature ?? targetObj.temp,
+        humidity: parsed.humidity ?? parsed.hum ?? targetObj.humidity ?? targetObj.hum,
+        accel_x: parsed.accel_x ?? parsed.acc_x ?? targetObj.accel_x ?? targetObj.acc_x ?? 0,
+        accel_y: parsed.accel_y ?? parsed.acc_y ?? targetObj.accel_y ?? targetObj.acc_y ?? 0,
+        accel_z: parsed.accel_z ?? parsed.acc_z ?? targetObj.accel_z ?? targetObj.acc_z ?? 1.0,
+        pitch: parsed.pitch ?? targetObj.pitch ?? 0,
+        roll: parsed.roll ?? targetObj.roll ?? 0,
+        hall_sensor: parsed.hall_sensor ?? parsed.hall ?? targetObj.hall_sensor ?? targetObj.hall ?? 0,
+        signals: finalSignals,
       };
     } catch (error) {
       this.logger.error('Failed to decode Endpoint 11 payload:', error);
@@ -56,13 +96,53 @@ export class DecoderService {
     try {
       const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
 
+      const evt = parsed.wirepas?.packet_received_event;
+      const measurements = evt?.payload_json?.measurements ?? evt?.measurements ?? parsed.payload_json?.measurements ?? parsed.measurements;
+      const extractedSignals: any[] = [];
+      if (Array.isArray(measurements)) {
+        measurements.forEach((m: any) => {
+          if (Array.isArray(m.rss_sr_4byte_addr)) {
+            m.rss_sr_4byte_addr.forEach((r: any) => {
+              if (r.addr && r.addr !== 248) {
+                extractedSignals.push({
+                  anchorId: String(r.addr),
+                  rssi: Number(r.rssi),
+                });
+              }
+            });
+          } else if (m.addr && m.rssi !== undefined) {
+            extractedSignals.push({
+              anchorId: String(m.addr),
+              rssi: Number(m.rssi),
+            });
+          }
+        });
+      }
+
+      // Extract from raw root keys (e.g. rssi_9023206)
+      const targetObj = evt?.payload_json ?? evt ?? parsed;
+      for (const key of Object.keys(targetObj)) {
+        if (key.startsWith('rssi_') && key !== 'rssi_gateway' && key !== 'gateway_rssi') {
+          const addr = key.replace('rssi_', '');
+          const rssiVal = Number(targetObj[key]);
+          if (!isNaN(rssiVal)) {
+            extractedSignals.push({
+              anchorId: addr,
+              rssi: rssiVal,
+            });
+          }
+        }
+      }
+
+      const finalSignals = targetObj.signals ?? targetObj.attributes ?? targetObj.rssi_anchors ?? targetObj.rssiAnchors ?? (extractedSignals.length > 0 ? extractedSignals : null);
+
       return {
-        battery_voltage: parsed.battery_voltage ?? parsed.battery ?? 3.6,
-        rssi: parsed.rssi ?? -70,
-        motion: parsed.motion ?? false,
-        hop_count: parsed.hop_count ?? parsed.hops ?? 1,
-        update_interval: parsed.update_interval ?? 30,
-        signals: parsed.signals ?? parsed.attributes ?? parsed.rssi_anchors ?? parsed.rssiAnchors ?? null,
+        battery_voltage: parsed.battery_voltage ?? parsed.battery ?? targetObj.battery_voltage ?? targetObj.battery ?? 3.6,
+        rssi: parsed.rssi ?? targetObj.rssi ?? -70,
+        motion: parsed.motion ?? targetObj.motion ?? false,
+        hop_count: parsed.hop_count ?? targetObj.hop_count ?? 1,
+        update_interval: parsed.update_interval ?? targetObj.update_interval ?? 30,
+        signals: finalSignals,
       };
     } catch (error) {
       this.logger.error('Failed to decode Endpoint 238 payload:', error);

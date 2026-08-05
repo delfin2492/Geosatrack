@@ -511,6 +511,42 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     this.websocketGateway.sendToTenant(asset.tenantId, 'tagUpdate', tag);
 
+    // Extract RSSI signals (e.g. rssi_9023206)
+    const signals: { anchorId: string; rssi: number }[] = [];
+    for (const key of Object.keys(decoded)) {
+      if (key.startsWith('rssi_') && key !== 'rssi_gateway' && key !== 'gateway_rssi') {
+        const addr = key.replace('rssi_', '');
+        const rssiVal = Number(decoded[key]);
+        if (!isNaN(rssiVal)) {
+          signals.push({
+            anchorId: addr,
+            rssi: rssiVal,
+          });
+        }
+      }
+    }
+
+    if (signals.length > 0) {
+      try {
+        const result = await this.floorplanService.updateMeshRssiPosition(asset.tenantId, asset.id, signals);
+        
+        // Save signals to database Tag.signals
+        await this.prisma.tag.update({
+          where: { id: tagId },
+          data: {
+            signals: JSON.stringify(signals),
+          },
+        });
+
+        // Broadcast updated asset coordinate via WebSocket
+        if (result && result.asset) {
+          this.websocketGateway.sendToTenant(asset.tenantId, 'assetUpdate', result.asset);
+        }
+      } catch (err) {
+        this.logger.error(`Failed to automatically update Mesh position from extracted rssi_ attributes: ${err.message}`);
+      }
+    }
+
     // Save historical trend to TimescaleDB
     await this.prisma.telemetry.create({
       data: {
