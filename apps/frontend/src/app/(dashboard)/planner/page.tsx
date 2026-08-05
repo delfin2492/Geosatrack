@@ -360,15 +360,71 @@ export default function PlannerPage() {
     }
   }, [selectedZone, apiHeaders, fetchAllAnchors, fetchZoneDetails, selectedZoneId]);
 
+  // ─── Real-time Asset/Mesh Update via WebSocket ──────────────────────
+  useEffect(() => {
+    if (!selectedZone || !assets || !selectedZoneId) return;
+
+    let hasChanges = false;
+    
+    // 1. Sync coordinates / status changes for assets in current zone
+    const updatedAssets = selectedZone.assets?.map((za) => {
+      const match = assets.find((sa) => sa.id === za.id);
+      if (match) {
+        const planX = match.planX !== null && match.planX !== undefined ? Number(match.planX) : za.planX;
+        const planY = match.planY !== null && match.planY !== undefined ? Number(match.planY) : za.planY;
+        if (planX !== za.planX || planY !== za.planY || match.status !== za.status || match.zoneId !== za.zoneId) {
+          hasChanges = true;
+          return { ...za, ...match, planX, planY };
+        }
+      }
+      return za;
+    });
+
+    // 2. Remove assets that moved to another zone
+    const filteredAssets = updatedAssets?.filter((za) => {
+      const match = assets.find((sa) => sa.id === za.id);
+      if (match && match.zoneId !== selectedZoneId) {
+        hasChanges = true;
+        return false;
+      }
+      return true;
+    });
+
+    // 3. Add assets that moved into this zone
+    const newAssets = assets
+      .filter((sa) => sa.zoneId === selectedZoneId && sa.type !== 'ANCHOR' && !selectedZone.assets?.some((za) => za.id === sa.id))
+      .map((sa) => ({
+        ...sa,
+        planX: sa.planX !== null && sa.planX !== undefined ? Number(sa.planX) : selectedZone.width / 2,
+        planY: sa.planY !== null && sa.planY !== undefined ? Number(sa.planY) : selectedZone.height / 2,
+      }));
+
+    if (newAssets.length > 0) {
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      setSelectedZone((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          assets: [...(filteredAssets || []), ...newAssets],
+        };
+      });
+      fetchAllMesh();
+    }
+  }, [assets, selectedZoneId, fetchAllMesh]);
+
   // ─── Create New Zone ──────────────────────────────────────────────
   const handleCreateZone = async () => {
-    if (!newZoneName.trim() || !newZoneSiteId) return;
+    const targetSiteId = newZoneSiteId || sites[0]?.id;
+    if (!newZoneName.trim() || !targetSiteId) return;
     try {
       const res = await fetch('http://localhost:4000/api/zones', {
         method: 'POST',
         headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          siteId: newZoneSiteId,
+          siteId: targetSiteId,
           name: newZoneName,
           width: Number(newZoneWidth),
           height: Number(newZoneHeight),
@@ -746,22 +802,6 @@ export default function PlannerPage() {
                     onChange={(e) => setNewZoneName(e.target.value)}
                   />
                 </div>
-                {sites.length > 0 && (
-                  <div>
-                    <label className="text-[9px] text-muted-foreground uppercase font-bold">Site</label>
-                    <select
-                      className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
-                      value={newZoneSiteId}
-                      onChange={(e) => setNewZoneSiteId(e.target.value)}
-                    >
-                      {sites.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[9px] text-muted-foreground uppercase font-bold">Lebar (m)</label>
@@ -817,22 +857,6 @@ export default function PlannerPage() {
                         onChange={(e) => setEditZoneName(e.target.value)}
                       />
                     </div>
-                    {sites.length > 0 && (
-                      <div>
-                        <label className="text-[9px] text-muted-foreground uppercase font-bold">Site / Warehouse Cabang</label>
-                        <select
-                          className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
-                          value={editZoneSiteId}
-                          onChange={(e) => setEditZoneSiteId(e.target.value)}
-                        >
-                          {sites.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-[9px] text-muted-foreground uppercase font-bold">Lebar (m)</label>
@@ -874,7 +898,7 @@ export default function PlannerPage() {
                     <div className="truncate mr-2">
                       <div className="font-bold truncate">{z.name}</div>
                       <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                        {z.site?.name || 'Site'} • {z.width}m × {z.height}m
+                        Denah: {z.width}m × {z.height}m
                       </div>
                     </div>
                     <Button

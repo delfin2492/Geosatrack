@@ -18,6 +18,8 @@ interface Asset {
   updatedAt?: string;
   latitude?: number | null;
   longitude?: number | null;
+  planX?: number | null;
+  planY?: number | null;
   tag: {
     id: string;
     name: string;
