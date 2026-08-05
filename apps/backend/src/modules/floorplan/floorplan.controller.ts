@@ -86,6 +86,39 @@ export class FloorplanController {
     return this.floorplanService.updateAnchorPosition(tenantId, anchorId, body.x, body.y);
   }
 
+  // ─── Mesh / Asset Management on Floor Plan ─────────────────────────
+  @Get('mesh')
+  getAllMeshAssets(@GetTenantId() tenantId: string) {
+    return this.floorplanService.getAllMeshAssets(tenantId);
+  }
+
+  @Post('zones/:zoneId/mesh/:assetId')
+  assignAssetToZone(
+    @GetTenantId() tenantId: string,
+    @Param('zoneId') zoneId: string,
+    @Param('assetId') assetId: string,
+    @Body() body: { planX?: number; planY?: number },
+  ) {
+    return this.floorplanService.assignAssetToZone(tenantId, zoneId, assetId, body?.planX, body?.planY);
+  }
+
+  @Delete('mesh/:assetId')
+  unassignAssetFromZone(
+    @GetTenantId() tenantId: string,
+    @Param('assetId') assetId: string,
+  ) {
+    return this.floorplanService.unassignAssetFromZone(tenantId, assetId);
+  }
+
+  @Patch('mesh/:assetId/position')
+  updateAssetPlanPosition(
+    @GetTenantId() tenantId: string,
+    @Param('assetId') assetId: string,
+    @Body() body: { planX: number; planY: number },
+  ) {
+    return this.floorplanService.updateAssetPlanPosition(tenantId, assetId, body.planX, body.planY);
+  }
+
   // ─── Update Zone Calibration (Dimensions) ──────────────────────────
   @Patch('zones/:zoneId/calibrate')
   updateZoneCalibration(

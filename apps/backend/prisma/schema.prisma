@@ -107,8 +107,10 @@ model Asset {
   description String?
   type        String   @default("FORKLIFT")
   status      String   @default("static") // static, moving, tilt_warning, fall_detected, high_vibration, offline
-  latitude    Float?
-  longitude   Float?
+  latitude    Float?   // GPS koordinat (derajat)
+  longitude   Float?   // GPS koordinat (derajat)
+  planX       Float?   // Posisi X pada denah lantai (meter, relatif ke zone)
+  planY       Float?   // Posisi Y pada denah lantai (meter, relatif ke zone)
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   zoneId      String?

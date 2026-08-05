@@ -47,14 +47,40 @@ export class FloorplanService {
       include: {
         site: true,
         anchors: true,
-        assets: { include: { tag: true } },
+        assets: {
+          // Hanya ambil asset yang benar-benar di-assign ke zone ini
+          where: {
+            zoneId,
+            NOT: [
+              { type: { startsWith: 'AGENT_' } },
+              { type: 'ANCHOR' },
+              { type: 'CITY' },
+              { type: 'BUILDING' },
+            ],
+          },
+          include: { tag: true },
+        },
         geofences: true,
       },
     });
     if (!zone) {
       throw new NotFoundException(`Zone "${zoneId}" not found for this tenant.`);
     }
-    return zone;
+
+    // Tambah field x/y dari planX/planY untuk rendering di denah
+    const assetsWithPlanCoords = zone.assets.map((a) => ({
+      ...a,
+      x: a.planX !== null && a.planX !== undefined ? Number(a.planX) : null,
+      y: a.planY !== null && a.planY !== undefined ? Number(a.planY) : null,
+      // Jika planX/Y belum di-set, default ke tengah zona
+      planX: a.planX !== null && a.planX !== undefined ? Number(a.planX) : zone.width / 2,
+      planY: a.planY !== null && a.planY !== undefined ? Number(a.planY) : zone.height / 2,
+    }));
+
+    return {
+      ...zone,
+      assets: assetsWithPlanCoords,
+    };
   }
 
   // ─── Get All Anchors for Tenant (Asset ANCHORs + Table Anchors) ──────
@@ -174,33 +200,109 @@ export class FloorplanService {
     });
   }
 
-  // ─── Update Anchor Position on Floor Plan ───────────────────────────
+  // ─── Update Asset Position on Floor Plan ───────────────────────────
+  async updateAssetPlanPosition(tenantId: string, assetId: string, planX: number, planY: number) {
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+    });
+    if (!asset) throw new NotFoundException(`Asset "${assetId}" not found.`);
+
+    return this.prisma.asset.update({
+      where: { id: assetId },
+      data: { planX, planY },
+    });
+  }
+
+  // ─── Assign Asset/Mesh to Zone ──────────────────────────────────────
+  async assignAssetToZone(tenantId: string, zoneId: string, assetId: string, planX?: number, planY?: number) {
+    const zone = await this.prisma.zone.findFirst({
+      where: { id: zoneId, site: { tenantId } },
+    });
+    if (!zone) throw new NotFoundException(`Zone "${zoneId}" not found for this tenant.`);
+
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+    });
+    if (!asset) throw new NotFoundException(`Asset "${assetId}" not found.`);
+
+    return this.prisma.asset.update({
+      where: { id: assetId },
+      data: {
+        zoneId,
+        planX: planX ?? zone.width / 2,
+        planY: planY ?? zone.height / 2,
+      },
+    });
+  }
+
+  // ─── Unassign Asset/Mesh from Zone ─────────────────────────────────
+  async unassignAssetFromZone(tenantId: string, assetId: string) {
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+    });
+    if (!asset) throw new NotFoundException(`Asset "${assetId}" not found.`);
+
+    return this.prisma.asset.update({
+      where: { id: assetId },
+      data: { zoneId: null, planX: null, planY: null },
+    });
+  }
+
+  // ─── Update Anchor Position on Floor Plan (Drag & Drop) ───────────────
   async updateAnchorPosition(tenantId: string, anchorId: string, x: number, y: number) {
+    // Check Asset-type ANCHOR first
     const assetAnchor = await this.prisma.asset.findFirst({
       where: { id: anchorId, tenantId, type: 'ANCHOR' },
     });
-
     if (assetAnchor) {
       return this.prisma.asset.update({
         where: { id: anchorId },
-        data: {
-          latitude: x,
-          longitude: y,
-        },
+        data: { planX: x, planY: y },
       });
     }
 
+    // Otherwise update Anchor table
     const tableAnchor = await this.prisma.anchor.findFirst({
       where: { id: anchorId, tenantId },
     });
-    if (!tableAnchor) {
-      throw new NotFoundException(`Anchor "${anchorId}" not found for this tenant.`);
-    }
+    if (!tableAnchor) throw new NotFoundException(`Anchor "${anchorId}" not found.`);
 
     return this.prisma.anchor.update({
       where: { id: anchorId },
       data: { x, y },
     });
+  }
+
+  // ─── Get All Non-Anchor Assets for Tenant (Mesh nodes) ──────────────
+  async getAllMeshAssets(tenantId: string) {
+    const assets = await this.prisma.asset.findMany({
+      where: {
+        tenantId,
+        NOT: [
+          { type: { startsWith: 'AGENT_' } },
+          { type: 'ANCHOR' },
+          { type: 'CITY' },
+          { type: 'BUILDING' },
+        ],
+      },
+      include: {
+        zone: { select: { id: true, name: true } },
+        tag: { select: { id: true, rssi: true, lastSeen: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return assets.map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      status: a.status,
+      planX: a.planX ?? null,
+      planY: a.planY ?? null,
+      zoneId: a.zoneId,
+      zone: a.zone,
+      tag: a.tag,
+    }));
   }
 
   // ─── Update Zone Dimensions & Anchor GPS Reference ──────────────────

@@ -69,6 +69,7 @@ export default function PlannerPage() {
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [selectedZone, setSelectedZone] = useState<ZoneData | null>(null);
   const [allTenantAnchors, setAllTenantAnchors] = useState<AnchorData[]>([]);
+  const [allTenantMesh, setAllTenantMesh] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   // New Zone Form state
@@ -141,10 +142,25 @@ export default function PlannerPage() {
     }
   }, [tenantId, apiHeaders]);
 
+  // ─── Fetch All Tenant Mesh/Assets ─────────────────────────────────
+  const fetchAllMesh = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      const res = await fetch('http://localhost:4000/api/floorplan/mesh', { headers: apiHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setAllTenantMesh(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch mesh assets:', e);
+    }
+  }, [tenantId, apiHeaders]);
+
   useEffect(() => {
     fetchSitesAndZones();
     fetchAllAnchors();
-  }, [fetchSitesAndZones, fetchAllAnchors]);
+    fetchAllMesh();
+  }, [fetchSitesAndZones, fetchAllAnchors, fetchAllMesh]);
 
   // ─── Fetch Selected Zone Details ───────────────────────────────────
   const fetchZoneDetails = useCallback(async (zoneId: string) => {
@@ -293,19 +309,22 @@ export default function PlannerPage() {
       });
     }
 
-    // Draw asset/mesh markers
+    // Draw asset/mesh markers — gunakan planX/planY (koordinat meter pada denah)
     if (selectedZone.assets) {
       selectedZone.assets.forEach((asset: any) => {
-        const x = asset.latitude ?? 50;
-        const y = asset.longitude ?? 50;
+        // planX/planY adalah koordinat meter pada denah, bukan GPS
+        const x = asset.planX !== null && asset.planX !== undefined ? Number(asset.planX) : selectedZone.width / 2;
+        const y = asset.planY !== null && asset.planY !== undefined ? Number(asset.planY) : selectedZone.height / 2;
+
+        const isOnline = asset.status === 'moving' || asset.status === 'static';
         const icon = L.divIcon({
           className: 'custom-asset-icon',
           html: `
             <div style="display:flex;flex-direction:column;align-items:center;">
               <div style="background:#0f172a;color:#22c55e;border:1px solid #334155;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 4px rgba(0,0,0,0.5);">
-                ${asset.name}
+                📡 ${asset.name}
               </div>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#22c55e" width="24" height="24" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${isOnline ? '#22c55e' : '#64748b'}" width="24" height="24" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" stroke="#ffffff" stroke-width="1"/>
               </svg>
             </div>`,
@@ -316,19 +335,22 @@ export default function PlannerPage() {
           .addTo(markerLayerRef.current)
           .on('dragend', async function (e: any) {
             const pos = e.target.getLatLng();
+            const newPlanX = Number(pos.lng.toFixed(2));
+            const newPlanY = Number(pos.lat.toFixed(2));
             try {
-              await fetch(`http://localhost:4000/api/assets/${asset.id}`, {
+              await fetch(`http://localhost:4000/api/floorplan/mesh/${asset.id}/position`, {
                 method: 'PATCH',
                 headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ latitude: pos.lng, longitude: pos.lat }),
+                body: JSON.stringify({ planX: newPlanX, planY: newPlanY }),
               });
+              fetchZoneDetails(selectedZoneId!);
             } catch (err) {
               console.error('Failed to update asset position:', err);
             }
           });
       });
     }
-  }, [selectedZone, apiHeaders, fetchAllAnchors]);
+  }, [selectedZone, apiHeaders, fetchAllAnchors, fetchZoneDetails, selectedZoneId]);
 
   // ─── Create New Zone ──────────────────────────────────────────────
   const handleCreateZone = async () => {
@@ -424,6 +446,46 @@ export default function PlannerPage() {
       }
     } catch (err) {
       console.error('Failed to unassign anchor:', err);
+    }
+  };
+
+  // ─── Assign Mesh/Asset to Selected Zone ───────────────────────────
+  const handleAssignMesh = async (assetId: string) => {
+    if (!selectedZoneId || !selectedZone) return;
+    try {
+      const res = await fetch(
+        `http://localhost:4000/api/floorplan/zones/${selectedZoneId}/mesh/${assetId}`,
+        {
+          method: 'POST',
+          headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            planX: selectedZone.width / 2,
+            planY: selectedZone.height / 2,
+          }),
+        },
+      );
+      if (res.ok) {
+        fetchZoneDetails(selectedZoneId);
+        fetchAllMesh();
+      }
+    } catch (err) {
+      console.error('Failed to assign mesh:', err);
+    }
+  };
+
+  // ─── Unassign Mesh/Asset from Zone ───────────────────────────────
+  const handleUnassignMesh = async (assetId: string) => {
+    try {
+      const res = await fetch(`http://localhost:4000/api/floorplan/mesh/${assetId}`, {
+        method: 'DELETE',
+        headers: apiHeaders(),
+      });
+      if (res.ok) {
+        if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+        fetchAllMesh();
+      }
+    } catch (err) {
+      console.error('Failed to unassign mesh:', err);
     }
   };
 
@@ -804,6 +866,86 @@ export default function PlannerPage() {
                 {allTenantAnchors.length === 0 && (
                   <p className="text-[10px] text-muted-foreground italic">
                     Belum ada Anchor terdaftar pada tenant ini.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ─── MESH / ASSET PLACEMENT PANEL ─────────────────────── */}
+        {selectedZoneId && (
+          <Card className="rounded-2xl border-border shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-bold flex items-center justify-between text-foreground">
+                <span className="flex items-center gap-2">
+                  <Radio className="h-4 w-4 text-emerald-400" />
+                  Penempatan Mesh / Asset
+                </span>
+                <Badge variant="secondary" className="text-[10px]">
+                  {selectedZone?.assets?.length || 0} Placed
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-[10px] text-muted-foreground">
+                Pilih Mesh/Asset untuk ditempatkan pada denah. Geser marker di peta untuk update posisi.
+              </p>
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                {allTenantMesh.map((ms) => {
+                  const isPlacedOnCurrent = ms.zoneId === selectedZoneId;
+                  const isPlacedElsewhere = ms.zoneId && !isPlacedOnCurrent;
+
+                  return (
+                    <div
+                      key={ms.id}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${
+                        isPlacedOnCurrent
+                          ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                          : 'bg-secondary/40 border-border text-foreground'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate mr-2">
+                        <Tag className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+                        <div className="truncate">
+                          <div className="font-bold text-[11px] truncate">{ms.name}</div>
+                          <div className="text-[9px] text-muted-foreground font-mono">
+                            {isPlacedOnCurrent
+                              ? `Pos: (${ms.planX?.toFixed(1) ?? '?'}m, ${ms.planY?.toFixed(1) ?? '?'}m)`
+                              : isPlacedElsewhere
+                              ? `On ${ms.zone?.name || 'Other Zone'}`
+                              : ms.type || 'MESH'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {isPlacedOnCurrent ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
+                          onClick={() => handleUnassignMesh(ms.id)}
+                          title="Hapus dari denah"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer flex-shrink-0"
+                          onClick={() => handleAssignMesh(ms.id)}
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Place
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {allTenantMesh.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground italic">
+                    Belum ada Mesh/Asset terdaftar pada tenant ini.
                   </p>
                 )}
               </div>
