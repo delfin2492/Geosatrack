@@ -132,6 +132,7 @@ model Tag {
   rssi        Int?     // Sinyal terakhir (dBm)
   temperature Float?
   humidity    Float?
+  signals     String?  // Menyimpan JSON data signal RSSI Anchor (e.g. '[{"anchorName":"Anchor A","rssi":-50}]')
   lastSeen    DateTime?
   asset       Asset?
   createdAt   DateTime @default(now())

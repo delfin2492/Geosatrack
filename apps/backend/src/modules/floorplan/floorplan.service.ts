@@ -360,7 +360,7 @@ export class FloorplanService {
     // 1. Fetch all tenant anchors (Asset-type ANCHOR + Table Anchors)
     const allAnchors = await this.getAllAnchors(tenantId);
 
-    const matchedSignals: { x: number; y: number; zoneId: string; rssi: number; weight: number; anchorName: string }[] = [];
+    const matchedSignals: { anchorId: string; x: number; y: number; zoneId: string; rssi: number; weight: number; anchorName: string }[] = [];
 
     for (const sig of anchorSignals) {
       const matched = allAnchors.find(
@@ -374,6 +374,7 @@ export class FloorplanService {
         const weight = Math.pow(10, (normalizedRssi + 100) / 20); // Exponential RSSI weighting
 
         matchedSignals.push({
+          anchorId: matched.id,
           x: matched.x,
           y: matched.y,
           zoneId: matched.zoneId,
@@ -416,7 +417,27 @@ export class FloorplanService {
       }
     }
 
-    // 3. Update Asset with new zoneId and planX/planY coordinates
+    // 3. Update Tag signals data & Asset with new zoneId and planX/planY coordinates
+    const dbAsset = await this.prisma.asset.findUnique({
+      where: { id: assetId },
+      include: { tag: true },
+    });
+
+    const signalsJson = JSON.stringify(
+      matchedSignals.map((s) => ({
+        anchorId: s.anchorId,
+        anchorName: s.anchorName,
+        rssi: s.rssi,
+      }))
+    );
+
+    if (dbAsset?.tagId) {
+      await this.prisma.tag.update({
+        where: { id: dbAsset.tagId },
+        data: { signals: signalsJson },
+      });
+    }
+
     const updatedAsset = await this.prisma.asset.update({
       where: { id: assetId },
       data: {

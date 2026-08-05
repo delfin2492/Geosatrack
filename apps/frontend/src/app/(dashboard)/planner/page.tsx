@@ -72,6 +72,7 @@ export default function PlannerPage() {
   const [allTenantAnchors, setAllTenantAnchors] = useState<AnchorData[]>([]);
   const [allTenantMesh, setAllTenantMesh] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [simulateToggle, setSimulateToggle] = useState(false);
 
   // New Zone Form state
   const [showNewZoneForm, setShowNewZoneForm] = useState(false);
@@ -339,23 +340,49 @@ export default function PlannerPage() {
           iconSize: [50, 40],
           iconAnchor: [25, 40],
         });
-        L.marker([y, x], { icon, draggable: true })
-          .addTo(markerLayerRef.current)
-          .on('dragend', async function (e: any) {
-            const pos = e.target.getLatLng();
-            const newPlanX = Number(pos.lng.toFixed(2));
-            const newPlanY = Number(pos.lat.toFixed(2));
-            try {
-              await fetch(`http://localhost:4000/api/floorplan/mesh/${asset.id}/position`, {
-                method: 'PATCH',
-                headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ planX: newPlanX, planY: newPlanY }),
-              });
-              fetchZoneDetails(selectedZoneId!);
-            } catch (err) {
-              console.error('Failed to update asset position:', err);
+
+        let signalTooltipHtml = '';
+        if (asset.tag?.signals) {
+          try {
+            const sigs = JSON.parse(asset.tag.signals);
+            if (Array.isArray(sigs) && sigs.length > 0) {
+              signalTooltipHtml = `
+                <div style="margin-top:4px;border-top:1px solid #e2e8f0;padding-top:4px;font-size:9px;text-align:left;color:#475569;">
+                  <strong style="color:#0f172a">Sinyal Anchor:</strong><br/>
+                  ${sigs.map((s: any) => `• ${s.anchorName}: <strong>${s.rssi} dBm</strong>`).join('<br/>')}
+                </div>
+              `;
             }
-          });
+          } catch (e) {}
+        }
+
+        const marker = L.marker([y, x], { icon, draggable: true })
+          .addTo(markerLayerRef.current);
+
+        marker.bindTooltip(`
+          <div style="font-family:sans-serif;padding:2px">
+            <strong style="color:#22c55e">${asset.name}</strong><br/>
+            <span style="font-size:10px;color:#64748b">Status: ${asset.status}</span><br/>
+            <span style="font-size:10px;color:#64748b">Posisi: (${x}m, ${y}m)</span>
+            ${signalTooltipHtml}
+          </div>
+        `, { sticky: true });
+
+        marker.on('dragend', async function (e: any) {
+          const pos = e.target.getLatLng();
+          const newPlanX = Number(pos.lng.toFixed(2));
+          const newPlanY = Number(pos.lat.toFixed(2));
+          try {
+            await fetch(`http://localhost:4000/api/floorplan/mesh/${asset.id}/position`, {
+              method: 'PATCH',
+              headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ planX: newPlanX, planY: newPlanY }),
+            });
+            fetchZoneDetails(selectedZoneId!);
+          } catch (err) {
+            console.error('Failed to update asset position:', err);
+          }
+        });
       });
     }
   }, [selectedZone, apiHeaders, fetchAllAnchors, fetchZoneDetails, selectedZoneId]);
@@ -622,12 +649,25 @@ export default function PlannerPage() {
       return;
     }
     try {
-      // Sinyal RSSI buatan: Anchor 1 paling kuat (-52 dBm)
-      const signals = allTenantAnchors.map((a, i) => ({
-        anchorId: a.id,
-        anchorName: a.name,
-        rssi: i === 0 ? -52 : -75 - i * 5,
-      }));
+      const nextToggle = !simulateToggle;
+      setSimulateToggle(nextToggle);
+
+      // Determine signals
+      const signals = allTenantAnchors.map((a, i) => {
+        // Toggle strongest: if nextToggle = true, index 0 is strongest (-50 dBm).
+        // If nextToggle = false, index 1 is strongest (-50 dBm).
+        let isStrongest = false;
+        if (nextToggle && i === 0) isStrongest = true;
+        if (!nextToggle && i === 1) isStrongest = true;
+        // Fallback for single anchor
+        if (allTenantAnchors.length === 1) isStrongest = true;
+
+        return {
+          anchorId: a.id,
+          anchorName: a.name,
+          rssi: isStrongest ? -50 : -85,
+        };
+      });
 
       const res = await fetch(`http://localhost:4000/api/floorplan/mesh/${assetId}/rssi-position`, {
         method: 'POST',
@@ -637,8 +677,10 @@ export default function PlannerPage() {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.targetZoneId) setSelectedZoneId(data.targetZoneId);
-        if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+        if (data.targetZoneId) {
+          setSelectedZoneId(data.targetZoneId);
+          fetchZoneDetails(data.targetZoneId);
+        }
         fetchAllMesh();
       }
     } catch (err) {
@@ -1131,6 +1173,25 @@ export default function PlannerPage() {
                               ? `On ${ms.zone?.name || 'Other Zone'}`
                               : ms.type || 'MESH'}
                           </div>
+                          {isPlacedOnCurrent && ms.tag?.signals && (() => {
+                            try {
+                              const sigs = JSON.parse(ms.tag.signals);
+                              if (Array.isArray(sigs) && sigs.length > 0) {
+                                return (
+                                  <div className="mt-1 space-y-0.5 text-[8px] bg-emerald-950/40 p-1 rounded border border-emerald-500/20 text-left">
+                                    <span className="font-bold text-[8px] text-emerald-400">Sinyal Anchor:</span>
+                                    {sigs.map((s: any) => (
+                                      <div key={s.anchorId} className="flex justify-between gap-1 text-[8px]">
+                                        <span className="truncate max-w-[80px]">{s.anchorName}</span>
+                                        <span className="font-bold text-emerald-300">{s.rssi} dBm</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                            } catch (e) {}
+                            return null;
+                          })()}
                         </div>
                       </div>
 
