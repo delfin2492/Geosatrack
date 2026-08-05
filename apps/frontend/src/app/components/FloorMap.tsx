@@ -6,7 +6,6 @@ import {
   ZoomOut,
   Maximize2,
   Globe,
-  MapPin,
 } from 'lucide-react';
 
 export interface TagData {
@@ -63,22 +62,14 @@ export default function FloorMap({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [activeSiteName, setActiveSiteName] = useState<string>('Site Jakarta');
   const [mapStyle, setMapStyle] = useState<'osm_standard' | 'osm_dark'>('osm_standard');
-
-  const [anchors, setAnchors] = useState<MapAnchor[]>(initialAnchors || []);
-  const [draggedAnchorId, setDraggedAnchorId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setAnchors(initialAnchors || []);
-  }, [initialAnchors]);
-
   const [zoom, setZoom] = useState<number>(1.2);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const [hoveredAsset, setHoveredAsset] = useState<MapAsset | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [tileLoadedCount, setTileLoadedCount] = useState<number>(0);
 
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -158,24 +149,7 @@ export default function FloorMap({
     return { x, y };
   };
 
-  const screenToLatLon = (screenX: number, screenY: number) => {
-    const zoomLevel = 16;
-    const tileSize = 256 * zoom;
-    const centerX = dimensions.width / 2 + pan.x;
-    const centerY = dimensions.height / 2 + pan.y;
-
-    const centerTileXFraction = lonToTileFraction(centerLon, zoomLevel);
-    const centerTileYFraction = latToTileFraction(centerLat, zoomLevel);
-
-    const targetTileXFraction = centerTileXFraction + (screenX - centerX) / tileSize;
-    const targetTileYFraction = centerTileYFraction + (screenY - centerY) / tileSize;
-
-    const lon = (targetTileXFraction / Math.pow(2, zoomLevel)) * 360 - 180;
-    const n = Math.PI - (2 * Math.PI * targetTileYFraction) / Math.pow(2, zoomLevel);
-    const lat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-
-    return { lat, lon };
-  };
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
   // Render Loop
   useEffect(() => {
@@ -184,6 +158,8 @@ export default function FloorMap({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    ctx.save();
+    ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
     // 1. OpenStreetMap Tile Renderer
@@ -233,6 +209,7 @@ export default function FloorMap({
 
           img.onload = () => {
             tileImageCache.set(tileKey, img);
+            setTileLoadedCount((prev) => prev + 1);
           };
         } else {
           const cachedImg = tileImageCache.get(tileKey);
@@ -243,43 +220,7 @@ export default function FloorMap({
       }
     }
 
-    // 2. Draw Anchors (Geographical Placement)
-    anchors.forEach((anchor) => {
-      const lat = anchor.lat ?? (centerLat + (anchor.y - 20) * 0.00001);
-      const lon = anchor.lon ?? (centerLon + (anchor.x - 30) * 0.00001);
-      const screenPos = latLonToScreen(lat, lon);
-      const isDragged = draggedAnchorId === anchor.id;
-      
-      // Pulsing radio wave propagation circle
-      const pulse = 18 + Math.sin(Date.now() / 250) * 4;
-      ctx.beginPath();
-      ctx.arc(screenPos.x, screenPos.y, isDragged ? 24 : pulse, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
-      ctx.fill();
-      
-      // Anchor circle marker
-      ctx.beginPath();
-      ctx.arc(screenPos.x, screenPos.y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = '#06b6d4';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.fill();
-      ctx.stroke();
-      
-      // Anchor text label
-      const labelText = anchor.name || anchor.id;
-      ctx.font = 'bold 9px system-ui';
-      const textWidth = ctx.measureText(labelText).width;
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-      ctx.beginPath();
-      ctx.roundRect(screenPos.x - textWidth / 2 - 4, screenPos.y + 11, textWidth + 8, 14, 3);
-      ctx.fill();
-      
-      ctx.fillStyle = '#22d3ee';
-      ctx.fillText(labelText, screenPos.x, screenPos.y + 21);
-    });
-
-    // 3. Draw Mesh Nodes & Assets (Geographical Placement)
+    // 2. Draw Mesh Nodes & Assets (Geographical Placement based on Database lat/lon)
     assets.forEach((asset) => {
       const lat = asset.lat ?? (centerLat + (asset.y - 20) * 0.00001);
       const lon = asset.lon ?? (centerLon + (asset.x - 30) * 0.00001);
@@ -352,7 +293,8 @@ export default function FloorMap({
       ctx.fillText(labelText, screenPos.x, badgeY + 14);
     });
 
-  }, [assets, anchors, zoom, pan, mapStyle, hoveredAsset, selectedAssetId, draggedAnchorId, dimensions]);
+    ctx.restore();
+  }, [assets, zoom, pan, mapStyle, hoveredAsset, selectedAssetId, dimensions, tileLoadedCount, dpr]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -361,28 +303,11 @@ export default function FloorMap({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // 1. Check if clicked an anchor
-    const clickedAnchor = anchors.find((anchor) => {
-      const lat = anchor.lat ?? (centerLat + (anchor.y - 20) * 0.00001);
-      const lon = anchor.lon ?? (centerLon + (anchor.x - 30) * 0.00001);
-      const pos = latLonToScreen(lat, lon);
-      return Math.hypot(pos.x - x, pos.y - y) <= 15;
-    });
-
-    if (clickedAnchor) {
-      setDraggedAnchorId(clickedAnchor.id);
-      return;
-    }
-
-    // 2. Check if clicked an asset
+    // Check if clicked an asset
     const clickedAsset = assets.find((asset) => {
       const lat = asset.lat ?? (centerLat + (asset.y - 20) * 0.00001);
-      const lon = asset.lon ?? (centerLon + (anchor => {
-        // Fallback offset
-        return centerLon;
-      })() * 0.00001); // Safe fallback
-      const actualLon = asset.lon ?? (centerLon + (asset.x - 30) * 0.00001);
-      const pos = latLonToScreen(lat, actualLon);
+      const lon = asset.lon ?? (centerLon + (asset.x - 30) * 0.00001);
+      const pos = latLonToScreen(lat, lon);
       return Math.hypot(pos.x - x, pos.y - y) <= 18;
     });
 
@@ -404,14 +329,6 @@ export default function FloorMap({
     const y = e.clientY - rect.top;
     setMousePos({ x, y });
 
-    if (draggedAnchorId) {
-      const mapCoords = screenToLatLon(x, y);
-      setAnchors((prev) =>
-        prev.map((a) => (a.id === draggedAnchorId ? { ...a, lat: mapCoords.lat, lon: mapCoords.lon } : a))
-      );
-      return;
-    }
-
     if (isPanning) {
       setPan({
         x: e.clientX - panStartRef.current.x,
@@ -430,14 +347,6 @@ export default function FloorMap({
   };
 
   const handleMouseUp = () => {
-    if (draggedAnchorId) {
-      const finalAnchor = anchors.find((a) => a.id === draggedAnchorId);
-      if (finalAnchor && onAnchorUpdate) {
-        onAnchorUpdate(draggedAnchorId, finalAnchor.lat ?? centerLat, finalAnchor.lon ?? centerLon);
-      }
-      setDraggedAnchorId(null);
-      return;
-    }
     setIsPanning(false);
   };
 
@@ -545,8 +454,13 @@ export default function FloorMap({
       {/* CANVAS VIEWPORT */}
       <canvas
         ref={canvasRef}
-        width={dimensions.width}
-        height={dimensions.height}
+        width={dimensions.width * dpr}
+        height={dimensions.height * dpr}
+        style={{
+          width: `${dimensions.width}px`,
+          height: `${dimensions.height}px`,
+          display: 'block'
+        }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

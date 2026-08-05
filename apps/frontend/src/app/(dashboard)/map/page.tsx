@@ -279,6 +279,8 @@ export default function MapPage() {
         status: statusVal,
         x,
         y,
+        lat: x,
+        lon: y,
         tag: tagData,
       };
     });
