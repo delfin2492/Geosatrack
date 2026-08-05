@@ -43,11 +43,12 @@ export class ZoneController {
     @GetTenantId() tenantId: string,
     @Param('id') id: string,
     @Body('name') name?: string,
+    @Body('siteId') siteId?: string,
     @Body('floorPlanUrl') floorPlanUrl?: string,
     @Body('width') width?: number,
     @Body('height') height?: number,
   ) {
-    return this.zoneService.update(tenantId, id, name, floorPlanUrl, width, height);
+    return this.zoneService.update(tenantId, id, name, siteId, floorPlanUrl, width, height);
   }
 
   @Delete(':id')

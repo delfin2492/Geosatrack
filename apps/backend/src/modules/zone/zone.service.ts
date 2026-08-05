@@ -82,16 +82,27 @@ export class ZoneService {
     tenantId: string,
     id: string,
     name?: string,
+    siteId?: string,
     floorPlanUrl?: string,
     width?: number,
     height?: number,
   ) {
     await this.findOne(tenantId, id); // Verify ownership
 
+    if (siteId) {
+      const site = await this.prisma.site.findFirst({
+        where: { id: siteId, tenantId },
+      });
+      if (!site) {
+        throw new NotFoundException(`Site with ID "${siteId}" not found for this tenant.`);
+      }
+    }
+
     return this.prisma.zone.update({
       where: { id },
       data: {
         name: name !== undefined ? name : undefined,
+        siteId: siteId !== undefined ? siteId : undefined,
         floorPlanUrl: floorPlanUrl !== undefined ? floorPlanUrl : undefined,
         width: width !== undefined ? width : undefined,
         height: height !== undefined ? height : undefined,

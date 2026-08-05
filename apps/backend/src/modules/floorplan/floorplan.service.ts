@@ -67,18 +67,64 @@ export class FloorplanService {
       throw new NotFoundException(`Zone "${zoneId}" not found for this tenant.`);
     }
 
-    // Tambah field x/y dari planX/planY untuk rendering di denah
+    // Fetch Asset-type ANCHORs assigned to this zone
+    const assetAnchorsInZone = await this.prisma.asset.findMany({
+      where: { tenantId, zoneId, type: 'ANCHOR' },
+      include: { zone: { select: { id: true, name: true } } },
+    });
+
+    // Map table anchors
+    const mappedTableAnchors = (zone.anchors || []).map((a) => ({
+      id: a.id,
+      name: a.name,
+      x: Number(a.x),
+      y: Number(a.y),
+      status: a.status,
+      zoneId: a.zoneId,
+      zone: zone,
+      isAsset: false,
+    }));
+
+    // Map asset anchors
+    const mappedAssetAnchors = assetAnchorsInZone.map((a) => {
+      // Priority: planX/planY -> latitude/longitude -> default center
+      const posX = a.planX !== null && a.planX !== undefined
+        ? Number(a.planX)
+        : (a.latitude !== null && a.latitude !== undefined ? Number(a.latitude) : zone.width / 2);
+      const posY = a.planY !== null && a.planY !== undefined
+        ? Number(a.planY)
+        : (a.longitude !== null && a.longitude !== undefined ? Number(a.longitude) : zone.height / 2);
+
+      return {
+        id: a.id,
+        name: a.name,
+        x: posX,
+        y: posY,
+        status: a.status || 'online',
+        zoneId: a.zoneId,
+        zone: a.zone,
+        isAsset: true,
+      };
+    });
+
+    // Filter out duplicates if any
+    const allZoneAnchors = [
+      ...mappedAssetAnchors,
+      ...mappedTableAnchors.filter((ta) => !mappedAssetAnchors.some((aa) => aa.id === ta.id || aa.name === ta.name)),
+    ];
+
+    // Tambah field x/y dari planX/planY untuk rendering asset mesh di denah
     const assetsWithPlanCoords = zone.assets.map((a) => ({
       ...a,
       x: a.planX !== null && a.planX !== undefined ? Number(a.planX) : null,
       y: a.planY !== null && a.planY !== undefined ? Number(a.planY) : null,
-      // Jika planX/Y belum di-set, default ke tengah zona
       planX: a.planX !== null && a.planX !== undefined ? Number(a.planX) : zone.width / 2,
       planY: a.planY !== null && a.planY !== undefined ? Number(a.planY) : zone.height / 2,
     }));
 
     return {
       ...zone,
+      anchors: allZoneAnchors,
       assets: assetsWithPlanCoords,
     };
   }
@@ -303,6 +349,91 @@ export class FloorplanService {
       zone: a.zone,
       tag: a.tag,
     }));
+  }
+
+  // ─── Update Mesh Position & Zone based on Anchor RSSI Signal Values ────
+  async updateMeshRssiPosition(
+    tenantId: string,
+    assetId: string,
+    anchorSignals: { anchorId?: string; anchorName?: string; rssi: number }[],
+  ) {
+    // 1. Fetch all tenant anchors (Asset-type ANCHOR + Table Anchors)
+    const allAnchors = await this.getAllAnchors(tenantId);
+
+    const matchedSignals: { x: number; y: number; zoneId: string; rssi: number; weight: number; anchorName: string }[] = [];
+
+    for (const sig of anchorSignals) {
+      const matched = allAnchors.find(
+        (a) =>
+          (sig.anchorId && (a.id === sig.anchorId || a.name === sig.anchorId)) ||
+          (sig.anchorName && a.name.toLowerCase() === sig.anchorName.toLowerCase()),
+      );
+
+      if (matched && matched.zoneId) {
+        const normalizedRssi = Math.max(-100, Math.min(-30, sig.rssi));
+        const weight = Math.pow(10, (normalizedRssi + 100) / 20); // Exponential RSSI weighting
+
+        matchedSignals.push({
+          x: matched.x,
+          y: matched.y,
+          zoneId: matched.zoneId,
+          rssi: sig.rssi,
+          weight,
+          anchorName: matched.name,
+        });
+      }
+    }
+
+    if (matchedSignals.length === 0) {
+      throw new NotFoundException('No registered placed anchors matched from provided signal list.');
+    }
+
+    // 2. Zone Auto-Assignment: Pick zoneId of the Anchor with strongest RSSI (highest dBm value)
+    matchedSignals.sort((a, b) => b.rssi - a.rssi);
+    const targetZoneId = matchedSignals[0].zoneId;
+    const strongestAnchorName = matchedSignals[0].anchorName;
+
+    // Filter signals belonging to the target zone
+    const zoneSignals = matchedSignals.filter((s) => s.zoneId === targetZoneId);
+
+    let calculatedX = zoneSignals[0].x;
+    let calculatedY = zoneSignals[0].y;
+
+    if (zoneSignals.length > 1) {
+      let totalWeight = 0;
+      let weightedX = 0;
+      let weightedY = 0;
+
+      for (const s of zoneSignals) {
+        totalWeight += s.weight;
+        weightedX += s.x * s.weight;
+        weightedY += s.y * s.weight;
+      }
+
+      if (totalWeight > 0) {
+        calculatedX = Number((weightedX / totalWeight).toFixed(2));
+        calculatedY = Number((weightedY / totalWeight).toFixed(2));
+      }
+    }
+
+    // 3. Update Asset with new zoneId and planX/planY coordinates
+    const updatedAsset = await this.prisma.asset.update({
+      where: { id: assetId },
+      data: {
+        zoneId: targetZoneId,
+        planX: calculatedX,
+        planY: calculatedY,
+      },
+      include: { zone: true, tag: true },
+    });
+
+    return {
+      asset: updatedAsset,
+      strongestAnchor: strongestAnchorName,
+      targetZoneId,
+      calculatedPosition: { x: calculatedX, y: calculatedY },
+      matchedAnchorsCount: zoneSignals.length,
+    };
   }
 
   // ─── Update Zone Dimensions & Anchor GPS Reference ──────────────────

@@ -20,6 +20,7 @@ import {
   Layers,
   Tag,
   Building2,
+  Pencil,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -78,6 +79,13 @@ export default function PlannerPage() {
   const [newZoneSiteId, setNewZoneSiteId] = useState('');
   const [newZoneWidth, setNewZoneWidth] = useState(50);
   const [newZoneHeight, setNewZoneHeight] = useState(30);
+
+  // Edit Zone Form state
+  const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
+  const [editZoneName, setEditZoneName] = useState('');
+  const [editZoneSiteId, setEditZoneSiteId] = useState('');
+  const [editZoneWidth, setEditZoneWidth] = useState(50);
+  const [editZoneHeight, setEditZoneHeight] = useState(30);
 
   // New Anchor Form state
   const [showNewAnchorForm, setShowNewAnchorForm] = useState(false);
@@ -378,6 +386,40 @@ export default function PlannerPage() {
     }
   };
 
+  // ─── Edit Existing Zone ───────────────────────────────────────────
+  const startEditZone = (z: ZoneData) => {
+    setEditingZoneId(z.id);
+    setEditZoneName(z.name);
+    setEditZoneSiteId(z.siteId);
+    setEditZoneWidth(z.width || 50);
+    setEditZoneHeight(z.height || 30);
+  };
+
+  const handleUpdateZone = async () => {
+    if (!editingZoneId || !editZoneName.trim()) return;
+    try {
+      const res = await fetch(`http://localhost:4000/api/zones/${editingZoneId}`, {
+        method: 'PATCH',
+        headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editZoneName,
+          siteId: editZoneSiteId,
+          width: Number(editZoneWidth),
+          height: Number(editZoneHeight),
+        }),
+      });
+      if (res.ok) {
+        setEditingZoneId(null);
+        fetchSitesAndZones();
+        if (selectedZoneId === editingZoneId) {
+          fetchZoneDetails(editingZoneId);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update zone:', err);
+    }
+  };
+
   // ─── Create New Anchor Asset ──────────────────────────────────────
   const handleCreateAnchor = async () => {
     if (!newAnchorName.trim() || !selectedZoneId || !selectedZone) return;
@@ -486,6 +528,37 @@ export default function PlannerPage() {
       }
     } catch (err) {
       console.error('Failed to unassign mesh:', err);
+    }
+  };
+
+  // ─── Simulate Mesh Position from Anchor RSSI Signals ─────────────
+  const handleSimulateRssi = async (assetId: string) => {
+    if (allTenantAnchors.length === 0) {
+      alert('Belum ada Anchor terdaftar untuk menghitung sinyal RSSI.');
+      return;
+    }
+    try {
+      // Sinyal RSSI buatan: Anchor 1 paling kuat (-52 dBm)
+      const signals = allTenantAnchors.map((a, i) => ({
+        anchorId: a.id,
+        anchorName: a.name,
+        rssi: i === 0 ? -52 : -75 - i * 5,
+      }));
+
+      const res = await fetch(`http://localhost:4000/api/floorplan/mesh/${assetId}/rssi-position`, {
+        method: 'POST',
+        headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signals }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.targetZoneId) setSelectedZoneId(data.targetZoneId);
+        if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+        fetchAllMesh();
+      }
+    } catch (err) {
+      console.error('Failed to simulate RSSI:', err);
     }
   };
 
@@ -698,20 +771,99 @@ export default function PlannerPage() {
               </p>
             )}
             {zones.map((z) => (
-              <button
-                key={z.id}
-                onClick={() => setSelectedZoneId(z.id)}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all border cursor-pointer ${
-                  selectedZoneId === z.id
-                    ? 'bg-primary/10 border-primary text-primary font-bold'
-                    : 'bg-secondary/50 border-border text-muted-foreground hover:bg-secondary'
-                }`}
-              >
-                <div className="font-bold">{z.name}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  {z.site?.name || 'Site'} • {z.width}m × {z.height}m
-                </div>
-              </button>
+              <div key={z.id} className="space-y-1">
+                {editingZoneId === z.id ? (
+                  <div className="p-3 rounded-xl bg-primary/10 border border-primary/40 space-y-2">
+                    <div className="text-[11px] font-bold text-foreground flex justify-between items-center">
+                      <span>Edit Zone & Denah</span>
+                      <button onClick={() => setEditingZoneId(null)} className="text-muted-foreground hover:text-foreground">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-muted-foreground uppercase font-bold">Nama Zone</label>
+                      <input
+                        type="text"
+                        className="w-full mt-0.5 px-2.5 py-1 rounded bg-background border border-border text-xs text-foreground"
+                        value={editZoneName}
+                        onChange={(e) => setEditZoneName(e.target.value)}
+                      />
+                    </div>
+                    {sites.length > 0 && (
+                      <div>
+                        <label className="text-[9px] text-muted-foreground uppercase font-bold">Site / Warehouse Cabang</label>
+                        <select
+                          className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                          value={editZoneSiteId}
+                          onChange={(e) => setEditZoneSiteId(e.target.value)}
+                        >
+                          {sites.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] text-muted-foreground uppercase font-bold">Lebar (m)</label>
+                        <input
+                          type="number"
+                          className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                          value={editZoneWidth}
+                          onChange={(e) => setEditZoneWidth(Number(e.target.value))}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-muted-foreground uppercase font-bold">Tinggi (m)</label>
+                        <input
+                          type="number"
+                          className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                          value={editZoneHeight}
+                          onChange={(e) => setEditZoneHeight(Number(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button size="sm" className="flex-1 h-6 text-[10px] cursor-pointer" onClick={handleUpdateZone}>
+                        Update Zone
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setEditingZoneId(null)}>
+                        Batal
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => setSelectedZoneId(z.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all border cursor-pointer ${
+                      selectedZoneId === z.id
+                        ? 'bg-primary/10 border-primary text-primary font-bold'
+                        : 'bg-secondary/50 border-border text-muted-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <div className="truncate mr-2">
+                      <div className="font-bold truncate">{z.name}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                        {z.site?.name || 'Site'} • {z.width}m × {z.height}m
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 hover:bg-primary/20 text-muted-foreground hover:text-primary cursor-pointer flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEditZone(z);
+                      }}
+                      title="Edit Nama, Site & Ukuran Denah"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             ))}
           </CardContent>
         </Card>
@@ -920,24 +1072,46 @@ export default function PlannerPage() {
                       </div>
 
                       {isPlacedOnCurrent ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
-                          onClick={() => handleUnassignMesh(ms.id)}
-                          title="Hapus dari denah"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-1.5 text-[9px] border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
+                            onClick={() => handleSimulateRssi(ms.id)}
+                            title="Hitung Posisi & Zone Otomatis dari Sinyal RSSI Anchor"
+                          >
+                            ⚡ RSSI Track
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
+                            onClick={() => handleUnassignMesh(ms.id)}
+                            title="Hapus dari denah"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2 text-[10px] border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer flex-shrink-0"
-                          onClick={() => handleAssignMesh(ms.id)}
-                        >
-                          <Plus className="h-3 w-3 mr-1" /> Place
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-1.5 text-[9px] border-amber-500/40 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
+                            onClick={() => handleSimulateRssi(ms.id)}
+                            title="Hitung Zone berbasis Sinyal RSSI Anchor Terkuat"
+                          >
+                            ⚡ RSSI Track
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-[10px] border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer flex-shrink-0"
+                            onClick={() => handleAssignMesh(ms.id)}
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Place
+                          </Button>
+                        </div>
                       )}
                     </div>
                   );

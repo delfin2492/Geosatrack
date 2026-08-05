@@ -9,6 +9,7 @@ export interface TelemetryPayload {
   pitch?: number;
   roll?: number;
   hall_sensor?: number;
+  signals?: any;
 }
 
 export interface StatusPayload {
@@ -17,6 +18,7 @@ export interface StatusPayload {
   motion?: boolean;
   hop_count?: number;
   update_interval?: number;
+  signals?: any;
 }
 
 @Injectable()
@@ -28,8 +30,6 @@ export class DecoderService {
    */
   decodeTelemetry(payload: any): TelemetryPayload {
     try {
-      // In a real environment, gateway payload could be binary.
-      // We assume Tiny Gateway has already decoded it to JSON or we parse a JSON string.
       const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
 
       return {
@@ -37,10 +37,11 @@ export class DecoderService {
         humidity: parsed.humidity ?? parsed.hum,
         accel_x: parsed.accel_x ?? parsed.acc_x ?? 0,
         accel_y: parsed.accel_y ?? parsed.acc_y ?? 0,
-        accel_z: parsed.accel_z ?? parsed.acc_z ?? 1.0, // default gravity
+        accel_z: parsed.accel_z ?? parsed.acc_z ?? 1.0,
         pitch: parsed.pitch ?? 0,
         roll: parsed.roll ?? 0,
         hall_sensor: parsed.hall_sensor ?? parsed.hall ?? 0,
+        signals: parsed.signals ?? parsed.attributes ?? parsed.rssi_anchors ?? parsed.rssiAnchors ?? null,
       };
     } catch (error) {
       this.logger.error('Failed to decode Endpoint 11 payload:', error);
@@ -61,6 +62,7 @@ export class DecoderService {
         motion: parsed.motion ?? false,
         hop_count: parsed.hop_count ?? parsed.hops ?? 1,
         update_interval: parsed.update_interval ?? 30,
+        signals: parsed.signals ?? parsed.attributes ?? parsed.rssi_anchors ?? parsed.rssiAnchors ?? null,
       };
     } catch (error) {
       this.logger.error('Failed to decode Endpoint 238 payload:', error);

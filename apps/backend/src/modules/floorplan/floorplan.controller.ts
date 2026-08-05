@@ -119,6 +119,15 @@ export class FloorplanController {
     return this.floorplanService.updateAssetPlanPosition(tenantId, assetId, body.planX, body.planY);
   }
 
+  @Post('mesh/:assetId/rssi-position')
+  updateMeshRssiPosition(
+    @GetTenantId() tenantId: string,
+    @Param('assetId') assetId: string,
+    @Body() body: { signals: { anchorId?: string; anchorName?: string; rssi: number }[] },
+  ) {
+    return this.floorplanService.updateMeshRssiPosition(tenantId, assetId, body.signals || []);
+  }
+
   // ─── Update Zone Calibration (Dimensions) ──────────────────────────
   @Patch('zones/:zoneId/calibrate')
   updateZoneCalibration(

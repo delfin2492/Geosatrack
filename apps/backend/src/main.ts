@@ -9,16 +9,18 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Set global prefix
-  app.setGlobalPrefix('api');
-
-  // Enable CORS
-  app.enableCors();
-
   // Serve uploaded floor plan images statically at /uploads/*
   app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
   });
+
+  // Set global prefix with exclusion for static uploads
+  app.setGlobalPrefix('api', {
+    exclude: ['uploads/(.*)'],
+  });
+
+  // Enable CORS
+  app.enableCors();
 
   // Swagger Setup
   const config = new DocumentBuilder()

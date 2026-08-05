@@ -5,6 +5,7 @@ import * as vm from 'vm';
 import { PrismaService } from '../prisma/prisma.service';
 import { DecoderService, TelemetryPayload, StatusPayload } from '../decoders/decoder.service';
 import { WebsocketGateway } from '../modules/websocket/websocket.gateway';
+import { FloorplanService } from '../modules/floorplan/floorplan.service';
 
 // Helper: Match MQTT topic patterns (supporting + and # wildcards)
 function mqttTopicMatch(filter: string, topic: string): boolean {
@@ -38,6 +39,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly decoder: DecoderService,
     private readonly websocketGateway: WebsocketGateway,
+    private readonly floorplanService: FloorplanService,
   ) {}
 
   onModuleInit() {
@@ -546,17 +548,54 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       where: { tagId: tag.id },
     });
 
+    let updatedAsset = null;
+
     if (asset) {
       const mockStatus: StatusPayload = { motion: Math.abs(accel_x) > 0.1 || Math.abs(accel_y) > 0.1 };
       const newStatus = this.decoder.evaluateAssetStatus(telemetry, mockStatus);
 
-      const updatedAsset = await this.prisma.asset.update({
-        where: { id: asset.id },
-        data: { status: newStatus },
-        include: {
-          tag: true,
-        },
-      });
+      // Auto update position based on RSSI signals if present
+      let rssiPositionUpdated = false;
+      if (telemetry.signals) {
+        try {
+          let parsedSignals = telemetry.signals;
+          if (typeof parsedSignals === 'string') {
+            parsedSignals = JSON.parse(parsedSignals);
+          }
+          if (Array.isArray(parsedSignals)) {
+            const mappedSignals = parsedSignals.map((sig: any) => ({
+              anchorId: sig.anchorId || sig.name || sig.id || sig.mac,
+              anchorName: sig.anchorName || sig.name,
+              rssi: Number(sig.rssi || sig.value || -80),
+            }));
+
+            const result = await this.floorplanService.updateMeshRssiPosition(tenantId, asset.id, mappedSignals);
+            updatedAsset = result.asset;
+            rssiPositionUpdated = true;
+          }
+        } catch (e) {
+          this.logger.error(`Failed to automatically update Mesh position from RSSI signals in telemetry:`, e);
+        }
+      }
+
+      if (!rssiPositionUpdated) {
+        updatedAsset = await this.prisma.asset.update({
+          where: { id: asset.id },
+          data: { status: newStatus },
+          include: {
+            tag: true,
+          },
+        });
+      } else {
+        // Just update status if position was already updated
+        updatedAsset = await this.prisma.asset.update({
+          where: { id: asset.id },
+          data: { status: newStatus },
+          include: {
+            tag: true,
+          },
+        });
+      }
 
       this.websocketGateway.sendToTenant(tenantId, 'assetUpdate', updatedAsset);
 
@@ -612,17 +651,53 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       where: { tagId: tag.id },
     });
 
+    let updatedAsset = null;
+
     if (asset) {
       const dummyTelemetry: TelemetryPayload = { accel_z: 1.0, pitch: 0, roll: 0 };
       const newStatus = this.decoder.evaluateAssetStatus(dummyTelemetry, status);
 
-      const updatedAsset = await this.prisma.asset.update({
-        where: { id: asset.id },
-        data: { status: newStatus },
-        include: {
-          tag: true,
-        },
-      });
+      // Auto update position based on RSSI signals if present
+      let rssiPositionUpdated = false;
+      if (status.signals) {
+        try {
+          let parsedSignals = status.signals;
+          if (typeof parsedSignals === 'string') {
+            parsedSignals = JSON.parse(parsedSignals);
+          }
+          if (Array.isArray(parsedSignals)) {
+            const mappedSignals = parsedSignals.map((sig: any) => ({
+              anchorId: sig.anchorId || sig.name || sig.id || sig.mac,
+              anchorName: sig.anchorName || sig.name,
+              rssi: Number(sig.rssi || sig.value || -80),
+            }));
+
+            const result = await this.floorplanService.updateMeshRssiPosition(tenantId, asset.id, mappedSignals);
+            updatedAsset = result.asset;
+            rssiPositionUpdated = true;
+          }
+        } catch (e) {
+          this.logger.error(`Failed to automatically update Mesh position from RSSI signals in status:`, e);
+        }
+      }
+
+      if (!rssiPositionUpdated) {
+        updatedAsset = await this.prisma.asset.update({
+          where: { id: asset.id },
+          data: { status: newStatus },
+          include: {
+            tag: true,
+          },
+        });
+      } else {
+        updatedAsset = await this.prisma.asset.update({
+          where: { id: asset.id },
+          data: { status: newStatus },
+          include: {
+            tag: true,
+          },
+        });
+      }
 
       this.websocketGateway.sendToTenant(tenantId, 'assetUpdate', updatedAsset);
 
