@@ -642,37 +642,13 @@ export default function PlannerPage() {
     }
   };
 
-  // ─── Simulate Mesh Position from Anchor RSSI Signals ─────────────
+  // ─── Recalculate Mesh Position from Real Anchor RSSI Signals ─────
   const handleSimulateRssi = async (assetId: string) => {
-    if (allTenantAnchors.length === 0) {
-      alert('Belum ada Anchor terdaftar untuk menghitung sinyal RSSI.');
-      return;
-    }
     try {
-      const nextToggle = !simulateToggle;
-      setSimulateToggle(nextToggle);
-
-      // Determine signals
-      const signals = allTenantAnchors.map((a, i) => {
-        // Toggle strongest: if nextToggle = true, index 0 is strongest (-50 dBm).
-        // If nextToggle = false, index 1 is strongest (-50 dBm).
-        let isStrongest = false;
-        if (nextToggle && i === 0) isStrongest = true;
-        if (!nextToggle && i === 1) isStrongest = true;
-        // Fallback for single anchor
-        if (allTenantAnchors.length === 1) isStrongest = true;
-
-        return {
-          anchorId: a.id,
-          anchorName: a.name,
-          rssi: isStrongest ? -50 : -85,
-        };
-      });
-
       const res = await fetch(`http://localhost:4000/api/floorplan/mesh/${assetId}/rssi-position`, {
         method: 'POST',
         headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signals }),
+        body: JSON.stringify({}), // Send empty body to trigger recalculation based on real database signals!
       });
 
       if (res.ok) {
@@ -682,9 +658,12 @@ export default function PlannerPage() {
           fetchZoneDetails(data.targetZoneId);
         }
         fetchAllMesh();
+      } else {
+        const errData = await res.json();
+        alert(errData.message || 'Belum ada data nilai RSSI Anchor asli yang masuk ke Mesh ini.');
       }
     } catch (err) {
-      console.error('Failed to simulate RSSI:', err);
+      console.error('Failed to recalculate RSSI:', err);
     }
   };
 
@@ -1202,9 +1181,9 @@ export default function PlannerPage() {
                             variant="outline"
                             className="h-6 px-1.5 text-[9px] border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
                             onClick={() => handleSimulateRssi(ms.id)}
-                            title="Hitung Posisi & Zone Otomatis dari Sinyal RSSI Anchor"
+                            title="Hitung Posisi & Zone Otomatis dari Sinyal RSSI Anchor Asli yang Masuk"
                           >
-                            ⚡ RSSI Track
+                            ⚡ RSSI Real
                           </Button>
                           <Button
                             size="sm"
@@ -1223,9 +1202,9 @@ export default function PlannerPage() {
                             variant="outline"
                             className="h-6 px-1.5 text-[9px] border-amber-500/40 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
                             onClick={() => handleSimulateRssi(ms.id)}
-                            title="Hitung Zone berbasis Sinyal RSSI Anchor Terkuat"
+                            title="Hitung Zone berbasis Sinyal RSSI Anchor Terkuat yang Masuk"
                           >
-                            ⚡ RSSI Track
+                            ⚡ RSSI Real
                           </Button>
                           <Button
                             size="sm"

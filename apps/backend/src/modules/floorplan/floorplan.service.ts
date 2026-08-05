@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -144,6 +144,7 @@ export class FloorplanService {
     const mappedAssetAnchors = assetAnchors.map((a) => ({
       id: a.id,
       name: a.name,
+      tagId: a.tagId,
       x: a.latitude !== null ? Number(a.latitude) : 0,
       y: a.longitude !== null ? Number(a.longitude) : 0,
       status: a.status || 'online',
@@ -157,6 +158,7 @@ export class FloorplanService {
       .map((a) => ({
         id: a.id,
         name: a.name,
+        tagId: a.id,
         x: a.x,
         y: a.y,
         status: a.status,
@@ -355,17 +357,43 @@ export class FloorplanService {
   async updateMeshRssiPosition(
     tenantId: string,
     assetId: string,
-    anchorSignals: { anchorId?: string; anchorName?: string; rssi: number }[],
+    anchorSignals?: { anchorId?: string; anchorName?: string; rssi: number }[],
   ) {
+    let signalsToUse = anchorSignals;
+
+    // Jika signals tidak dikirim (atau kosong), ambil nilai asli yang sudah masuk dari database Tag.signals
+    if (!signalsToUse || signalsToUse.length === 0) {
+      const asset = await this.prisma.asset.findUnique({
+        where: { id: assetId },
+        include: { tag: true },
+      });
+      if (asset?.tag?.signals) {
+        try {
+          signalsToUse = JSON.parse(asset.tag.signals);
+        } catch (e) {
+          throw new BadRequestException('Failed to parse original signals data from database.');
+        }
+      }
+    }
+
+    if (!signalsToUse || signalsToUse.length === 0) {
+      throw new BadRequestException('Belum ada data nilai RSSI Anchor asli yang masuk ke Mesh ini.');
+    }
+
     // 1. Fetch all tenant anchors (Asset-type ANCHOR + Table Anchors)
     const allAnchors = await this.getAllAnchors(tenantId);
 
     const matchedSignals: { anchorId: string; x: number; y: number; zoneId: string; rssi: number; weight: number; anchorName: string }[] = [];
 
-    for (const sig of anchorSignals) {
+    for (const sig of signalsToUse) {
       const matched = allAnchors.find(
         (a) =>
-          (sig.anchorId && (a.id === sig.anchorId || a.name === sig.anchorId)) ||
+          (sig.anchorId && (
+            a.id === sig.anchorId || 
+            a.name === sig.anchorId ||
+            (a as any).tagId === sig.anchorId ||
+            (a as any).tagId === String(sig.anchorId).replace('node-', '')
+          )) ||
           (sig.anchorName && a.name.toLowerCase() === sig.anchorName.toLowerCase()),
       );
 

@@ -98,13 +98,14 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.defaultClient.on('message', async (topic, payload) => {
+      this.logger.log(`Received message on default Wirepas topic: "${topic}", payload: ${payload.toString().substring(0, 150)}`);
       // Ingest standard Wirepas
       const standardRegex = /^wirepas\/gateway\/([^/]+)\/node\/([^/]+)\/endpoint\/(\d+)$/;
       const standardMatch = topic.match(standardRegex);
       if (standardMatch) {
         const [, gatewayId, nodeId, endpointStr] = standardMatch;
         const endpointId = parseInt(endpointStr, 10);
-        const tagId = `node-${nodeId}`;
+        const tagId = nodeId;
         await this.ingestWirepasMessage(gatewayId, tagId, endpointId, payload.toString());
       }
     });
@@ -544,9 +545,22 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     this.websocketGateway.sendToTenant(tenantId, 'tagUpdate', tag);
 
-    const asset = await this.prisma.asset.findUnique({
+    let asset = await this.prisma.asset.findUnique({
       where: { tagId: tag.id },
     });
+
+    if (!asset && tag.id.startsWith('node-')) {
+      const rawId = tag.id.replace('node-', '');
+      asset = await this.prisma.asset.findUnique({
+        where: { tagId: rawId },
+      });
+    }
+
+    if (!asset) {
+      asset = await this.prisma.asset.findUnique({
+        where: { tagId: `node-${tag.id}` },
+      });
+    }
 
     let updatedAsset = null;
 
@@ -647,9 +661,22 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     this.websocketGateway.sendToTenant(tenantId, 'tagUpdate', tag);
 
-    const asset = await this.prisma.asset.findUnique({
+    let asset = await this.prisma.asset.findUnique({
       where: { tagId: tag.id },
     });
+
+    if (!asset && tag.id.startsWith('node-')) {
+      const rawId = tag.id.replace('node-', '');
+      asset = await this.prisma.asset.findUnique({
+        where: { tagId: rawId },
+      });
+    }
+
+    if (!asset) {
+      asset = await this.prisma.asset.findUnique({
+        where: { tagId: `node-${tag.id}` },
+      });
+    }
 
     let updatedAsset = null;
 
