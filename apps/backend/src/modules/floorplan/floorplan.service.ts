@@ -57,12 +57,43 @@ export class FloorplanService {
     return zone;
   }
 
-  // ─── Get All Anchors for Tenant (placed + unplaced) ─────────────────
+  // ─── Get All Anchors for Tenant (Asset ANCHORs + Table Anchors) ──────
   async getAllAnchors(tenantId: string) {
-    return this.prisma.anchor.findMany({
+    const assetAnchors = await this.prisma.asset.findMany({
+      where: { tenantId, type: 'ANCHOR' },
+      include: { zone: { select: { id: true, name: true } } },
+    });
+
+    const tableAnchors = await this.prisma.anchor.findMany({
       where: { tenantId },
       include: { zone: { select: { id: true, name: true } } },
     });
+
+    const mappedAssetAnchors = assetAnchors.map((a) => ({
+      id: a.id,
+      name: a.name,
+      x: a.latitude !== null ? Number(a.latitude) : 0,
+      y: a.longitude !== null ? Number(a.longitude) : 0,
+      status: a.status || 'online',
+      zoneId: a.zoneId,
+      zone: a.zone,
+      isAsset: true,
+    }));
+
+    const mappedTableAnchors = tableAnchors
+      .filter((ta) => !assetAnchors.some((aa) => aa.id === ta.id || aa.name === ta.name))
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+        x: a.x,
+        y: a.y,
+        status: a.status,
+        zoneId: a.zoneId,
+        zone: a.zone,
+        isAsset: false,
+      }));
+
+    return [...mappedAssetAnchors, ...mappedTableAnchors];
   }
 
   // ─── Assign Anchor to Zone ──────────────────────────────────────────
@@ -73,7 +104,6 @@ export class FloorplanService {
     x?: number,
     y?: number,
   ) {
-    // Verify zone belongs to tenant
     const zone = await this.prisma.zone.findFirst({
       where: { id: zoneId, site: { tenantId } },
     });
@@ -81,11 +111,30 @@ export class FloorplanService {
       throw new NotFoundException(`Zone "${zoneId}" not found for this tenant.`);
     }
 
-    // Verify anchor belongs to tenant
-    const anchor = await this.prisma.anchor.findFirst({
+    const posX = x ?? zone.width / 2;
+    const posY = y ?? zone.height / 2;
+
+    // Check if it's an Asset of type ANCHOR first
+    const assetAnchor = await this.prisma.asset.findFirst({
+      where: { id: anchorId, tenantId, type: 'ANCHOR' },
+    });
+
+    if (assetAnchor) {
+      return this.prisma.asset.update({
+        where: { id: anchorId },
+        data: {
+          zoneId,
+          latitude: posX,
+          longitude: posY,
+        },
+      });
+    }
+
+    // Otherwise update Anchor table
+    const tableAnchor = await this.prisma.anchor.findFirst({
       where: { id: anchorId, tenantId },
     });
-    if (!anchor) {
+    if (!tableAnchor) {
       throw new NotFoundException(`Anchor "${anchorId}" not found for this tenant.`);
     }
 
@@ -93,18 +142,29 @@ export class FloorplanService {
       where: { id: anchorId },
       data: {
         zoneId,
-        x: x ?? zone.width / 2,  // Default to center of the floor plan
-        y: y ?? zone.height / 2,
+        x: posX,
+        y: posY,
       },
     });
   }
 
   // ─── Unassign Anchor from Zone ──────────────────────────────────────
   async unassignAnchorFromZone(tenantId: string, anchorId: string) {
-    const anchor = await this.prisma.anchor.findFirst({
+    const assetAnchor = await this.prisma.asset.findFirst({
+      where: { id: anchorId, tenantId, type: 'ANCHOR' },
+    });
+
+    if (assetAnchor) {
+      return this.prisma.asset.update({
+        where: { id: anchorId },
+        data: { zoneId: null },
+      });
+    }
+
+    const tableAnchor = await this.prisma.anchor.findFirst({
       where: { id: anchorId, tenantId },
     });
-    if (!anchor) {
+    if (!tableAnchor) {
       throw new NotFoundException(`Anchor "${anchorId}" not found for this tenant.`);
     }
 
@@ -116,10 +176,24 @@ export class FloorplanService {
 
   // ─── Update Anchor Position on Floor Plan ───────────────────────────
   async updateAnchorPosition(tenantId: string, anchorId: string, x: number, y: number) {
-    const anchor = await this.prisma.anchor.findFirst({
+    const assetAnchor = await this.prisma.asset.findFirst({
+      where: { id: anchorId, tenantId, type: 'ANCHOR' },
+    });
+
+    if (assetAnchor) {
+      return this.prisma.asset.update({
+        where: { id: anchorId },
+        data: {
+          latitude: x,
+          longitude: y,
+        },
+      });
+    }
+
+    const tableAnchor = await this.prisma.anchor.findFirst({
       where: { id: anchorId, tenantId },
     });
-    if (!anchor) {
+    if (!tableAnchor) {
       throw new NotFoundException(`Anchor "${anchorId}" not found for this tenant.`);
     }
 
