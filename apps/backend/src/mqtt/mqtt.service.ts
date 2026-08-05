@@ -70,12 +70,18 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`Connecting default Wirepas MQTT Client to ${brokerUrl}...`);
 
-    this.defaultClient = mqtt.connect(brokerUrl, {
+    const clientOptions: mqtt.IClientOptions = {
       username,
       password,
       clean: true,
       reconnectPeriod: 5000,
-    });
+    };
+
+    if (brokerUrl.startsWith('mqtts://') || brokerUrl.startsWith('wss://')) {
+      clientOptions.rejectUnauthorized = false;
+    }
+
+    this.defaultClient = mqtt.connect(brokerUrl, clientOptions);
 
     this.defaultClient.on('connect', () => {
       this.logger.log('Default Wirepas MQTT Client successfully connected!');
@@ -123,10 +129,12 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
 
-        const { host, port, username, password, clientId } = parsed;
+        const { host, port, username, password, clientId, useTls } = parsed;
         if (!host || !port) continue;
 
-        const brokerUrl = `mqtt://${host}:${port}`;
+        const isTls = useTls === 'true' || useTls === true || port === 8883 || port === 8084 || port === 443;
+        const protocol = isTls ? 'mqtts' : 'mqtt';
+        const brokerUrl = `${protocol}://${host}:${port}`;
         const connectionKey = `${agent.id}::${brokerUrl}::${username || ''}::${clientId || ''}`;
 
         const existing = this.clients.get(agent.id);
@@ -146,13 +154,19 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
         this.logger.log(`Connecting Agent "${agent.name}" to broker: ${brokerUrl}...`);
 
-        const client = mqtt.connect(brokerUrl, {
+        const clientOptions: mqtt.IClientOptions = {
           username: username || undefined,
           password: password || undefined,
           clientId: clientId || undefined,
           clean: true,
           reconnectPeriod: 5000,
-        });
+        };
+
+        if (isTls) {
+          clientOptions.rejectUnauthorized = false; // support self-signed certificates by default
+        }
+
+        const client = mqtt.connect(brokerUrl, clientOptions);
         (client as any).connectionKey = connectionKey;
 
         client.on('connect', async () => {

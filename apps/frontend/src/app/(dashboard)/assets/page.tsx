@@ -240,6 +240,7 @@ const agentConnectionFieldsLookup: Record<string, { label: string; key: string; 
   AGENT_MQTT_TELTONIKA: [
     { label: 'MQTT Broker Host', key: 'host', placeholder: 'e.g. localhost' },
     { label: 'MQTT Port', key: 'port', placeholder: 'e.g. 1883', type: 'number' },
+    { label: 'Use TLS (MQTTS)', key: 'useTls', type: 'select', options: ['false', 'true'], placeholder: 'Select SSL/TLS mode...' },
     { label: 'Client ID', key: 'clientId', placeholder: 'e.g. teltonika-mesh-gw' },
     { label: 'Username', key: 'username', placeholder: 'e.g. admin' },
     { label: 'Password', key: 'password', placeholder: 'password', type: 'password' }
@@ -247,6 +248,7 @@ const agentConnectionFieldsLookup: Record<string, { label: string; key: string; 
   AGENT_MQTT_GENERIC: [
     { label: 'MQTT Broker Host', key: 'host', placeholder: 'e.g. localhost' },
     { label: 'MQTT Port', key: 'port', placeholder: 'e.g. 1883', type: 'number' },
+    { label: 'Use TLS (MQTTS)', key: 'useTls', type: 'select', options: ['false', 'true'], placeholder: 'Select SSL/TLS mode...' },
     { label: 'Client ID', key: 'clientId', placeholder: 'e.g. generic-subscriber' },
     { label: 'Username', key: 'username', placeholder: 'e.g. admin' },
     { label: 'Password', key: 'password', placeholder: 'password', type: 'password' }
