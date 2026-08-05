@@ -340,55 +340,54 @@ export default function MapPage() {
                 </button>
               </div>
 
-              {/* Content */}
-              <div className="p-4 space-y-4 overflow-y-auto max-h-[380px] text-xs">
-                {/* Location name and node ID info */}
-                <div className="flex justify-between items-center text-[10px] text-muted-foreground border-b border-border/60 pb-2">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3 text-primary shrink-0" />
-                    Site Jakarta (Warehouse)
-                  </span>
-                  <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-[9px]">
-                    {selectedAsset.meshLabel}
-                  </span>
-                </div>
-
-                {/* Alerts */}
-                {(selectedAsset.status === 'tilt_warning' || selectedAsset.status === 'fall_detected') && (
-                  <div className="p-2 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg text-[10px] flex gap-1.5 items-start">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold">Tilt Alert Active</p>
-                      <p className="text-[8.5px] opacity-90 mt-0.5">Device pitch/roll exceeded safety threshold.</p>
+                 {/* Content */}
+                <div className="p-4 space-y-4 overflow-y-auto max-h-[380px] text-xs">
+                  {/* Clean Info row */}
+                  <div className="flex justify-between items-center text-[10px] text-muted-foreground border-b border-border/60 pb-2">
+                    <span className="font-bold text-foreground">
+                      Device Info
+                    </span>
+                    <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-[9px]">
+                      {selectedAsset.meshLabel}
+                    </span>
+                  </div>
+  
+                  {/* Alerts */}
+                  {(selectedAsset.status === 'tilt_warning' || selectedAsset.status === 'fall_detected') && (
+                    <div className="p-2 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg text-[10px] flex gap-1.5 items-start">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold">Tilt Alert Active</p>
+                        <p className="text-[8.5px] opacity-90 mt-0.5">Device pitch/roll exceeded safety threshold.</p>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {/* Dynamic Attributes Grid */}
-                <div className="space-y-2">
-                  <div className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider">
-                    Device Attributes
-                  </div>
-
-                  {(() => {
-                    const originalAsset = assets.find(as => as.id === selectedAsset.id);
-                    let customAttrs: any[] = [];
-                    if (originalAsset && originalAsset.description) {
-                      try {
-                        const parsed = JSON.parse(originalAsset.description);
-                        customAttrs = parsed.attributes || [];
-                      } catch(e) {}
-                    }
-
-                    const itemsToRender = [
-                      { label: 'CO2 Level (ppm)', value: customAttrs.find((a: any) => a.name === 'co2')?.value || '--' },
-                      { label: 'CO Level (ppm)', value: customAttrs.find((a: any) => a.name === 'co')?.value || '--' },
-                      { label: 'Temperature', value: selectedAsset.tag && selectedAsset.tag.temperature !== null ? `${selectedAsset.tag.temperature} °C` : '--' },
-                      { label: 'Humidity', value: selectedAsset.tag && selectedAsset.tag.humidity !== null ? `${selectedAsset.tag.humidity} %` : '--' },
-                      { label: 'Battery/Voltage', value: selectedAsset.tag && selectedAsset.tag.battery !== null ? `${selectedAsset.tag.battery} V` : '--' },
-                      { label: 'RSSI', value: selectedAsset.tag && selectedAsset.tag.rssi !== null ? `${selectedAsset.tag.rssi} dBm` : '--' },
-                      { label: 'Position (X, Y)', value: `${selectedAsset.x.toFixed(1)}m, ${selectedAsset.y.toFixed(1)}m` },
-                    ];
+                  )}
+  
+                  {/* Dynamic Attributes Grid */}
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-bold text-muted-foreground/80 uppercase tracking-wider">
+                      Device Attributes
+                    </div>
+  
+                    {(() => {
+                      const originalAsset = assets.find(as => as.id === selectedAsset.id);
+                      let customAttrs: any[] = [];
+                      if (originalAsset && originalAsset.description) {
+                        try {
+                          const parsed = JSON.parse(originalAsset.description);
+                          customAttrs = parsed.attributes || [];
+                        } catch(e) {}
+                      }
+  
+                      const itemsToRender = [
+                        { label: 'CO2 Level (ppm)', value: customAttrs.find((a: any) => a.name === 'co2')?.value || '--' },
+                        { label: 'CO Level (ppm)', value: customAttrs.find((a: any) => a.name === 'co')?.value || '--' },
+                        { label: 'Temperature', value: selectedAsset.tag && selectedAsset.tag.temperature !== null ? `${selectedAsset.tag.temperature} °C` : '--' },
+                        { label: 'Humidity', value: selectedAsset.tag && selectedAsset.tag.humidity !== null ? `${selectedAsset.tag.humidity} %` : '--' },
+                        { label: 'Battery/Voltage', value: selectedAsset.tag && selectedAsset.tag.battery !== null ? `${selectedAsset.tag.battery} V` : '--' },
+                        { label: 'RSSI', value: selectedAsset.tag && selectedAsset.tag.rssi !== null ? `${selectedAsset.tag.rssi} dBm` : '--' },
+                        { label: 'Coordinates (Lat, Lon)', value: `${selectedAsset.x.toFixed(6)}, ${selectedAsset.y.toFixed(6)}` },
+                      ];
 
                     customAttrs.forEach((attr: any) => {
                       const isDuplicate = ['temperature', 'humidity', 'voltage', 'battery', 'gateway_rssi', 'rssi', 'co2', 'co'].includes(attr.name);
