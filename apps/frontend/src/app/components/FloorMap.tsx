@@ -76,6 +76,8 @@ export default function FloorMap({
 
   // Anchors State
   const [anchors, setAnchors] = useState<MapAnchor[]>(initialAnchors || []);
+  const [draggedAnchorId, setDraggedAnchorId] = useState<string | null>(null);
+
   useEffect(() => {
     setAnchors(initialAnchors || []);
   }, [initialAnchors]);
@@ -318,6 +320,40 @@ export default function FloorMap({
         ctx.restore();
       }
 
+      // Draw Anchors (indoor_zone mode)
+      anchors.forEach((anchor) => {
+        const screenPos = mapToScreen(anchor.x, anchor.y);
+        const isDragged = draggedAnchorId === anchor.id;
+        
+        // Pulsing radio wave propagation circle
+        const pulse = 18 + Math.sin(Date.now() / 250) * 4;
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, isDragged ? 24 : pulse, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
+        ctx.fill();
+        
+        // Anchor circle marker
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#06b6d4'; // Cyan color
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        
+        // Anchor core dot
+        ctx.beginPath();
+        ctx.arc(screenPos.x, screenPos.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        
+        // Anchor text label
+        ctx.font = 'bold 9px monospace';
+        ctx.fillStyle = '#22d3ee';
+        ctx.textAlign = 'center';
+        ctx.fillText(anchor.name || anchor.id, screenPos.x, screenPos.y + 18);
+      });
+
       // Draw Mesh Nodes (Mesh 1, Mesh 3, Mesh 4, Mesh 5)
       assets.forEach((asset) => {
         const screenPos = mapToScreen(asset.x, asset.y);
@@ -392,6 +428,20 @@ export default function FloorMap({
 
   }, [assets, anchors, zoom, pan, rotation, viewMode, mapStyle, showGrid, showBlueprint, dimensions, hoveredAsset, selectedAssetId]);
 
+  const screenToMap = (screenX: number, screenY: number) => {
+    const baseScale = getBaseScale();
+    const centerX = dimensions.width / 2 + pan.x;
+    const centerY = dimensions.height / 2 + pan.y;
+
+    const xMeters = (screenX - centerX) / (baseScale * zoom) + widthMeters / 2;
+    const yMeters = (screenY - centerY) / (baseScale * zoom) + heightMeters / 2;
+
+    return {
+      x: xMeters,
+      y: yMeters,
+    };
+  };
+
   // Mouse Click Interactivity
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -401,6 +451,18 @@ export default function FloorMap({
     const y = e.clientY - rect.top;
 
     if (viewMode === 'indoor_zone') {
+      // 1. Check if clicked an anchor
+      const clickedAnchor = anchors.find((anchor) => {
+        const pos = mapToScreen(anchor.x, anchor.y);
+        return Math.hypot(pos.x - x, pos.y - y) <= 15;
+      });
+
+      if (clickedAnchor) {
+        setDraggedAnchorId(clickedAnchor.id);
+        return;
+      }
+
+      // 2. Check if clicked an asset
       const clickedAsset = assets.find((asset) => {
         const pos = mapToScreen(asset.x, asset.y);
         return Math.hypot(pos.x - x, pos.y - y) <= 18;
@@ -439,6 +501,17 @@ export default function FloorMap({
     const y = e.clientY - rect.top;
     setMousePos({ x, y });
 
+    if (draggedAnchorId) {
+      const mapCoords = screenToMap(x, y);
+      const boundedX = Math.max(0, Math.min(widthMeters, mapCoords.x));
+      const boundedY = Math.max(0, Math.min(heightMeters, mapCoords.y));
+      
+      setAnchors((prev) =>
+        prev.map((a) => (a.id === draggedAnchorId ? { ...a, x: boundedX, y: boundedY } : a))
+      );
+      return;
+    }
+
     if (isPanning) {
       setPan({
         x: e.clientX - panStartRef.current.x,
@@ -457,6 +530,14 @@ export default function FloorMap({
   };
 
   const handleMouseUp = () => {
+    if (draggedAnchorId) {
+      const finalAnchor = anchors.find((a) => a.id === draggedAnchorId);
+      if (finalAnchor && onAnchorUpdate) {
+        onAnchorUpdate(draggedAnchorId, finalAnchor.x, finalAnchor.y);
+      }
+      setDraggedAnchorId(null);
+      return;
+    }
     setIsPanning(false);
   };
 

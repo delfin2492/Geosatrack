@@ -39,6 +39,11 @@ export class AssetController {
     return this.assetService.findAll(tenantId, { status, zoneId, siteId, search });
   }
 
+  @Get('anchors')
+  getAnchors(@GetTenantId() tenantId: string) {
+    return this.assetService.getAnchors(tenantId);
+  }
+
   @Get(':id')
   findOne(@GetTenantId() tenantId: string, @Param('id') id: string) {
     return this.assetService.findOne(tenantId, id);

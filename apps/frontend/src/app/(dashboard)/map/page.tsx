@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
 import FloorMap, { MapAsset } from '../../components/FloorMap';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -18,100 +19,273 @@ import {
 } from 'lucide-react';
 
 export default function MapPage() {
-  const { simulationActive, setSimulationActive } = useSocket();
+  const { tenantId, token } = useAuth();
+  const { assets, simulationActive, setSimulationActive } = useSocket();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [dbAnchors, setDbAnchors] = useState<any[]>([]);
 
-  const [anchors, setAnchors] = useState<any[]>([
-    { id: 'anchor-1', name: 'Anchor North-East', x: 48, y: 10 },
-    { id: 'anchor-2', name: 'Anchor South-West', x: 12, y: 30 },
-  ]);
+  const fetchDbAnchors = async () => {
+    try {
+      const headers: Record<string, string> = { 'x-tenant-id': tenantId || '' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`http://localhost:4000/api/assets/anchors`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setDbAnchors(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch anchors:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (tenantId) {
+      fetchDbAnchors();
+    }
+  }, [tenantId, assets]); // Re-fetch or sync when assets change
+
+  const getCombinedAnchors = () => {
+    const assetAnchors = assets
+      .filter((a) => a.type === 'ANCHOR')
+      .map((a) => {
+        let anchorId = a.name;
+        try {
+          if (a.description && a.description.startsWith('{')) {
+            const parsed = JSON.parse(a.description);
+            anchorId = parsed.attributes?.find((at: any) => at.name === 'anchorId')?.value || a.name;
+          }
+        } catch (e) {}
+
+        return {
+          id: a.id,
+          name: a.name,
+          x: a.latitude !== null ? Number(a.latitude) : 10,
+          y: a.longitude !== null ? Number(a.longitude) : 10,
+          anchorId,
+        };
+      });
+
+    const tableAnchorsOnly = dbAnchors.filter(
+      (da) => !assets.some((a) => a.id === da.id) && !assetAnchors.some((aa) => aa.anchorId === da.anchorId)
+    );
+
+    return [...assetAnchors, ...tableAnchorsOnly];
+  };
+
+  const currentAnchors = getCombinedAnchors();
+
+  const handleAnchorUpdate = async (id: string, x: number, y: number) => {
+    setDbAnchors((prev) => prev.map((a) => (a.id === id ? { ...a, x, y } : a)));
+    
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId || '',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      
+      await fetch(`http://localhost:4000/api/assets/${id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          latitude: Number(x.toFixed(2)),
+          longitude: Number(y.toFixed(2)),
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to persist anchor coordinate update:', e);
+    }
+  };
 
   const getMapAssets = (): MapAsset[] => {
-    const meshNodes: MapAsset[] = [
-      {
-        id: 'node-mesh-1',
-        name: 'Sensor Node Alpha',
-        meshLabel: 'Mesh 1',
-        type: 'Static Tag',
-        status: 'static',
-        x: 34,
-        y: 8,
-        tag: {
-          id: 'tag-439201',
-          name: 'Teltonika Tag #1',
-          temperature: 23.4,
-          humidity: 52.0,
-          battery: 3.6,
-          rssi: -62,
-        },
-      },
-      {
-        id: 'node-mesh-3',
-        name: 'Pallet Kargo A4',
-        meshLabel: 'Mesh 3',
-        type: 'Pallet',
-        status: 'tilt_warning', // Anomaly warning (Red ring)
-        x: 42,
-        y: 10,
-        tag: {
-          id: 'tag-439202',
-          name: 'Teltonika Tag #3',
-          temperature: 28.1,
-          humidity: 61.5,
-          battery: 3.2,
-          rssi: -84,
-        },
-      },
-      {
-        id: 'node-mesh-5',
-        name: 'Container B2',
-        meshLabel: 'Mesh 5',
-        type: 'Container',
-        status: 'static',
-        x: 32,
-        y: 22,
-        tag: {
-          id: 'tag-439205',
-          name: 'Teltonika Tag #5',
-          temperature: 24.0,
-          humidity: 55.0,
-          battery: 3.5,
-          rssi: -68,
-        },
-      },
-      {
-        id: 'node-mesh-4',
-        name: 'Forklift TF-01',
-        meshLabel: 'Mesh 4',
-        type: 'Vehicle',
-        status: 'moving', // Moving active (Green ring)
-        x: 32,
-        y: 28,
-        tag: {
-          id: 'tag-439204',
-          name: 'Teltonika Tag #4',
-          temperature: 25.8,
-          humidity: 48.0,
-          battery: 3.6,
-          rssi: -58,
-        },
-      },
-    ];
-
     if (simulationActive) {
+      const mockNodes: MapAsset[] = [
+        {
+          id: 'node-mesh-1',
+          name: 'Sensor Node Alpha',
+          meshLabel: 'Mesh 1',
+          type: 'Static Tag',
+          status: 'static',
+          x: 34,
+          y: 8,
+          tag: {
+            id: 'tag-439201',
+            name: 'Teltonika Tag #1',
+            temperature: 23.4,
+            humidity: 52.0,
+            battery: 3.6,
+            rssi: -62,
+          },
+        },
+        {
+          id: 'node-mesh-3',
+          name: 'Pallet Kargo A4',
+          meshLabel: 'Mesh 3',
+          type: 'Pallet',
+          status: 'tilt_warning',
+          x: 42,
+          y: 10,
+          tag: {
+            id: 'tag-439202',
+            name: 'Teltonika Tag #3',
+            temperature: 28.1,
+            humidity: 61.5,
+            battery: 3.2,
+            rssi: -84,
+          },
+        },
+        {
+          id: 'node-mesh-5',
+          name: 'Container B2',
+          meshLabel: 'Mesh 5',
+          type: 'Container',
+          status: 'static',
+          x: 32,
+          y: 22,
+          tag: {
+            id: 'tag-439205',
+            name: 'Teltonika Tag #5',
+            temperature: 24.0,
+            humidity: 55.0,
+            battery: 3.5,
+            rssi: -68,
+          },
+        },
+        {
+          id: 'node-mesh-4',
+          name: 'Forklift TF-01',
+          meshLabel: 'Mesh 4',
+          type: 'Vehicle',
+          status: 'moving',
+          x: 32,
+          y: 28,
+          tag: {
+            id: 'tag-439204',
+            name: 'Teltonika Tag #4',
+            temperature: 25.8,
+            humidity: 48.0,
+            battery: 3.6,
+            rssi: -58,
+          },
+        },
+      ];
       const time = Date.now() / 2500;
-      const mesh4 = meshNodes.find((m) => m.meshLabel === 'Mesh 4');
+      const mesh4 = mockNodes.find((m) => m.meshLabel === 'Mesh 4');
       if (mesh4) {
         mesh4.x = 32 + Math.sin(time) * 6;
         mesh4.y = 28 + Math.cos(time) * 4;
       }
+      return mockNodes;
     }
 
-    return meshNodes;
+    const physicalAssets = assets.filter(
+      (a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING'
+    );
+
+    return physicalAssets.map((a) => {
+      let x = 30;
+      let y = 20;
+      if (a.latitude !== null && a.latitude !== undefined) x = Number(a.latitude);
+      if (a.longitude !== null && a.longitude !== undefined) y = Number(a.longitude);
+
+      let tagData: any = null;
+      let descriptionParsed: any = {};
+      
+      try {
+        if (a.description && a.description.startsWith('{')) {
+          descriptionParsed = JSON.parse(a.description);
+        }
+      } catch (e) {}
+
+      const attrs = descriptionParsed.attributes || [];
+      const temp = attrs.find((at: any) => at.name === 'temperature')?.value;
+      const hum = attrs.find((at: any) => at.name === 'humidity')?.value;
+      const volt = attrs.find((at: any) => at.name === 'voltage')?.value;
+      const rssi = attrs.find((at: any) => at.name === 'gateway_rssi' || at.name === 'rssi')?.value;
+
+      if (descriptionParsed.attributes) {
+        tagData = {
+          id: a.tagId || a.id,
+          name: a.name,
+          temperature: temp !== undefined && temp !== '' ? Number(temp) : null,
+          humidity: hum !== undefined && hum !== '' ? Number(hum) : null,
+          battery: volt !== undefined && volt !== '' ? Number(volt) : null,
+          rssi: rssi !== undefined && rssi !== '' ? Number(rssi) : null,
+        };
+      }
+
+      let rssiList: { x: number; y: number; rssi: number }[] = [];
+      attrs.forEach((attr: any) => {
+        if (attr.name.startsWith('rssi_') && attr.value !== undefined && attr.value !== null && attr.value !== '') {
+          const rssiVal = Number(attr.value);
+          if (!isNaN(rssiVal)) {
+            let anchorId = '';
+            if (attr.name === 'rssi_anchor_1' || attr.name === 'rssi_anchor_2') {
+              if (attr.mqttValuePath && attr.mqttValuePath.includes('rssi_')) {
+                anchorId = attr.mqttValuePath.split('rssi_')[1];
+              }
+            } else {
+              anchorId = attr.name.replace('rssi_', '');
+            }
+
+            if (anchorId) {
+              const matchedAnchor = currentAnchors.find((an) => an.anchorId === anchorId);
+              if (matchedAnchor) {
+                rssiList.push({
+                  x: matchedAnchor.x,
+                  y: matchedAnchor.y,
+                  rssi: rssiVal,
+                });
+              }
+            }
+          }
+        }
+      });
+
+      if (rssiList.length > 0) {
+        let totalWeight = 0;
+        let weightedX = 0;
+        let weightedY = 0;
+        
+        rssiList.forEach((item) => {
+          const weight = Math.pow(item.rssi + 100, 2);
+          weightedX += item.x * weight;
+          weightedY += item.y * weight;
+          totalWeight += weight;
+        });
+        
+        if (totalWeight > 0) {
+          x = weightedX / totalWeight;
+          y = weightedY / totalWeight;
+        }
+      }
+
+      let statusVal: 'static' | 'moving' | 'tilt_warning' | 'fall_detected' = 'static';
+      const motion = attrs.find((at: any) => at.name === 'motion')?.value;
+      const isStatic = attrs.find((at: any) => at.name === 'is_static')?.value;
+      const hall = attrs.find((at: any) => at.name === 'hall')?.value;
+
+      if (a.status === 'tilt_warning' || a.status === 'fall_detected') {
+        statusVal = a.status;
+      } else if (motion === true || motion === 'true' || hall === true || hall === 'true' || isStatic === false || isStatic === 'false') {
+        statusVal = 'moving';
+      }
+
+      return {
+        id: a.id,
+        name: a.name,
+        meshLabel: a.tagId ? `Node ${a.tagId}` : a.name,
+        type: a.type,
+        status: statusVal,
+        x,
+        y,
+        tag: tagData,
+      };
+    });
   };
 
   const mapAssets = getMapAssets();
-  const selectedAsset = mapAssets.find((a) => a.id === selectedAssetId) || mapAssets[1];
+  const selectedAsset = mapAssets.find((a) => a.id === selectedAssetId) || (mapAssets.length > 0 ? mapAssets[0] : null);
 
   return (
     <div className="flex h-full w-full gap-4 relative">
@@ -144,11 +318,9 @@ export default function MapPage() {
         <div className="flex-1 min-h-[580px]">
           <FloorMap
             assets={mapAssets}
-            anchors={anchors}
+            anchors={currentAnchors}
             onSelectAsset={(asset) => setSelectedAssetId(asset.id)}
-            onAnchorUpdate={(id, x, y) => {
-              setAnchors((prev) => prev.map((a) => (a.id === id ? { ...a, x, y } : a)));
-            }}
+            onAnchorUpdate={handleAnchorUpdate}
           />
         </div>
       </div>

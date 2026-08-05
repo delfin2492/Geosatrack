@@ -157,7 +157,24 @@ export class AssetService {
       parentId?: string | null;
     },
   ) {
-    const asset = await this.findOne(tenantId, id); // Verify ownership
+    let asset: any = null;
+    try {
+      asset = await this.findOne(tenantId, id); // Verify ownership
+    } catch (e) {
+      const anchor = await this.prisma.anchor.findFirst({
+        where: { id, tenantId },
+      });
+      if (anchor) {
+        return this.prisma.anchor.update({
+          where: { id },
+          data: {
+            x: data.latitude !== undefined && data.latitude !== null ? Number(data.latitude) : undefined,
+            y: data.longitude !== undefined && data.longitude !== null ? Number(data.longitude) : undefined,
+          },
+        });
+      }
+      throw e;
+    }
 
     const { name, description, status, zoneId, tagId, type, latitude, longitude, parentId } = data;
 
@@ -308,5 +325,43 @@ export class AssetService {
         timestamp: t.timestamp.toISOString(),
         value: Number(t[dbField]),
       }));
+  }
+
+  async getAnchors(tenantId: string) {
+    const assetAnchors = await this.prisma.asset.findMany({
+      where: { tenantId, type: 'ANCHOR' },
+    });
+
+    const tableAnchors = await this.prisma.anchor.findMany({
+      where: { tenantId },
+    });
+
+    const mappedAssetAnchors = assetAnchors.map(a => {
+      let anchorId = a.name;
+      try {
+        if (a.description && a.description.startsWith('{')) {
+          const parsed = JSON.parse(a.description);
+          anchorId = parsed.attributes?.find((at: any) => at.name === 'anchorId')?.value || a.name;
+        }
+      } catch (e) {}
+
+      return {
+        id: a.id,
+        name: a.name,
+        x: a.latitude !== null ? Number(a.latitude) : 10,
+        y: a.longitude !== null ? Number(a.longitude) : 10,
+        anchorId,
+      };
+    });
+
+    const mappedTableAnchors = tableAnchors.map(a => ({
+      id: a.id,
+      name: a.name,
+      x: a.x !== null ? Number(a.x) : 20,
+      y: a.y !== null ? Number(a.y) : 20,
+      anchorId: a.id,
+    }));
+
+    return [...mappedAssetAnchors, ...mappedTableAnchors];
   }
 }
