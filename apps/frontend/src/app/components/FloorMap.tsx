@@ -67,8 +67,8 @@ export default function FloorMap({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Map Modes: 'indonesia_overview' (Full Indonesia Map) or 'indoor_zone' (Denah Detail)
-  const [viewMode, setViewMode] = useState<'indonesia_overview' | 'indoor_zone'>('indonesia_overview');
+  // Map Modes: always 'indoor_zone'
+  const [viewMode, setViewMode] = useState<'indonesia_overview' | 'indoor_zone'>('indoor_zone');
   const [activeSiteName, setActiveSiteName] = useState<string>('Site Jakarta');
 
   // OpenStreetMap Tile Style: 'osm_standard' or 'osm_dark'
@@ -97,21 +97,6 @@ export default function FloorMap({
 
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Non-passive Wheel Listener for Mouse & Trackpad Scroll Zoom
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const handleNativeWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
-      setZoom((prev) => Math.min(Math.max(prev * zoomFactor, 0.4), 5));
-    };
-
-    canvas.addEventListener('wheel', handleNativeWheel, { passive: false });
-    return () => canvas.removeEventListener('wheel', handleNativeWheel);
-  }, []);
-
   // Canvas Resize Observer
   const [dimensions, setDimensions] = useState({ width: 950, height: 600 });
   useEffect(() => {
@@ -127,6 +112,40 @@ export default function FloorMap({
     resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
   }, []);
+
+  // Non-passive Wheel Listener for Mouse & Trackpad Scroll Zoom (Cursor-Centered Focus)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      setZoom((prevZoom) => {
+        const newZoom = Math.min(Math.max(prevZoom * zoomFactor, 0.4), 5);
+        const ratio = newZoom / prevZoom;
+        
+        setPan((prevPan) => {
+          const dx = mouseX - dimensions.width / 2;
+          const dy = mouseY - dimensions.height / 2;
+          return {
+            x: prevPan.x * ratio + dx * (1 - ratio),
+            y: prevPan.y * ratio + dy * (1 - ratio),
+          };
+        });
+        
+        return newZoom;
+      });
+    };
+
+    canvas.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleNativeWheel);
+  }, [dimensions]);
 
   const getBaseScale = () => {
     return Math.min(dimensions.width / widthMeters, dimensions.height / heightMeters) * 0.75;
@@ -546,7 +565,6 @@ export default function FloorMap({
   };
 
   const handleReset = () => {
-    setViewMode('indonesia_overview');
     setZoom(1.2);
     setPan({ x: 0, y: 0 });
     setRotation(15);
@@ -577,18 +595,6 @@ export default function FloorMap({
 
         {/* Clean Tools Bar (Mode Switcher Button Removed) */}
         <div className="flex items-center gap-1.5 bg-card/95 border border-border px-2.5 py-1 rounded-xl shadow-lg backdrop-blur-md">
-          {/* Back to Indonesia Map (visible when inside indoor zone view) */}
-          {viewMode === 'indoor_zone' && (
-            <button
-              onClick={handleReset}
-              className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 bg-primary text-primary-foreground cursor-pointer shadow-sm"
-              title="Kembali ke Peta Indonesia"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Kembali ke Peta Indonesia</span>
-            </button>
-          )}
-
           {/* OSM Style Switcher */}
           <button
             onClick={() => setMapStyle(mapStyle === 'osm_standard' ? 'osm_dark' : 'osm_standard')}
@@ -620,17 +626,10 @@ export default function FloorMap({
       </div>
 
       {/* TOP-RIGHT SITE ADVICE BADGE */}
-      {viewMode === 'indonesia_overview' ? (
-        <div className="absolute top-4 right-4 z-20 bg-card/95 border border-border px-3 py-1.5 rounded-xl text-xs text-muted-foreground flex items-center gap-2 shadow-lg backdrop-blur-md font-sans">
-          <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
-          <span>Klik salah satu 📍 <strong>Titik Koordinat Site</strong> untuk Zoom ke Denah Indoor</span>
-        </div>
-      ) : (
-        <div className="absolute top-4 right-4 z-20 bg-card/95 border border-primary/40 px-3 py-1.5 rounded-xl text-xs text-primary font-bold flex items-center gap-2 shadow-lg backdrop-blur-md">
-          <MapPin className="h-3.5 w-3.5" />
-          <span>{activeSiteName} (Floor 1 Zone Alpha)</span>
-        </div>
-      )}
+      <div className="absolute top-4 right-4 z-20 bg-card/95 border border-primary/40 px-3 py-1.5 rounded-xl text-xs text-primary font-bold flex items-center gap-2 shadow-lg backdrop-blur-md">
+        <MapPin className="h-3.5 w-3.5" />
+        <span>{activeSiteName} (Floor 1 Zone Alpha)</span>
+      </div>
 
       {/* BOTTOM-LEFT SCALE BAR */}
       <div className="absolute bottom-4 left-4 z-20 bg-card/95 border border-border px-3 py-1.5 rounded-lg shadow-md text-xs font-mono text-muted-foreground flex items-center gap-2 backdrop-blur-md">

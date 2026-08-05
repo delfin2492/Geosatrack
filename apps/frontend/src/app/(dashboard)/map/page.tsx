@@ -285,7 +285,7 @@ export default function MapPage() {
   };
 
   const mapAssets = getMapAssets();
-  const selectedAsset = mapAssets.find((a) => a.id === selectedAssetId) || (mapAssets.length > 0 ? mapAssets[0] : null);
+  const selectedAsset = mapAssets.find((a) => a.id === selectedAssetId) || null;
 
   return (
     <div className="h-full w-full relative">
