@@ -19,8 +19,7 @@ import {
   X,
   Layers,
   Tag,
-  CheckCircle,
-  AlertCircle,
+  Building2,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -55,16 +54,34 @@ interface GeofenceData {
   type: string;
 }
 
+interface SiteData {
+  id: string;
+  name: string;
+}
+
 // ─── Planner Page ─────────────────────────────────────────────────────
 export default function PlannerPage() {
   const { tenantId, token } = useAuth();
   const { assets } = useSocket();
 
   const [zones, setZones] = useState<ZoneData[]>([]);
+  const [sites, setSites] = useState<SiteData[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [selectedZone, setSelectedZone] = useState<ZoneData | null>(null);
   const [allTenantAnchors, setAllTenantAnchors] = useState<AnchorData[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // New Zone Form state
+  const [showNewZoneForm, setShowNewZoneForm] = useState(false);
+  const [newZoneName, setNewZoneName] = useState('');
+  const [newZoneSiteId, setNewZoneSiteId] = useState('');
+  const [newZoneWidth, setNewZoneWidth] = useState(50);
+  const [newZoneHeight, setNewZoneHeight] = useState(30);
+
+  // New Anchor Form state
+  const [showNewAnchorForm, setShowNewAnchorForm] = useState(false);
+  const [newAnchorName, setNewAnchorName] = useState('');
+  const [newAnchorHardwareId, setNewAnchorHardwareId] = useState('');
 
   // Geofence draw state
   const [drawMode, setDrawMode] = useState<'pointer' | 'draw_zone'>('pointer');
@@ -87,18 +104,28 @@ export default function PlannerPage() {
   }, [tenantId, token]);
 
   // ─── Fetch Sites & Zones ───────────────────────────────────────────
-  const fetchZones = useCallback(async () => {
+  const fetchSitesAndZones = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const res = await fetch('http://localhost:4000/api/zones', { headers: apiHeaders() });
-      if (res.ok) {
-        const data = await res.json();
+      const [zonesRes, sitesRes] = await Promise.all([
+        fetch('http://localhost:4000/api/zones', { headers: apiHeaders() }),
+        fetch('http://localhost:4000/api/sites', { headers: apiHeaders() }),
+      ]);
+      if (zonesRes.ok) {
+        const data = await zonesRes.json();
         setZones(data);
       }
+      if (sitesRes.ok) {
+        const data = await sitesRes.json();
+        setSites(data);
+        if (data.length > 0 && !newZoneSiteId) {
+          setNewZoneSiteId(data[0].id);
+        }
+      }
     } catch (e) {
-      console.error('Failed to fetch zones:', e);
+      console.error('Failed to fetch sites/zones:', e);
     }
-  }, [tenantId, apiHeaders]);
+  }, [tenantId, apiHeaders, newZoneSiteId]);
 
   // ─── Fetch All Tenant Anchors ──────────────────────────────────────
   const fetchAllAnchors = useCallback(async () => {
@@ -115,9 +142,9 @@ export default function PlannerPage() {
   }, [tenantId, apiHeaders]);
 
   useEffect(() => {
-    fetchZones();
+    fetchSitesAndZones();
     fetchAllAnchors();
-  }, [fetchZones, fetchAllAnchors]);
+  }, [fetchSitesAndZones, fetchAllAnchors]);
 
   // ─── Fetch Selected Zone Details ───────────────────────────────────
   const fetchZoneDetails = useCallback(async (zoneId: string) => {
@@ -303,6 +330,66 @@ export default function PlannerPage() {
     }
   }, [selectedZone, apiHeaders, fetchAllAnchors]);
 
+  // ─── Create New Zone ──────────────────────────────────────────────
+  const handleCreateZone = async () => {
+    if (!newZoneName.trim() || !newZoneSiteId) return;
+    try {
+      const res = await fetch('http://localhost:4000/api/zones', {
+        method: 'POST',
+        headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siteId: newZoneSiteId,
+          name: newZoneName,
+          width: Number(newZoneWidth),
+          height: Number(newZoneHeight),
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setNewZoneName('');
+        setShowNewZoneForm(false);
+        fetchSitesAndZones();
+        setSelectedZoneId(created.id);
+      }
+    } catch (err) {
+      console.error('Failed to create zone:', err);
+    }
+  };
+
+  // ─── Create New Anchor Asset ──────────────────────────────────────
+  const handleCreateAnchor = async () => {
+    if (!newAnchorName.trim() || !selectedZoneId || !selectedZone) return;
+    try {
+      const descObj = newAnchorHardwareId
+        ? { attributes: [{ name: 'anchorId', value: newAnchorHardwareId }] }
+        : {};
+
+      const res = await fetch('http://localhost:4000/api/assets', {
+        method: 'POST',
+        headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newAnchorName,
+          type: 'ANCHOR',
+          status: 'online',
+          description: JSON.stringify(descObj),
+          latitude: selectedZone.width / 2,
+          longitude: selectedZone.height / 2,
+          zoneId: selectedZoneId,
+        }),
+      });
+
+      if (res.ok) {
+        setNewAnchorName('');
+        setNewAnchorHardwareId('');
+        setShowNewAnchorForm(false);
+        fetchZoneDetails(selectedZoneId);
+        fetchAllAnchors();
+      }
+    } catch (err) {
+      console.error('Failed to create anchor:', err);
+    }
+  };
+
   // ─── Assign Anchor to Selected Zone ───────────────────────────────
   const handleAssignAnchor = async (anchorId: string) => {
     if (!selectedZoneId || !selectedZone) return;
@@ -460,8 +547,6 @@ export default function PlannerPage() {
     });
   }, [drawingPoints, newGeofenceType]);
 
-  const placedAnchorIds = new Set(selectedZone?.anchors?.map((a) => a.id) || []);
-
   return (
     <div className="flex h-full gap-4">
       {/* ─── LEFT SIDEBAR PANEL ───────────────────────────────────── */}
@@ -469,15 +554,85 @@ export default function PlannerPage() {
         {/* Zone Selector */}
         <Card className="rounded-2xl border-border shadow-md">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold flex items-center gap-2 text-foreground">
-              <Layers className="h-4 w-4 text-primary" />
-              Zones / Floor Plans
+            <CardTitle className="text-xs font-bold flex items-center justify-between text-foreground">
+              <span className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-primary" />
+                Zones / Floor Plans
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-[10px] px-2 cursor-pointer"
+                onClick={() => setShowNewZoneForm(!showNewZoneForm)}
+              >
+                <Plus className="h-3 w-3 mr-1" /> New Zone
+              </Button>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            {showNewZoneForm && (
+              <div className="p-3 rounded-xl bg-secondary/50 border border-border space-y-2 mb-2">
+                <div className="text-[11px] font-bold text-foreground">Tambah Zone Baru</div>
+                <div>
+                  <label className="text-[9px] text-muted-foreground uppercase font-bold">Nama Zone</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Storage Zone Alpha"
+                    className="w-full mt-0.5 px-2.5 py-1 rounded bg-background border border-border text-xs text-foreground"
+                    value={newZoneName}
+                    onChange={(e) => setNewZoneName(e.target.value)}
+                  />
+                </div>
+                {sites.length > 0 && (
+                  <div>
+                    <label className="text-[9px] text-muted-foreground uppercase font-bold">Site</label>
+                    <select
+                      className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                      value={newZoneSiteId}
+                      onChange={(e) => setNewZoneSiteId(e.target.value)}
+                    >
+                      {sites.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] text-muted-foreground uppercase font-bold">Lebar (m)</label>
+                    <input
+                      type="number"
+                      className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                      value={newZoneWidth}
+                      onChange={(e) => setNewZoneWidth(Number(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-muted-foreground uppercase font-bold">Tinggi (m)</label>
+                    <input
+                      type="number"
+                      className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                      value={newZoneHeight}
+                      onChange={(e) => setNewZoneHeight(Number(e.target.value))}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button size="sm" className="flex-1 h-6 text-[10px] cursor-pointer" onClick={handleCreateZone}>
+                    Simpan Zone
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setShowNewZoneForm(false)}>
+                    Batal
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {zones.length === 0 && (
               <p className="text-[11px] text-muted-foreground italic">
-                No zones found. Create zones via Assets → Sites first.
+                No zones found. Create a zone to begin.
               </p>
             )}
             {zones.map((z) => (
@@ -492,7 +647,7 @@ export default function PlannerPage() {
               >
                 <div className="font-bold">{z.name}</div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
-                  {z.site?.name || 'Unknown Site'} • {z.width}m × {z.height}m
+                  {z.site?.name || 'Site'} • {z.width}m × {z.height}m
                 </div>
               </button>
             ))}
@@ -539,12 +694,56 @@ export default function PlannerPage() {
                   <Radio className="h-4 w-4 text-cyan-400" />
                   Penempatan Anchor
                 </span>
-                <Badge variant="secondary" className="text-[10px]">
-                  {selectedZone?.anchors?.length || 0} Placed
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {selectedZone?.anchors?.length || 0} Placed
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[10px] px-2 cursor-pointer"
+                    onClick={() => setShowNewAnchorForm(!showNewAnchorForm)}
+                  >
+                    <Plus className="h-3 w-3 mr-0.5" /> Anchor
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              {showNewAnchorForm && (
+                <div className="p-3 rounded-xl bg-secondary/50 border border-border space-y-2 mb-2">
+                  <div className="text-[11px] font-bold text-foreground">Tambah Anchor Aset Baru</div>
+                  <div>
+                    <label className="text-[9px] text-muted-foreground uppercase font-bold">Nama Anchor</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Anchor North-East Corner"
+                      className="w-full mt-0.5 px-2.5 py-1 rounded bg-background border border-border text-xs text-foreground"
+                      value={newAnchorName}
+                      onChange={(e) => setNewAnchorName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-muted-foreground uppercase font-bold">Hardware ID / Node Address</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 9023206"
+                      className="w-full mt-0.5 px-2.5 py-1 rounded bg-background border border-border text-xs text-foreground font-mono"
+                      value={newAnchorHardwareId}
+                      onChange={(e) => setNewAnchorHardwareId(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button size="sm" className="flex-1 h-6 text-[10px] cursor-pointer" onClick={handleCreateAnchor}>
+                      Simpan & Tempatkan
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setShowNewAnchorForm(false)}>
+                      Batal
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <p className="text-[10px] text-muted-foreground">
                 Pilih Anchor di bawah ini untuk ditempatkan pada denah, atau geser marker di peta.
               </p>
