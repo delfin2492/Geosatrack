@@ -188,7 +188,15 @@ export default function MapPage() {
       if (a.latitude !== null && a.latitude !== undefined) x = Number(a.latitude);
       if (a.longitude !== null && a.longitude !== undefined) y = Number(a.longitude);
 
-      let tagData: any = null;
+      let tagData: any = a.tag ? {
+        id: a.tag.id,
+        name: a.tag.name,
+        temperature: a.tag.temperature,
+        humidity: a.tag.humidity,
+        battery: a.tag.battery,
+        rssi: a.tag.rssi,
+        lastSeen: a.tag.lastSeen,
+      } : null;
       let descriptionParsed: any = {};
       
       try {
@@ -204,14 +212,21 @@ export default function MapPage() {
       const rssi = attrs.find((at: any) => at.name === 'gateway_rssi' || at.name === 'rssi')?.value;
 
       if (descriptionParsed.attributes) {
-        tagData = {
-          id: a.tagId || a.id,
-          name: a.name,
-          temperature: temp !== undefined && temp !== '' ? Number(temp) : null,
-          humidity: hum !== undefined && hum !== '' ? Number(hum) : null,
-          battery: volt !== undefined && volt !== '' ? Number(volt) : null,
-          rssi: rssi !== undefined && rssi !== '' ? Number(rssi) : null,
-        };
+        if (!tagData) {
+          tagData = {
+            id: a.tagId || a.id,
+            name: a.name,
+            temperature: null,
+            humidity: null,
+            battery: null,
+            rssi: null,
+            lastSeen: null,
+          };
+        }
+        if (temp !== undefined && temp !== '') tagData.temperature = Number(temp);
+        if (hum !== undefined && hum !== '') tagData.humidity = Number(hum);
+        if (volt !== undefined && volt !== '') tagData.battery = Number(volt);
+        if (rssi !== undefined && rssi !== '') tagData.rssi = Number(rssi);
       }
 
       let rssiList: { x: number; y: number; rssi: number }[] = [];
@@ -289,12 +304,24 @@ export default function MapPage() {
   const mapAssets = getMapAssets();
   const selectedAsset = mapAssets.find((a) => a.id === selectedAssetId) || null;
 
+  // Calculate online/offline assets count based on lastSeen timestamp (active in the last 2 minutes)
+  const filteredAssetsOnly = assets.filter(
+    (a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING'
+  );
+  const onlineAssetsCount = filteredAssetsOnly.filter((a) => {
+    if (!a.tag?.lastSeen) return false;
+    const lastSeenDate = new Date(a.tag.lastSeen);
+    const diffMs = Date.now() - lastSeenDate.getTime();
+    return diffMs < 120000; // 2 minutes threshold
+  }).length;
+  const offlineAssetsCount = filteredAssetsOnly.length - onlineAssetsCount;
+
   return (
     <div className="h-full w-full relative">
       
       {/* LEFT CONTENT: OPENSTREETMAP CANVAS */}
       <div className="w-full h-full relative">
-        {/* Stats Row Banner (Agents and Assets count info) */}
+        {/* Stats Row Banner (Assets online & offline count info) */}
         <div className="flex flex-wrap items-center gap-3 mb-3.5">
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-card border border-border shadow-sm">
             <span className="relative flex h-2 w-2">
@@ -302,17 +329,16 @@ export default function MapPage() {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
             <span className="text-xs text-muted-foreground">
-              Connected Agents: <strong className="text-foreground ml-1">{assets.filter((a) => a.type.startsWith('AGENT_') && a.status === 'connected').length}</strong> / {assets.filter((a) => a.type.startsWith('AGENT_')).length}
+              Assets Online: <strong className="text-foreground ml-1">{onlineAssetsCount}</strong>
             </span>
           </div>
 
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-card border border-border shadow-sm">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
             </span>
             <span className="text-xs text-muted-foreground">
-              Connected Assets: <strong className="text-foreground ml-1">{assets.filter((a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING' && a.tagId !== null).length}</strong> / {assets.filter((a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING').length}
+              Assets Offline: <strong className="text-foreground ml-1">{offlineAssetsCount}</strong>
             </span>
           </div>
         </div>
@@ -434,7 +460,7 @@ export default function MapPage() {
 
                 {/* Meta info */}
                 <div className="pt-2 border-t border-border/60 flex justify-between items-center text-[9px] text-muted-foreground/80 font-mono">
-                  <span>Updated: {new Date().toLocaleTimeString()}</span>
+                  <span>Updated: {selectedAsset.tag?.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : '--:--:--'}</span>
                   <a 
                     href={`/assets?id=${selectedAsset.id}`}
                     className="text-primary hover:underline font-bold text-[10px] tracking-wider transition-all uppercase"

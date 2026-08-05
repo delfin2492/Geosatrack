@@ -13,6 +13,7 @@ export interface TagData {
   humidity: number | null;
   battery: number | null;
   rssi: number | null;
+  lastSeen?: string | Date | null;
 }
 
 export interface MapAsset {
@@ -141,29 +142,35 @@ export default function FloorMap({
         pulseClass = 'animate-pulse';
       }
 
-      // Vector Map Pin teardrop icon shape
+      // Vector Map Pin radio signal icon shape
       const customIcon = L.divIcon({
         className: 'custom-asset-icon',
         html: `
-          <div style="display: flex; flex-direction: column; align-items: center; position: relative;">
-            <!-- Pulsing outer ring -->
-            ${(asset.status === 'moving' || asset.status === 'tilt_warning' || asset.status === 'fall_detected') ? `
-              <div class="absolute -top-1 w-10 h-10 rounded-full ${pulseClass}" style="background-color: ${markerColor}44; margin-top: -6px;"></div>
-            ` : ''}
-            
+          <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
             <!-- Pin label badge (using actual asset display name) -->
-            <div class="bg-slate-900/95 text-white border border-slate-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-md whitespace-nowrap mb-1">
+            <div class="bg-slate-900/95 text-white border border-slate-700 px-2 py-0.5 rounded text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10">
               ${asset.name}
             </div>
             
-            <!-- Map Pin SVG -->
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${markerColor}" width="32" height="32" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" stroke="#ffffff" stroke-width="1"/>
-            </svg>
+            <!-- Radio Signal Icon Area -->
+            <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #0f172a; border-radius: 50%; border: 1.5px solid ${markerColor}; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);">
+              <!-- Radio Icon SVG -->
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${markerColor}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                <circle cx="12" cy="12" r="1" fill="${markerColor}" />
+                <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14" />
+              </svg>
+              
+              <!-- Animasi warna menyala di tengah marker icon -->
+              <div class="absolute w-2.5 h-2.5 rounded-full animate-ping" style="background-color: ${markerColor}; opacity: 0.85;"></div>
+              <div class="absolute w-2 h-2 rounded-full" style="background-color: ${markerColor}; box-shadow: 0 0 8px ${markerColor};"></div>
+            </div>
+
+            <!-- Bayangan marker di bawahnya -->
+            <div style="width: 18px; height: 5px; background: rgba(15, 23, 42, 0.35); border-radius: 50%; filter: blur(2px); margin-top: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
           </div>
         `,
         iconSize: [60, 60],
-        iconAnchor: [30, 45],
+        iconAnchor: [30, 48],
       });
 
       const existingMarker = markersRef.current.get(asset.id);
