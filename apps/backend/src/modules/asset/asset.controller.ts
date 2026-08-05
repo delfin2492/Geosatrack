@@ -78,4 +78,14 @@ export class AssetController {
   unlinkTag(@GetTenantId() tenantId: string, @Param('id') id: string) {
     return this.assetService.unlinkTag(tenantId, id);
   }
+
+  @Get(':id/telemetry')
+  getTelemetryHistory(
+    @GetTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Query('attribute') attribute: string,
+    @Query('range') range?: string,
+  ) {
+    return this.assetService.getTelemetryHistory(tenantId, id, attribute, range || '1h');
+  }
 }

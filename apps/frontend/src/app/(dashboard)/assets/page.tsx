@@ -393,7 +393,10 @@ export default function AssetsPage() {
 
   // Info/Message states
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedHistoryAttr, setSelectedHistoryAttr] = useState('Temperature');
+  const [selectedHistoryAttr, setSelectedHistoryAttr] = useState('temperature');
+  const [selectedHistoryRange, setSelectedHistoryRange] = useState<'1h' | '6h' | '24h' | '7d'>('1h');
+  const [historyData, setHistoryData] = useState<{ timestamp: string; value: number }[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
 
@@ -410,6 +413,77 @@ export default function AssetsPage() {
     }
     return [];
   })();
+
+  // Fetch telemetry history when selection/filter changes
+  useEffect(() => {
+    if (!selectedAssetId || selectedAsset?.type?.startsWith('AGENT_') || !selectedHistoryAttr) {
+      setHistoryData([]);
+      return;
+    }
+
+    const fetchHistory = async () => {
+      setIsLoadingHistory(true);
+      try {
+        const headers: Record<string, string> = { 'x-tenant-id': tenantId || '' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(
+          `http://localhost:4000/api/assets/${selectedAssetId}/telemetry?attribute=${selectedHistoryAttr}&range=${selectedHistoryRange}`,
+          { headers }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setHistoryData(data);
+        } else {
+          setHistoryData([]);
+        }
+      } catch (e) {
+        console.error('Failed to fetch telemetry history:', e);
+        setHistoryData([]);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    fetchHistory();
+  }, [selectedAssetId, selectedHistoryAttr, selectedHistoryRange, token, selectedAsset?.type, tenantId]);
+
+  // SVG dynamic path builder for history chart
+  const generateSvgPath = (data: { timestamp: string; value: number }[]) => {
+    if (data.length === 0) return { linePath: '', areaPath: '', minVal: 0, maxVal: 0, latestVal: 0 };
+
+    const values = data.map(d => d.value);
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    const latestVal = values[values.length - 1];
+    const valRange = maxVal - minVal || 1;
+
+    if (data.length === 1) {
+      // Only 1 point
+      return {
+        linePath: 'M 0 50 L 100 50',
+        areaPath: 'M 0 50 L 100 50 L 100 100 L 0 100 Z',
+        minVal,
+        maxVal,
+        latestVal
+      };
+    }
+
+    const points = data.map((d, index) => {
+      const x = (index / (data.length - 1)) * 100;
+      // Scale y from 15 (maxVal) to 85 (minVal) for safety padding
+      const y = 85 - ((d.value - minVal) / valRange) * 70;
+      return { x, y };
+    });
+
+    let linePath = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+    for (let i = 1; i < points.length; i++) {
+      linePath += ` L ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)}`;
+    }
+
+    const areaPath = `${linePath} L 100 100 L 0 100 Z`;
+
+    return { linePath, areaPath, minVal, maxVal, latestVal };
+  };
 
   // Leaflet form map ref
   const formMapRef = useRef<HTMLDivElement | null>(null);
@@ -1363,7 +1437,7 @@ export default function AssetsPage() {
           /* ==================== VIEW MODE ==================== */
           <>
             {selectedAsset ? (
-              <div className="flex-1 flex flex-col">
+              <div className="flex-1 flex flex-col min-h-0">
                 <div className="border-b border-border p-4 flex items-center justify-between bg-secondary/15 shrink-0">
                   <div className="space-y-0.5">
                     <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -1433,7 +1507,7 @@ export default function AssetsPage() {
                   </Button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 flex flex-col lg:flex-row gap-6">
+                <div className="flex-1 overflow-y-auto p-5 flex flex-col lg:flex-row gap-6 min-h-0">
                   {/* Left Column: Info, Connection Parameters & Dynamic Attributes */}
                   <div className="flex-1 space-y-5">
                     
@@ -1569,7 +1643,7 @@ export default function AssetsPage() {
                             Attributes
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45 max-h-[350px] overflow-y-auto pr-1 select-text scrollbar-thin pb-4">
+                        <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45 max-h-[500px] overflow-y-auto pr-1 select-text scrollbar-thin pb-4">
                           {activeAttributes.length === 0 ? (
                             <div className="p-6 text-center text-muted-foreground/65 italic font-normal">
                               No attributes registered for this asset.
@@ -1657,38 +1731,86 @@ export default function AssetsPage() {
                     {/* HISTORY Card */}
                     {!selectedAsset.type.startsWith('AGENT_') && selectedAsset.type !== 'CITY' && selectedAsset.type !== 'BUILDING' && (
                       <Card className="border border-border/80">
-                        <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50 flex flex-row items-center justify-between">
+                        <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
                             History
                           </CardTitle>
-                          <select
-                            value={selectedHistoryAttr}
-                            onChange={(e) => setSelectedHistoryAttr(e.target.value)}
-                            className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer capitalize"
-                          >
-                            {activeAttributes.map((attr: any) => (
-                              <option key={attr.name} value={attr.name} className="bg-background text-foreground">
-                                {attr.name}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={selectedHistoryAttr}
+                              onChange={(e) => setSelectedHistoryAttr(e.target.value)}
+                              className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer capitalize border border-border/40 px-1.5 py-0.5 rounded"
+                            >
+                              {activeAttributes.map((attr: any) => (
+                                <option key={attr.name} value={attr.name} className="bg-background text-foreground">
+                                  {attr.name}
+                                </option>
+                              ))}
+                            </select>
+
+                            <select
+                              value={selectedHistoryRange}
+                              onChange={(e) => setSelectedHistoryRange(e.target.value as any)}
+                              className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer border border-border/40 px-1.5 py-0.5 rounded"
+                            >
+                              <option value="1h" className="bg-background text-foreground">1h</option>
+                              <option value="6h" className="bg-background text-foreground">6h</option>
+                              <option value="24h" className="bg-background text-foreground">24h</option>
+                              <option value="7d" className="bg-background text-foreground">7d</option>
+                            </select>
+                          </div>
                         </CardHeader>
                         <CardContent className="p-4 text-xs font-semibold">
-                          <div className="h-28 w-full bg-black/40 rounded-lg p-2 border border-border/30 relative flex flex-col justify-between">
-                            <svg className="w-full h-16" viewBox="0 0 100 100" preserveAspectRatio="none">
-                              <path
-                                d="M 0 80 Q 20 40 40 70 T 80 50 T 100 60"
-                                fill="none"
-                                stroke="rgba(var(--primary), 0.8)"
-                                strokeWidth="2.5"
-                              />
-                            </svg>
-                            <div className="flex justify-between text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-border/30">
-                              <span>10m ago</span>
-                              <span>5m ago</span>
-                              <span>Now</span>
+                          {isLoadingHistory ? (
+                            <div className="h-32 w-full flex items-center justify-center bg-black/20 rounded-lg border border-border/30 text-muted-foreground/60 text-[10px] italic">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2" />
+                              Loading trends...
                             </div>
-                          </div>
+                          ) : historyData.length === 0 ? (
+                            <div className="h-32 w-full flex flex-col items-center justify-center bg-black/20 rounded-lg border border-border/30 text-muted-foreground/60 text-[10px] italic p-4 text-center">
+                              No history data found for this period.
+                            </div>
+                          ) : (
+                            (() => {
+                              const { linePath, areaPath, minVal, maxVal, latestVal } = generateSvgPath(historyData);
+                              const unit = activeAttributes.find((a: any) => a.name === selectedHistoryAttr)?.unit || '';
+                              return (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between text-[9px] text-muted-foreground font-mono">
+                                    <span>Min: <strong className="text-foreground">{minVal.toFixed(1)}{unit}</strong></span>
+                                    <span>Latest: <strong className="text-primary">{latestVal.toFixed(1)}{unit}</strong></span>
+                                    <span>Max: <strong className="text-foreground">{maxVal.toFixed(1)}{unit}</strong></span>
+                                  </div>
+                                  
+                                  <div className="h-28 w-full bg-black/40 rounded-lg p-2 border border-border/30 relative flex flex-col justify-between overflow-hidden">
+                                    <svg className="w-full h-16 overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                      <defs>
+                                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                                          <stop offset="0%" stopColor="rgb(var(--primary))" stopOpacity="0.4" />
+                                          <stop offset="100%" stopColor="rgb(var(--primary))" stopOpacity="0.0" />
+                                        </linearGradient>
+                                      </defs>
+                                      <path d={areaPath} fill="url(#chartGradient)" />
+                                      <path
+                                        d={linePath}
+                                        fill="none"
+                                        stroke="rgb(var(--primary))"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                    </svg>
+                                    
+                                    <div className="flex justify-between text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-border/30">
+                                      <span>{new Date(historyData[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                      <span>{new Date(historyData[Math.floor(historyData.length / 2)].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                      <span>{new Date(historyData[historyData.length - 1].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          )}
                         </CardContent>
                       </Card>
                     )}

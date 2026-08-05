@@ -233,4 +233,80 @@ export class AssetService {
   async unlinkTag(tenantId: string, id: string) {
     return this.update(tenantId, id, { tagId: null });
   }
+
+  async getTelemetryHistory(
+    tenantId: string,
+    assetId: string,
+    attributeName: string,
+    range: string,
+  ) {
+    const asset = await this.prisma.asset.findFirst({
+      where: { id: assetId, tenantId },
+    });
+    if (!asset) {
+      throw new NotFoundException(`Asset with ID "${assetId}" not found.`);
+    }
+
+    if (!asset.tagId) {
+      return [];
+    }
+
+    // Determine time range start date
+    const now = new Date();
+    let startDate = new Date(now.getTime() - 60 * 60 * 1000); // default last 1 hour
+    if (range === '6h') {
+      startDate = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+    } else if (range === '24h') {
+      startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    } else if (range === '7d') {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (range === '30d') {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // Map attribute name to schema field name
+    const attrNameLower = attributeName.toLowerCase();
+    const fieldMap: Record<string, string> = {
+      temperature: 'temperature',
+      humidity: 'humidity',
+      voltage: 'battery',
+      battery: 'battery',
+      rssi: 'rssi',
+      gateway_rssi: 'rssi',
+      accel_x: 'accelX',
+      accel_y: 'accelY',
+      accel_z: 'accelZ',
+      pitch: 'pitch',
+      roll: 'roll',
+      hall: 'hall',
+    };
+
+    const dbField = fieldMap[attrNameLower];
+    if (!dbField) {
+      return [];
+    }
+
+    const telemetryLogs = (await this.prisma.telemetry.findMany({
+      where: {
+        tagId: asset.tagId,
+        timestamp: {
+          gte: startDate,
+        },
+      },
+      select: {
+        timestamp: true,
+        [dbField]: true,
+      },
+      orderBy: {
+        timestamp: 'asc',
+      },
+    })) as any[];
+
+    return telemetryLogs
+      .filter((t) => t[dbField] !== null)
+      .map((t) => ({
+        timestamp: t.timestamp.toISOString(),
+        value: Number(t[dbField]),
+      }));
+  }
 }
