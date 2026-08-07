@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { io, Socket } from 'socket.io-client';
+import { getApiUrl, getBackendUrl } from '../lib/api';
 
 interface Asset {
   id: string;
@@ -96,7 +97,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const headers: Record<string, string> = { 'x-tenant-id': tenantId };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const assetsRes = await fetch(`http://localhost:4000/api/assets`, { headers });
+      const apiUrl = getApiUrl();
+      const assetsRes = await fetch(`${apiUrl}/assets`, { headers });
       if (assetsRes.ok) {
         const assetsData = await assetsRes.json();
         setAssets(assetsData);
@@ -104,7 +106,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setAssets([]);
       }
 
-      const alertsRes = await fetch(`http://localhost:4000/api/assets/alerts?unresolvedOnly=true`, { headers });
+      const alertsRes = await fetch(`${apiUrl}/assets/alerts?unresolvedOnly=true`, { headers });
       if (alertsRes.ok) {
         const alertsData = await alertsRes.json();
         setAlerts(alertsData);
@@ -127,7 +129,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!initialized || !tenantId) return;
 
     setSocketStatus('connecting');
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:4000';
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || getBackendUrl();
     
     const socketIo = io(wsUrl, {
       transports: ['websocket', 'polling'],

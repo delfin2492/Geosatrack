@@ -11,4 +11,11 @@ export class AuthController {
   login(@Body() body: { email: string; password?: string }) {
     return this.authService.login(body.email, body.password);
   }
+
+  @Post('change-password')
+  changePassword(
+    @Body() body: { email: string; oldPassword?: string; newPassword: string },
+  ) {
+    return this.authService.changePassword(body.email, body.oldPassword, body.newPassword);
+  }
 }

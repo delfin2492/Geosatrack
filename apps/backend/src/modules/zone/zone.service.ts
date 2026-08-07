@@ -12,6 +12,8 @@ export class ZoneService {
     floorPlanUrl?: string,
     width?: number,
     height?: number,
+    offsetX?: number,
+    offsetY?: number,
   ) {
     // 1. Verify Site belongs to Tenant
     const site = await this.prisma.site.findFirst({
@@ -27,6 +29,8 @@ export class ZoneService {
         floorPlanUrl,
         width: width ?? 100.0,
         height: height ?? 100.0,
+        offsetX: offsetX ?? 0.0,
+        offsetY: offsetY ?? 0.0,
         siteId,
       },
     });
@@ -46,10 +50,19 @@ export class ZoneService {
             name: true,
           },
         },
+        anchors: true,
+        geofences: true,
+        assets: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
         _count: {
           select: {
             anchors: true,
             assets: true,
+            geofences: true,
           },
         },
       },
@@ -86,6 +99,8 @@ export class ZoneService {
     floorPlanUrl?: string,
     width?: number,
     height?: number,
+    offsetX?: number,
+    offsetY?: number,
   ) {
     await this.findOne(tenantId, id); // Verify ownership
 
@@ -106,6 +121,8 @@ export class ZoneService {
         floorPlanUrl: floorPlanUrl !== undefined ? floorPlanUrl : undefined,
         width: width !== undefined ? width : undefined,
         height: height !== undefined ? height : undefined,
+        offsetX: offsetX !== undefined ? offsetX : undefined,
+        offsetY: offsetY !== undefined ? offsetY : undefined,
       },
     });
   }

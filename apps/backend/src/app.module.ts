@@ -11,6 +11,7 @@ import { SiteModule } from './modules/site/site.module';
 import { ZoneModule } from './modules/zone/zone.module';
 import { AssetModule } from './modules/asset/asset.module';
 import { FloorplanModule } from './modules/floorplan/floorplan.module';
+import { RuleModule } from './modules/rule/rule.module';
 import {
   KeycloakConnectModule,
   TokenValidation,
@@ -41,6 +42,7 @@ import { AuthModule } from './modules/auth/auth.module';
     ZoneModule,
     AssetModule,
     FloorplanModule,
+    RuleModule,
   ],
   controllers: [AppController],
   providers: [AppService],

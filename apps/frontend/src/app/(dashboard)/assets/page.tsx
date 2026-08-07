@@ -3,16 +3,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
+import { getApiUrl, getBackendUrl } from '../../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
-import { 
-  Folder, 
-  MapPin, 
-  Boxes, 
-  FileText, 
-  Plus, 
+import {
+  Folder,
+  MapPin,
+  Boxes,
+  FileText,
+  Plus,
   Trash2,
   Edit,
   Save,
@@ -22,7 +23,8 @@ import {
   Activity,
   X,
   Globe,
-  Code
+  Code,
+  Copy
 } from 'lucide-react';
 
 const defaultTeltonikaDecodeCode = `//====================================================
@@ -344,9 +346,23 @@ const buildAssetTree = (flatAssets: any[]): TreeAsset[] => {
   return roots;
 };
 
+interface TenantQuota {
+  agentLimit: number;
+  agentCount: number;
+  agentRemaining: number;
+  isAgentLimitReached: boolean;
+  assetLimit: number;
+  assetCount: number;
+  assetRemaining: number;
+  isAssetLimitReached: boolean;
+}
+
 export default function AssetsPage() {
-  const { tenantId, token } = useAuth();
+  const { tenantId, token, isAdmin } = useAuth();
   const { assets, setAssets } = useSocket();
+
+  // Tenant Quota state
+  const [quota, setQuota] = useState<TenantQuota | null>(null);
 
   // Search/Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -387,7 +403,7 @@ export default function AssetsPage() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
   };
-  
+
   // Dynamic parameters
   const [attributes, setAttributes] = useState<AssetAttribute[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
@@ -439,7 +455,7 @@ export default function AssetsPage() {
         const headers: Record<string, string> = { 'x-tenant-id': tenantId || '' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(
-          `http://localhost:4000/api/assets/${selectedAssetId}/telemetry?attribute=${selectedHistoryAttr}&range=${selectedHistoryRange}`,
+          `${getApiUrl()}/assets/${selectedAssetId}/telemetry?attribute=${selectedHistoryAttr}&range=${selectedHistoryRange}`,
           { headers }
         );
         if (res.ok) {
@@ -503,16 +519,32 @@ export default function AssetsPage() {
   // Leaflet view-only map ref
   const viewMapRef = useRef<HTMLDivElement | null>(null);
 
+  const fetchQuota = async () => {
+    if (!tenantId) return;
+    try {
+      const headers: Record<string, string> = { 'x-tenant-id': tenantId };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${getApiUrl()}/assets/quota`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setQuota(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch tenant quota:', e);
+    }
+  };
+
   const refreshAssets = async () => {
     if (!tenantId) return;
     try {
       const headers: Record<string, string> = { 'x-tenant-id': tenantId };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`http://localhost:4000/api/assets`, { headers });
+      const res = await fetch(`${getApiUrl()}/assets`, { headers });
       if (res.ok) {
         const data = await res.json();
         setAssets(data);
       }
+      fetchQuota();
     } catch (e) {
       console.error('Failed to refresh assets:', e);
     }
@@ -521,6 +553,7 @@ export default function AssetsPage() {
   useEffect(() => {
     if (tenantId) {
       refreshAssets();
+      fetchQuota();
       setSelectedAssetId(null);
       setMode('view');
     }
@@ -542,7 +575,7 @@ export default function AssetsPage() {
     setLatitude(asset.latitude !== null && asset.latitude !== undefined ? String(asset.latitude) : '');
     setLongitude(asset.longitude !== null && asset.longitude !== undefined ? String(asset.longitude) : '');
     setTagId(asset.tagId || '');
-    
+
     // Parse custom configurations
     try {
       if (asset.description && asset.description.startsWith('{')) {
@@ -552,7 +585,7 @@ export default function AssetsPage() {
         setMqttTopic(parsed.mqttTopic || '');
         setMqttPublishTopic(parsed.mqttPublishTopic || '');
         setMqttDecodeFunctionCode(parsed.mqttDecodeFunctionCode || '');
-        
+
         if (asset.type.startsWith('AGENT_')) {
           setCustomFields(parsed);
           setAttributes([]);
@@ -627,9 +660,9 @@ export default function AssetsPage() {
 
     setIsSubmitting(true);
     try {
-      const headers: Record<string, string> = { 
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-tenant-id': tenantId 
+        'x-tenant-id': tenantId
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -649,14 +682,14 @@ export default function AssetsPage() {
         });
       }
 
-      const res = await fetch(`http://localhost:4000/api/assets`, {
+      const res = await fetch(`${getApiUrl()}/assets`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           name,
           type: addModalSelectedType,
           parentId: parentId || null,
-          tagId: null, 
+          tagId: null,
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
           description: serializedDescription
@@ -687,9 +720,9 @@ export default function AssetsPage() {
 
     setIsSubmitting(true);
     try {
-      const headers: Record<string, string> = { 
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-tenant-id': tenantId 
+        'x-tenant-id': tenantId
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -710,7 +743,7 @@ export default function AssetsPage() {
         });
       }
 
-      const res = await fetch(`http://localhost:4000/api/assets/${selectedAssetId}`, {
+      const res = await fetch(`${getApiUrl()}/assets/${selectedAssetId}`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({
@@ -752,7 +785,7 @@ export default function AssetsPage() {
       const headers: Record<string, string> = { 'x-tenant-id': tenantId };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`http://localhost:4000/api/assets/${selectedAssetId}`, {
+      const res = await fetch(`${getApiUrl()}/assets/${selectedAssetId}`, {
         method: 'DELETE',
         headers
       });
@@ -768,6 +801,31 @@ export default function AssetsPage() {
       showToast('success', 'Asset successfully deleted.');
     } catch (err: any) {
       showToast('error', err.message || 'Error deleting asset.');
+    }
+  };
+
+  const handleDuplicateAsset = async () => {
+    if (!selectedAssetId || !tenantId || !selectedAsset) return;
+    try {
+      const headers: Record<string, string> = { 'x-tenant-id': tenantId };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${getApiUrl()}/assets/${selectedAssetId}/duplicate`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Failed to duplicate asset.');
+      }
+
+      const newAsset = await res.json();
+      await refreshAssets();
+      setSelectedAssetId(newAsset.id);
+      showToast('success', `Asset "${selectedAsset.name}" berhasil diduplikat.`);
+    } catch (err: any) {
+      showToast('error', err.message || 'Error duplicating asset.');
     }
   };
 
@@ -937,11 +995,10 @@ export default function AssetsPage() {
         <div
           onClick={() => handleSelectAsset(node)}
           style={{ paddingLeft: `${level * 14 + 10}px` }}
-          className={`flex items-center gap-2 py-1.5 pr-2.5 rounded cursor-pointer transition-all border ${
-            isSelected 
-              ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm' 
-              : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-          }`}
+          className={`flex items-center gap-2 py-1.5 pr-2.5 rounded cursor-pointer transition-all border ${isSelected
+            ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm'
+            : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+            }`}
         >
           <TypeIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
           <span className="truncate">{node.name}</span>
@@ -962,7 +1019,7 @@ export default function AssetsPage() {
 
   return (
     <div className="flex h-[calc(100vh-128px)] w-full gap-5 overflow-hidden">
-      
+
       {/* LEFT COLUMN: ASSETS SIDEBAR TREE */}
       <Card className="w-80 flex flex-col shrink-0 overflow-hidden border border-border">
         <div className="bg-secondary/40 border-b border-border p-3 flex items-center justify-between">
@@ -970,28 +1027,87 @@ export default function AssetsPage() {
             <Boxes className="h-4.5 w-4.5 text-primary" />
             Assets
           </span>
-          <div className="flex items-center gap-1">
-            <Button
-              onClick={handleDeleteAsset}
-              disabled={!selectedAssetId}
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-red-400 disabled:opacity-35 cursor-pointer"
-              title="Delete Selected Asset"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              onClick={handleOpenCreate}
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
-              title="Add Agent or Asset"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+          {isAdmin && (
+            <>
+              <Button
+                onClick={handleDeleteAsset}
+                disabled={!selectedAssetId}
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-red-400 disabled:opacity-35 cursor-pointer"
+                title="Delete Selected Asset"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                onClick={handleDuplicateAsset}
+                disabled={!selectedAssetId}
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-blue-400 disabled:opacity-35 cursor-pointer"
+                title="Duplicate Selected Asset"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                onClick={handleOpenCreate}
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Add Agent or Asset"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
         </div>
+
+        {/* Quota Usage Summary */}
+        {quota && (
+          <div className="p-3 border-b border-border bg-secondary/20 space-y-2">
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              {/* Agent Quota Badge */}
+              <div className={`p-2 rounded-lg border ${quota.isAgentLimitReached ? 'bg-red-950/30 border-red-500/40' : 'bg-secondary/40 border-border text-foreground'}`}>
+                <div className="flex justify-between items-center font-bold">
+                  <span>Agent Usage</span>
+                  <Badge variant={quota.isAgentLimitReached ? 'destructive' : 'secondary'} className="text-[8px] px-1 py-0 font-mono">
+                    {quota.isAgentLimitReached ? 'FULL' : 'OK'}
+                  </Badge>
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-xs font-mono font-bold">{quota.agentCount} / {quota.agentLimit}</span>
+                  <span className="text-[9px] text-muted-foreground">{quota.agentRemaining} left</span>
+                </div>
+                <div className="w-full bg-secondary/80 h-1 rounded-full mt-1 overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${quota.isAgentLimitReached ? 'bg-red-500' : 'bg-primary'}`}
+                    style={{ width: `${Math.min(100, (quota.agentCount / quota.agentLimit) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Asset Quota Badge */}
+              <div className={`p-2 rounded-lg border ${quota.isAssetLimitReached ? 'bg-amber-950/30 border-amber-500/40 text-amber-300' : 'bg-secondary/40 border-border text-foreground'}`}>
+                <div className="flex justify-between items-center font-bold">
+                  <span>Asset Usage</span>
+                  <Badge variant={quota.isAssetLimitReached ? 'destructive' : 'secondary'} className="text-[8px] px-1 py-0 font-mono">
+                    {quota.isAssetLimitReached ? 'FULL' : 'OK'}
+                  </Badge>
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-xs font-mono font-bold">{quota.assetCount} / {quota.assetLimit}</span>
+                  <span className="text-[9px] text-muted-foreground">{quota.assetRemaining} left</span>
+                </div>
+                <div className="w-full bg-secondary/80 h-1 rounded-full mt-1 overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${quota.isAssetLimitReached ? 'bg-amber-500' : 'bg-cyan-500'}`}
+                    style={{ width: `${Math.min(100, (quota.assetCount / quota.assetLimit) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Filter Input */}
         <div className="p-3 border-b border-border/60">
@@ -1145,7 +1261,7 @@ export default function AssetsPage() {
               {!type.startsWith('AGENT_') && (
                 <div className="space-y-3.5 pt-4 border-t border-border/60">
                   <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Asset-Level Ingestion Configuration (Optional)</span>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div className="space-y-1">
                       <label className="text-muted-foreground">MQTT Agent Link</label>
@@ -1326,8 +1442,8 @@ export default function AssetsPage() {
                                       if (i === idx) {
                                         const agent = assets.find(as => as.id === val);
                                         const defaultCode = agent?.type === 'AGENT_MQTT_TELTONIKA' ? defaultTeltonikaDecodeCode : defaultGenericAttributeCode;
-                                        return { 
-                                          ...a, 
+                                        return {
+                                          ...a,
                                           mqttAgentId: val || undefined,
                                           mqttTopic: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? 'json-gw-event/received_data/#' : '') : '',
                                           mqttValuePath: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? `$.${a.name}` : '') : '',
@@ -1463,33 +1579,44 @@ export default function AssetsPage() {
                       Created: {selectedAsset.createdAt ? new Date(selectedAsset.createdAt).toLocaleString() : '--'}
                     </p>
                   </div>
-                  <Button
-                    onClick={() => {
-                      setName(selectedAsset.name);
-                      setType(selectedAsset.type || 'FORKLIFT');
-                      setParentId(selectedAsset.parentId || '');
-                      setLatitude(selectedAsset.latitude !== null && selectedAsset.latitude !== undefined ? String(selectedAsset.latitude) : '');
-                      setLongitude(selectedAsset.longitude !== null && selectedAsset.longitude !== undefined ? String(selectedAsset.longitude) : '');
-                      
-                      try {
-                        if (selectedAsset.description && selectedAsset.description.startsWith('{')) {
-                          const parsed = JSON.parse(selectedAsset.description);
-                          setCustomFields(parsed);
-                          setDescription(parsed.notes || '');
-                          setMqttAgentId(parsed.mqttAgentId || '');
-                          setMqttTopic(parsed.mqttTopic || '');
-                          setMqttPublishTopic(parsed.mqttPublishTopic || '');
-                          setMqttDecodeFunctionCode(parsed.mqttDecodeFunctionCode || '');
+                  {isAdmin && (
+                    <Button
+                      onClick={() => {
+                        setName(selectedAsset.name);
+                        setType(selectedAsset.type || 'FORKLIFT');
+                        setParentId(selectedAsset.parentId || '');
+                        setLatitude(selectedAsset.latitude !== null && selectedAsset.latitude !== undefined ? String(selectedAsset.latitude) : '');
+                        setLongitude(selectedAsset.longitude !== null && selectedAsset.longitude !== undefined ? String(selectedAsset.longitude) : '');
 
-                          if (!selectedAsset.type.startsWith('AGENT_')) {
-                            if (parsed.attributes && Array.isArray(parsed.attributes)) {
-                              setAttributes(parsed.attributes);
-                            } else {
-                              const defaults = defaultAttributesLookup[selectedAsset.type] || [];
-                              setAttributes(defaults.map(d => ({ ...d, value: '' })));
+                        try {
+                          if (selectedAsset.description && selectedAsset.description.startsWith('{')) {
+                            const parsed = JSON.parse(selectedAsset.description);
+                            setCustomFields(parsed);
+                            setDescription(parsed.notes || '');
+                            setMqttAgentId(parsed.mqttAgentId || '');
+                            setMqttTopic(parsed.mqttTopic || '');
+                            setMqttPublishTopic(parsed.mqttPublishTopic || '');
+                            setMqttDecodeFunctionCode(parsed.mqttDecodeFunctionCode || '');
+
+                            if (!selectedAsset.type.startsWith('AGENT_')) {
+                              if (parsed.attributes && Array.isArray(parsed.attributes)) {
+                                setAttributes(parsed.attributes);
+                              } else {
+                                const defaults = defaultAttributesLookup[selectedAsset.type] || [];
+                                setAttributes(defaults.map(d => ({ ...d, value: '' })));
+                              }
                             }
+                          } else {
+                            setCustomFields({});
+                            setDescription(selectedAsset.description || '');
+                            setMqttAgentId('');
+                            setMqttTopic('');
+                            setMqttPublishTopic('');
+                            setMqttDecodeFunctionCode('');
+                            const defaults = defaultAttributesLookup[selectedAsset.type] || [];
+                            setAttributes(defaults.map(d => ({ ...d, value: '' })));
                           }
-                        } else {
+                        } catch (e) {
                           setCustomFields({});
                           setDescription(selectedAsset.description || '');
                           setMqttAgentId('');
@@ -1499,30 +1626,21 @@ export default function AssetsPage() {
                           const defaults = defaultAttributesLookup[selectedAsset.type] || [];
                           setAttributes(defaults.map(d => ({ ...d, value: '' })));
                         }
-                      } catch (e) {
-                        setCustomFields({});
-                        setDescription(selectedAsset.description || '');
-                        setMqttAgentId('');
-                        setMqttTopic('');
-                        setMqttPublishTopic('');
-                        setMqttDecodeFunctionCode('');
-                        const defaults = defaultAttributesLookup[selectedAsset.type] || [];
-                        setAttributes(defaults.map(d => ({ ...d, value: '' })));
-                      }
-                      setMode('edit');
-                    }}
-                    variant="outline"
-                    className="flex items-center gap-1.5 h-8 text-[11px] font-bold"
-                  >
-                    <Edit className="h-3.5 w-3.5" />
-                    Modify
-                  </Button>
+                        setMode('edit');
+                      }}
+                      variant="outline"
+                      className="flex items-center gap-1.5 h-8 text-[11px] font-bold"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                      Modify
+                    </Button>
+                  )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-5 flex flex-col lg:flex-row gap-6 min-h-0">
                   {/* Left Column: Info, Connection Parameters & Dynamic Attributes */}
                   <div className="flex-1 space-y-5">
-                    
+
                     {/* INFO Card */}
                     <Card className="border border-border/80">
                       <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
@@ -1564,8 +1682,8 @@ export default function AssetsPage() {
                           <div className="flex items-center justify-between py-2 border-b border-border/40">
                             <span className="text-muted-foreground">Last Update:</span>
                             <span className="text-foreground font-bold">
-                              {selectedAsset.tag?.lastSeen 
-                                ? new Date(selectedAsset.tag.lastSeen).toLocaleString() 
+                              {selectedAsset.tag?.lastSeen
+                                ? new Date(selectedAsset.tag.lastSeen).toLocaleString()
                                 : (selectedAsset.updatedAt ? new Date(selectedAsset.updatedAt).toLocaleString() : '--')
                               }
                             </span>
@@ -1706,7 +1824,7 @@ export default function AssetsPage() {
 
                   {/* Right Column: Location, History */}
                   <div className="w-full lg:w-80 shrink-0 space-y-5">
-                    
+
                     {/* LOCATION Card */}
                     <Card className="border border-border/80 overflow-hidden">
                       <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50">
@@ -1784,40 +1902,88 @@ export default function AssetsPage() {
                             </div>
                           ) : (
                             (() => {
-                              const { linePath, areaPath, minVal, maxVal, latestVal } = generateSvgPath(historyData);
+                              const { linePath: _lp, areaPath: _ap, minVal, maxVal, latestVal } = generateSvgPath(historyData);
                               const unit = activeAttributes.find((a: any) => a.name === selectedHistoryAttr)?.unit || '';
+
+                              // Build smooth cubic bezier paths
+                              const values = historyData.map(d => d.value);
+                              const valRange = (maxVal - minVal) || 1;
+                              const pts = historyData.map((d, i) => ({
+                                x: (i / Math.max(historyData.length - 1, 1)) * 100,
+                                y: 82 - ((d.value - minVal) / valRange) * 68,
+                              }));
+
+                              let smoothLine = pts.length > 0 ? `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}` : '';
+                              for (let i = 1; i < pts.length; i++) {
+                                const cp1x = ((pts[i].x - pts[i - 1].x) * 0.35 + pts[i - 1].x).toFixed(2);
+                                const cp2x = (pts[i].x - (pts[i].x - pts[i - 1].x) * 0.35).toFixed(2);
+                                smoothLine += ` C ${cp1x} ${pts[i - 1].y.toFixed(2)}, ${cp2x} ${pts[i].y.toFixed(2)}, ${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)}`;
+                              }
+                              const smoothArea = pts.length > 0 ? `${smoothLine} L 100 100 L 0 100 Z` : '';
+                              const lastPt = pts[pts.length - 1];
+
                               return (
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between text-[9px] text-muted-foreground font-mono">
-                                    <span>Min: <strong className="text-foreground">{minVal.toFixed(1)}{unit}</strong></span>
-                                    <span>Latest: <strong className="text-primary">{latestVal.toFixed(1)}{unit}</strong></span>
-                                    <span>Max: <strong className="text-foreground">{maxVal.toFixed(1)}{unit}</strong></span>
+                                <div className="space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">{selectedHistoryAttr}</p>
+                                      <p className="text-xl font-bold text-foreground tabular-nums">
+                                        {latestVal.toFixed(1)}<span className="text-xs text-muted-foreground font-normal ml-0.5">{unit}</span>
+                                      </p>
+                                    </div>
+                                    <div className="text-right space-y-0.5">
+                                      <p className="text-[9px] text-muted-foreground font-mono">{historyData.length} data points</p>
+                                      <p className="text-[9px] text-muted-foreground/60 font-mono">
+                                        {minVal.toFixed(1)} — {maxVal.toFixed(1)}{unit}
+                                      </p>
+                                    </div>
                                   </div>
-                                  
-                                  <div className="h-28 w-full bg-black/40 rounded-lg p-2 border border-border/30 relative flex flex-col justify-between overflow-hidden">
-                                    <svg className="w-full h-16 overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+
+                                  <div className="h-36 w-full rounded-xl overflow-hidden relative bg-gradient-to-b from-background/50 to-black/30 border border-border/20">
+                                    <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
                                       <defs>
-                                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor="rgb(var(--primary))" stopOpacity="0.4" />
-                                          <stop offset="100%" stopColor="rgb(var(--primary))" stopOpacity="0.0" />
+                                        <linearGradient id={`grad-${selectedHistoryAttr}`} x1="0" y1="0" x2="0" y2="1">
+                                          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.5" />
+                                          <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.02" />
                                         </linearGradient>
+                                        <filter id="glow">
+                                          <feGaussianBlur stdDeviation="1.5" result="coloredBlur" />
+                                          <feMerge>
+                                            <feMergeNode in="coloredBlur" />
+                                            <feMergeNode in="SourceGraphic" />
+                                          </feMerge>
+                                        </filter>
                                       </defs>
-                                      <path d={areaPath} fill="url(#chartGradient)" />
+                                      {/* Grid lines */}
+                                      {[25, 50, 75].map(y => (
+                                        <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="hsl(var(--border))" strokeWidth="0.5" strokeOpacity="0.4" />
+                                      ))}
+                                      {/* Area fill */}
+                                      <path d={smoothArea} fill={`url(#grad-${selectedHistoryAttr})`} />
+                                      {/* Line */}
                                       <path
-                                        d={linePath}
+                                        d={smoothLine}
                                         fill="none"
-                                        stroke="rgb(var(--primary))"
+                                        stroke="hsl(var(--primary))"
                                         strokeWidth="2"
                                         strokeLinecap="round"
-                                        strokeLinejoin="round"
+                                        filter="url(#glow)"
+                                        vectorEffect="non-scaling-stroke"
                                       />
+                                      {/* Latest value dot */}
+                                      {lastPt && (
+                                        <>
+                                          <circle cx={lastPt.x} cy={lastPt.y} r="2.5" fill="hsl(var(--primary))" filter="url(#glow)" />
+                                          <circle cx={lastPt.x} cy={lastPt.y} r="4" fill="none" stroke="hsl(var(--primary))" strokeWidth="1" strokeOpacity="0.4" />
+                                        </>
+                                      )}
                                     </svg>
-                                    
-                                    <div className="flex justify-between text-[8px] text-muted-foreground font-mono pt-1.5 border-t border-border/30">
-                                      <span>{new Date(historyData[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                      <span>{new Date(historyData[Math.floor(historyData.length / 2)].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                      <span>{new Date(historyData[historyData.length - 1].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    </div>
+                                  </div>
+
+                                  <div className="flex justify-between text-[8px] text-muted-foreground/60 font-mono">
+                                    <span>{new Date(historyData[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    <span>{new Date(historyData[Math.floor(historyData.length / 2)].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    <span>{new Date(historyData[historyData.length - 1].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   </div>
                                 </div>
                               );
@@ -1846,7 +2012,7 @@ export default function AssetsPage() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/35 flex items-center justify-center p-4">
           <Card className="w-full max-w-3xl h-[550px] flex flex-col overflow-hidden border border-border shadow-2xl">
-            
+
             {/* Modal Title bar */}
             <div className="bg-secondary/40 border-b border-border px-4 py-3 flex items-center justify-between shrink-0">
               <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
@@ -1864,10 +2030,10 @@ export default function AssetsPage() {
 
             {/* Split panel layout */}
             <div className="flex-1 flex overflow-hidden">
-              
+
               {/* Left sidebar selector inside modal */}
               <div className="w-64 border-r border-border bg-card flex flex-col overflow-y-auto shrink-0 select-none">
-                
+
                 {/* Category togglers */}
                 <div className="grid grid-cols-2 p-2 gap-1.5 border-b border-border bg-secondary/15">
                   <button
@@ -1877,11 +2043,10 @@ export default function AssetsPage() {
                       setAddModalSelectedType('AGENT_MQTT_TELTONIKA');
                       setCustomFields({});
                     }}
-                    className={`py-1.5 text-[10px] uppercase tracking-wider font-bold rounded border transition-all cursor-pointer ${
-                      addModalTab === 'AGENT'
-                        ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm'
-                        : 'border-transparent text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`py-1.5 text-[10px] uppercase tracking-wider font-bold rounded border transition-all cursor-pointer ${addModalTab === 'AGENT'
+                      ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     Agents
                   </button>
@@ -1892,11 +2057,10 @@ export default function AssetsPage() {
                       setAddModalSelectedType('CITY');
                       setCustomFields({});
                     }}
-                    className={`py-1.5 text-[10px] uppercase tracking-wider font-bold rounded border transition-all cursor-pointer ${
-                      addModalTab === 'ASSET'
-                        ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm'
-                        : 'border-transparent text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`py-1.5 text-[10px] uppercase tracking-wider font-bold rounded border transition-all cursor-pointer ${addModalTab === 'ASSET'
+                      ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     Assets
                   </button>
@@ -1915,11 +2079,10 @@ export default function AssetsPage() {
                           setAddModalSelectedType(item.key);
                           setCustomFields({});
                         }}
-                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-left transition-all border ${
-                          isSelected
-                            ? 'bg-secondary border-border text-foreground font-bold'
-                            : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-                        }`}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-left transition-all border ${isSelected
+                          ? 'bg-secondary border-border text-foreground font-bold'
+                          : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
+                          }`}
                       >
                         <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span className="truncate">{item.label}</span>
@@ -1940,6 +2103,15 @@ export default function AssetsPage() {
                       {currentAddModalTypes.find((t) => t.key === addModalSelectedType)?.label || addModalSelectedType}
                     </Badge>
                   </div>
+
+                  {(addModalTab === 'AGENT' ? quota?.isAgentLimitReached : quota?.isAssetLimitReached) && (
+                    <div className="p-3 rounded-xl bg-destructive/15 border border-destructive/40 text-destructive text-xs font-bold flex items-center gap-2">
+                      <span className="text-sm">⚠️</span>
+                      <span>
+                        Quota capacity {addModalTab === 'AGENT' ? 'Agent' : 'Asset'} has reached the maximum limit ({addModalTab === 'AGENT' ? `${quota?.agentCount}/${quota?.agentLimit}` : `${quota?.assetCount}/${quota?.assetLimit}`}). Contact the administrator to upgrade your license.
+                      </span>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
@@ -2040,10 +2212,14 @@ export default function AssetsPage() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || (addModalTab === 'AGENT' ? !!quota?.isAgentLimitReached : !!quota?.isAssetLimitReached)}
                     className="h-8.5 font-bold uppercase tracking-wider text-[10px]"
                   >
-                    Add
+                    {(addModalTab === 'AGENT' ? quota?.isAgentLimitReached : quota?.isAssetLimitReached)
+                      ? 'Quota Limit Reached'
+                      : isSubmitting
+                        ? 'Adding...'
+                        : 'Add'}
                   </Button>
                 </div>
               </form>
@@ -2058,13 +2234,12 @@ export default function AssetsPage() {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`p-3.5 rounded-xl border shadow-xl flex items-center justify-between text-xs font-semibold animate-in slide-in-from-bottom duration-300 ${
-              t.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : t.type === 'error'
+            className={`p-3.5 rounded-xl border shadow-xl flex items-center justify-between text-xs font-semibold animate-in slide-in-from-bottom duration-300 ${t.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              : t.type === 'error'
                 ? 'bg-red-500/10 border-red-500/30 text-red-400'
                 : 'bg-blue-500/10 border-blue-500/30 text-blue-400'
-            }`}
+              }`}
           >
             <span>{t.message}</span>
             <button

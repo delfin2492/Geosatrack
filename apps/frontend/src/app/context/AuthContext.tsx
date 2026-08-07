@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type Keycloak from 'keycloak-js';
 
+import { getApiUrl, getKeycloakUrl } from '../lib/api';
+
 export interface UserSession {
   id: string;
   email: string;
@@ -11,6 +13,8 @@ export interface UserSession {
   isVerified: boolean;
   tenantId: string;
   tenantName: string;
+  tenantLogoUrl?: string;
+  tenantAdminEmail?: string;
 }
 
 interface AuthContextType {
@@ -25,12 +29,14 @@ interface AuthContextType {
   tenantName: string | null;
   token: string | null;
   isSuperAdmin: boolean;
+  isAdmin: boolean;
   isImpersonating: boolean;
   login: () => void;
   loginWithCredentials: (email: string, password?: string) => Promise<any>;
   switchTenantContext: (tenantId: string, tenantName: string) => void;
   exitImpersonation: () => void;
   logout: () => void;
+  updateSession: (updates: Partial<UserSession>) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -45,12 +51,14 @@ const AuthContext = createContext<AuthContextType>({
   tenantName: null,
   token: null,
   isSuperAdmin: false,
+  isAdmin: false,
   isImpersonating: false,
   login: () => {},
   loginWithCredentials: async () => {},
   switchTenantContext: () => {},
   exitImpersonation: () => {},
   logout: () => {},
+  updateSession: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -92,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const KeycloakClass = (await import('keycloak-js')).default;
 
-        const url = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'http://localhost:8080';
+        const url = getKeycloakUrl();
         const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'geomesh';
         const clientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || 'geomesh-frontend';
 
@@ -141,7 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loginWithCredentials = async (emailStr: string, passwordStr?: string) => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+    const apiUrl = getApiUrl();
     const res = await fetch(`${apiUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -161,6 +169,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isVerified: result.user.isVerified,
       tenantId: result.user.tenantId,
       tenantName: result.tenant?.name || 'PT ABC Logistics',
+      tenantLogoUrl: result.tenant?.logoUrl || undefined,
+      tenantAdminEmail: result.tenant?.adminEmail || undefined,
     };
 
     setUser(userSession);
@@ -209,7 +219,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateSession = (updates: Partial<UserSession>) => {
+    if (!user) return;
+    const updated: UserSession = { ...user, ...updates };
+    setUser(updated);
+    localStorage.setItem('geomesh_user_session', JSON.stringify(updated));
+  };
+
   const isSuperAdmin = user?.role === 'superadmin';
+  const isAdmin = user?.role === 'tenant_admin' || user?.role === 'superadmin';
 
   return (
     <AuthContext.Provider
@@ -219,18 +237,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         initialized,
         user,
         role: user?.role || null,
-        username: user?.name || null,
+        username: user?.email || null,
         email: user?.email || null,
         tenantId: user?.tenantId || null,
         tenantName: user?.tenantName || null,
         token,
         isSuperAdmin,
+        isAdmin,
         isImpersonating: !!originalTenant,
         login,
         loginWithCredentials,
         switchTenantContext,
         exitImpersonation,
         logout,
+        updateSession,
       }}
     >
       {children}

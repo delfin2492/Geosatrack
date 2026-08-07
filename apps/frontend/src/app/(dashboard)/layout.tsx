@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useTheme } from '../context/ThemeContext';
+import { getApiUrl, getBackendUrl } from '../lib/api';
 import { 
   Boxes, 
   Map, 
@@ -20,7 +21,8 @@ import {
   PenTool,
   ChevronRight,
   X,
-  Loader2
+  Loader2,
+  Settings
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -29,9 +31,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { 
     authenticated, 
     initialized, 
+    user,
     username, 
     role, 
-    isSuperAdmin, 
+    isSuperAdmin,
+    isAdmin,
     tenantId, 
     tenantName, 
     isImpersonating, 
@@ -39,6 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     exitImpersonation, 
     logout 
   } = useAuth();
+  const tenantLogoUrl = user?.tenantLogoUrl;
   const { theme, toggleTheme } = useTheme();
 
   // Impersonation modal popup states
@@ -55,7 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (showTenantPopup) {
       setLoadingTenants(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      const apiUrl = getApiUrl();
       fetch(`${apiUrl}/tenants`)
         .then((res) => res.json())
         .then((data) => {
@@ -84,6 +89,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'RTLS Planner', href: '/planner', icon: PenTool },
     { name: 'Automation Rules', href: '/rules', icon: ShieldAlert },
     { name: 'Insights', href: '/insights', icon: Activity },
+    // Settings hanya untuk Admin
+    ...(isAdmin ? [{ name: 'Settings', href: '/settings', icon: Settings }] : []),
   ];
 
   // Dynamic Navigation based on Superadmin status and Impersonation status
@@ -195,8 +202,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* User Account */}
             <div className="flex items-center gap-3 px-2 py-1.5 bg-secondary/35 rounded-lg border border-border/50">
-              <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0 relative">
-                {username?.charAt(0).toUpperCase() || 'U'}
+              <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0 relative overflow-hidden">
+                {tenantLogoUrl ? (
+                  <img
+                    src={`${getBackendUrl()}${tenantLogoUrl}`}
+                    alt="Tenant Logo"
+                    className="w-full h-full object-cover rounded-full"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  username?.charAt(0).toUpperCase() || 'U'
+                )}
               </div>
               <div className="flex flex-col overflow-hidden">
                 <span className="text-xs font-bold truncate text-foreground flex items-center gap-1">
@@ -204,7 +220,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   {username}
                 </span>
                 <span className="text-[9px] font-mono text-muted-foreground capitalize truncate">
-                  Role: {role || 'operator'}
+                  {role === 'tenant_admin' || role === 'superadmin' ? 'Admin Tenant' : 'Staff Tenant'}
                 </span>
               </div>
             </div>

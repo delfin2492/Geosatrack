@@ -39,6 +39,11 @@ export class AssetController {
     return this.assetService.findAll(tenantId, { status, zoneId, siteId, search });
   }
 
+  @Get('quota')
+  getQuota(@GetTenantId() tenantId: string) {
+    return this.assetService.getQuota(tenantId);
+  }
+
   @Get('anchors')
   getAnchors(@GetTenantId() tenantId: string) {
     return this.assetService.getAnchors(tenantId);
@@ -82,6 +87,11 @@ export class AssetController {
   @Post(':id/unlink-tag')
   unlinkTag(@GetTenantId() tenantId: string, @Param('id') id: string) {
     return this.assetService.unlinkTag(tenantId, id);
+  }
+
+  @Post(':id/duplicate')
+  duplicateAsset(@GetTenantId() tenantId: string, @Param('id') id: string) {
+    return this.assetService.duplicateAsset(tenantId, id);
   }
 
   @Get(':id/telemetry')

@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -71,6 +71,7 @@ export class TenantService {
           email: dto.adminEmail,
           name: dto.adminName,
           role: 'tenant_admin',
+          password: dto.password,
           tenantId: tenant.id,
         },
       });
@@ -141,5 +142,147 @@ export class TenantService {
     return this.prisma.tenant.delete({
       where: { id },
     });
+  }
+
+  // ─── Profile Settings ───────────────────────────────────────────────
+  async updateProfile(
+    tenantId: string,
+    data: { name?: string; adminEmail?: string },
+    file?: Express.Multer.File,
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException(`Tenant "${tenantId}" not found.`);
+
+    let logoUrl: string | undefined;
+
+    // Save uploaded logo file to disk
+    if (file && file.buffer) {
+      const fs = await import('fs');
+      const path = await import('path');
+      const uploadDir = path.join(process.cwd(), 'uploads', 'logos');
+      fs.mkdirSync(uploadDir, { recursive: true });
+      const ext = path.extname(file.originalname) || '.png';
+      const filename = `logo-${tenantId}-${Date.now()}${ext}`;
+      fs.writeFileSync(path.join(uploadDir, filename), file.buffer);
+      logoUrl = `/uploads/logos/${filename}`;
+    }
+
+    const updatePayload: any = {};
+    if (data.name) updatePayload.name = data.name;
+    if (logoUrl) updatePayload.logoUrl = logoUrl;
+    if (data.adminEmail) updatePayload.adminEmail = data.adminEmail;
+
+    const updatedTenant = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: updatePayload,
+    });
+
+    // Also update admin user email if provided
+    if (data.adminEmail) {
+      const adminUser = await this.prisma.user.findFirst({
+        where: { tenantId, role: 'tenant_admin' },
+      });
+      if (adminUser) {
+        await this.prisma.user.update({
+          where: { id: adminUser.id },
+          data: { email: data.adminEmail },
+        });
+      }
+    }
+
+    return {
+      message: 'Profile updated successfully.',
+      tenant: updatedTenant,
+    };
+  }
+
+
+  // ─── User Management ────────────────────────────────────────────────
+  async getTenantUsers(tenantId: string) {
+    return this.prisma.user.findMany({
+      where: { tenantId, NOT: { role: 'superadmin' } },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isVerified: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async createTenantUser(
+    tenantId: string,
+    data: { email: string; password?: string; role?: string },
+  ) {
+    const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
+    if (existing) {
+      throw new ConflictException(`User email "${data.email}" is already registered.`);
+    }
+
+    const allowedRoles = ['tenant_admin', 'staff'];
+    const role = allowedRoles.includes(data.role || '') ? data.role! : 'staff';
+
+    return this.prisma.user.create({
+      data: {
+        name: data.email.split('@')[0],
+        email: data.email,
+        password: data.password,
+        role,
+        isVerified: true,
+        tenantId,
+      },
+    });
+  }
+
+  async updateUserRole(tenantId: string, userId: string, newRole: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User "${userId}" not found in this tenant.`);
+    }
+
+    const allowedRoles = ['tenant_admin', 'staff'];
+    if (!allowedRoles.includes(newRole)) {
+      throw new BadRequestException(`Invalid role "${newRole}".`);
+    }
+
+    // Prevent downgrading the last admin
+    if (user.role === 'tenant_admin' && newRole !== 'tenant_admin') {
+      const adminCount = await this.prisma.user.count({
+        where: { tenantId, role: 'tenant_admin' },
+      });
+      if (adminCount <= 1) {
+        throw new BadRequestException('Cannot downgrade the last admin user of this tenant.');
+      }
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { role: newRole },
+    });
+  }
+
+  async deleteTenantUser(tenantId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+    });
+    if (!user) {
+      throw new NotFoundException(`User "${userId}" not found in this tenant.`);
+    }
+
+    // Prevent deleting the last admin
+    if (user.role === 'tenant_admin') {
+      const adminCount = await this.prisma.user.count({
+        where: { tenantId, role: 'tenant_admin' },
+      });
+      if (adminCount <= 1) {
+        throw new BadRequestException('Cannot delete the last admin user of this tenant.');
+      }
+    }
+
+    return this.prisma.user.delete({ where: { id: userId } });
   }
 }

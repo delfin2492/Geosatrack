@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RulesEngineService } from '../rule/rules-engine.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
 @Injectable()
 export class FloorplanService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rulesEngine: RulesEngineService,
+  ) {}
 
   // ─── Floor Plan Upload ──────────────────────────────────────────────
   async uploadFloorPlan(
@@ -255,10 +259,26 @@ export class FloorplanService {
     });
     if (!asset) throw new NotFoundException(`Asset "${assetId}" not found.`);
 
-    return this.prisma.asset.update({
+    const prevX = asset.planX !== null ? Number(asset.planX) : null;
+    const prevY = asset.planY !== null ? Number(asset.planY) : null;
+
+    const updated = await this.prisma.asset.update({
       where: { id: assetId },
       data: { planX, planY },
     });
+
+    await this.checkGeofenceTransitions(
+      tenantId,
+      asset.id,
+      asset.name,
+      asset.zoneId,
+      prevX,
+      prevY,
+      planX,
+      planY,
+    );
+
+    return updated;
   }
 
   // ─── Assign Asset/Mesh to Zone ──────────────────────────────────────
@@ -466,6 +486,9 @@ export class FloorplanService {
       });
     }
 
+    const prevX = dbAsset?.planX !== null && dbAsset?.planX !== undefined ? Number(dbAsset.planX) : null;
+    const prevY = dbAsset?.planY !== null && dbAsset?.planY !== undefined ? Number(dbAsset.planY) : null;
+
     const updatedAsset = await this.prisma.asset.update({
       where: { id: assetId },
       data: {
@@ -475,6 +498,17 @@ export class FloorplanService {
       },
       include: { zone: true, tag: true },
     });
+
+    await this.checkGeofenceTransitions(
+      tenantId,
+      assetId,
+      updatedAsset.name,
+      targetZoneId,
+      prevX,
+      prevY,
+      calculatedX,
+      calculatedY,
+    );
 
     return {
       asset: updatedAsset,
@@ -642,5 +676,57 @@ export class FloorplanService {
     }
 
     return violations;
+  }
+
+  async checkGeofenceTransitions(
+    tenantId: string,
+    assetId: string,
+    assetName: string,
+    zoneId: string | null,
+    prevX: number | null,
+    prevY: number | null,
+    newX: number,
+    newY: number,
+  ) {
+    if (!zoneId) return;
+
+    const geofences = await this.prisma.geofence.findMany({
+      where: { zoneId },
+    });
+
+    if (geofences.length === 0) return;
+
+    for (const geofence of geofences) {
+      try {
+        const polygon = JSON.parse(geofence.points) as { x: number; y: number }[];
+        if (!Array.isArray(polygon) || polygon.length < 3) continue;
+
+        const prevInside = prevX !== null && prevY !== null
+          ? this.isPointInPolygon({ x: prevX, y: prevY }, polygon)
+          : false;
+
+        const newInside = this.isPointInPolygon({ x: newX, y: newY }, polygon);
+
+        if (!prevInside && newInside) {
+          // ENTER event
+          await this.rulesEngine.processEvent(tenantId, 'GEOFENCE_ENTER', {
+            assetId,
+            assetName,
+            geofenceId: geofence.id,
+            geofenceName: geofence.name,
+          });
+        } else if (prevInside && !newInside) {
+          // EXIT event
+          await this.rulesEngine.processEvent(tenantId, 'GEOFENCE_EXIT', {
+            assetId,
+            assetName,
+            geofenceId: geofence.id,
+            geofenceName: geofence.name,
+          });
+        }
+      } catch (err) {
+        // Skip errors in rule execution so they don't break asset tracking
+      }
+    }
   }
 }

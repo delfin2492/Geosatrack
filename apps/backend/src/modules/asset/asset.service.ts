@@ -1,9 +1,51 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class AssetService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getQuota(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { agentLimit: true, assetLimit: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with ID "${tenantId}" not found.`);
+    }
+
+    const agentCount = await this.prisma.asset.count({
+      where: {
+        tenantId,
+        OR: [
+          { type: { startsWith: 'AGENT_' } },
+          { type: 'AGENT' },
+        ],
+      },
+    });
+
+    const assetCount = await this.prisma.asset.count({
+      where: {
+        tenantId,
+        NOT: [
+          { type: { startsWith: 'AGENT_' } },
+          { type: 'AGENT' },
+          { type: 'ANCHOR' },
+        ],
+      },
+    });
+
+    return {
+      agentLimit: tenant.agentLimit,
+      agentCount,
+      agentRemaining: Math.max(0, tenant.agentLimit - agentCount),
+      isAgentLimitReached: agentCount >= tenant.agentLimit,
+      assetLimit: tenant.assetLimit,
+      assetCount,
+      assetRemaining: Math.max(0, tenant.assetLimit - assetCount),
+      isAssetLimitReached: assetCount >= tenant.assetLimit,
+    };
+  }
 
   async create(
     tenantId: string,
@@ -20,6 +62,23 @@ export class AssetService {
     },
   ) {
     const { name, description, status, zoneId, tagId, type, latitude, longitude, parentId } = data;
+
+    // 0. Check Tenant Quota Limit
+    const quota = await this.getQuota(tenantId);
+    const isAgent = (type || '').startsWith('AGENT_') || type === 'AGENT';
+    const isAnchor = type === 'ANCHOR';
+
+    if (isAgent && quota.isAgentLimitReached) {
+      throw new BadRequestException(
+        `Kapasitas kuota Agent telah mencapai batas maksimum (${quota.agentCount}/${quota.agentLimit}). Hubungi administrator untuk upgrade lisensi.`,
+      );
+    }
+
+    if (!isAgent && !isAnchor && quota.isAssetLimitReached) {
+      throw new BadRequestException(
+        `Kapasitas kuota Asset telah mencapai batas maksimum (${quota.assetCount}/${quota.assetLimit}). Hubungi administrator untuk upgrade lisensi.`,
+      );
+    }
 
     // 1. Verify zone if provided
     if (zoneId) {
@@ -251,6 +310,49 @@ export class AssetService {
     return this.update(tenantId, id, { tagId: null });
   }
 
+  async duplicateAsset(tenantId: string, id: string) {
+    const source = await this.findOne(tenantId, id);
+
+    const quota = await this.getQuota(tenantId);
+    const isAgent = (source.type || '').startsWith('AGENT_') || source.type === 'AGENT';
+    const isAnchor = source.type === 'ANCHOR';
+
+    if (isAgent && quota.isAgentLimitReached) {
+      throw new BadRequestException(
+        `Tidak dapat menduplikasi Agent. Kapasitas kuota Agent sudah penuh (${quota.agentCount}/${quota.agentLimit}).`,
+      );
+    }
+
+    if (!isAgent && !isAnchor && quota.isAssetLimitReached) {
+      throw new BadRequestException(
+        `Tidak dapat menduplikasi Asset. Kapasitas kuota Asset sudah penuh (${quota.assetCount}/${quota.assetLimit}).`,
+      );
+    }
+
+    // Parse description to modify name in attributes
+    let descriptionJson: any = null;
+    try {
+      if (source.description) {
+        descriptionJson = JSON.parse(source.description);
+      }
+    } catch (e) {}
+
+    return this.prisma.asset.create({
+      data: {
+        name: `${source.name} (Copy)`,
+        description: source.description || null,
+        type: source.type,
+        status: 'static',
+        tenantId,
+        zoneId: source.zoneId || null,
+        tagId: null, // tagId tidak diduplikasi (1 tag = 1 asset)
+        latitude: source.latitude,
+        longitude: source.longitude,
+        parentId: source.parentId || null,
+      },
+    });
+  }
+
   async getTelemetryHistory(
     tenantId: string,
     assetId: string,
@@ -281,7 +383,24 @@ export class AssetService {
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
 
-    // Map attribute name to schema field name
+    // 1. Try TelemetryLog first (dynamic attributes)
+    const dynamicLogs = await (this.prisma as any).telemetryLog.findMany({
+      where: {
+        tagId: asset.tagId,
+        attrName: attributeName,
+        timestamp: { gte: startDate },
+      },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    if (dynamicLogs.length > 0) {
+      return dynamicLogs.map((t: any) => ({
+        timestamp: t.timestamp.toISOString(),
+        value: Number(t.value),
+      }));
+    }
+
+    // 2. Fallback: query legacy telemetry table via fieldMap
     const attrNameLower = attributeName.toLowerCase();
     const fieldMap: Record<string, string> = {
       temperature: 'temperature',
@@ -326,6 +445,7 @@ export class AssetService {
         value: Number(t[dbField]),
       }));
   }
+
 
   async getAnchors(tenantId: string) {
     const assetAnchors = await this.prisma.asset.findMany({

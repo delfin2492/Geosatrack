@@ -558,6 +558,32 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         rssi: decoded.rssi !== undefined ? parseInt(String(decoded.rssi), 10) : null,
       }
     });
+
+    // Save dynamic attribute history to TelemetryLog
+    try {
+      let parsedDesc: any = {};
+      if (asset.description) {
+        try { parsedDesc = JSON.parse(asset.description); } catch (e) {}
+      }
+      const registeredAttributes: any[] = parsedDesc.attributes || [];
+      const now = new Date();
+
+      for (const attr of registeredAttributes) {
+        if (!attr.name) continue;
+        const rawVal = decoded[attr.name];
+        if (rawVal === undefined || rawVal === null) continue;
+        const numVal = parseFloat(String(rawVal));
+        if (isNaN(numVal)) continue;
+
+        await this.prisma.telemetryLog.upsert({
+          where: { timestamp_tagId_attrName: { timestamp: now, tagId, attrName: attr.name } },
+          update: { value: numVal },
+          create: { timestamp: now, tagId, attrName: attr.name, value: numVal },
+        });
+      }
+    } catch (e) {
+      this.logger.error(`Failed to save dynamic TelemetryLog for tag ${tagId}:`, e);
+    }
   }
 
   private async processTelemetry(tenantId: string, tagId: string, telemetry: TelemetryPayload) {
@@ -674,6 +700,42 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.websocketGateway.sendToTenant(tenantId, 'telemetryNew', rawTelemetry);
+
+    // Save dynamic attribute history to TelemetryLog (for Wirepas standard path)
+    if (asset) {
+      try {
+        let parsedDesc: any = {};
+        if (asset.description) {
+          try { parsedDesc = JSON.parse(asset.description); } catch (e) {}
+        }
+        const registeredAttributes: any[] = parsedDesc.attributes || [];
+        const decodedVals: Record<string, any> = {
+          temperature, humidity,
+          battery: tag.battery, voltage: tag.battery,
+          rssi: tag.rssi,
+          accel_x, accel_y, accel_z,
+          pitch, roll,
+          hall: hall_sensor,
+        };
+        const now = rawTelemetry.timestamp;
+
+        for (const attr of registeredAttributes) {
+          if (!attr.name) continue;
+          const rawVal = decodedVals[attr.name.toLowerCase()] ?? decodedVals[attr.name];
+          if (rawVal === undefined || rawVal === null) continue;
+          const numVal = parseFloat(String(rawVal));
+          if (isNaN(numVal)) continue;
+
+          await this.prisma.telemetryLog.upsert({
+            where: { timestamp_tagId_attrName: { timestamp: now, tagId, attrName: attr.name } },
+            update: { value: numVal },
+            create: { timestamp: now, tagId, attrName: attr.name, value: numVal },
+          });
+        }
+      } catch (e) {
+        this.logger.error(`Failed to save dynamic TelemetryLog (Wirepas) for tag ${tagId}:`, e);
+      }
+    }
   }
 
   private async processStatus(tenantId: string, tagId: string, status: StatusPayload) {

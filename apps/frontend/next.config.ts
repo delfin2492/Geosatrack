@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  allowedDevOrigins: [
+    "geomesh.vantara.my.id",
+    "https://geomesh.vantara.my.id"
+  ]
 };
 
 export default nextConfig;

@@ -56,9 +56,10 @@ export default function FloorMap({
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const [mapStyle, setMapStyle] = useState<'google_roadmap' | 'osm_standard'>('google_roadmap');
+  const [mapReady, setMapReady] = useState(false);
 
-  const centerLat = -6.2088;
-  const centerLon = 106.8456;
+  const centerLat = -6.168911;
+  const centerLon = 106.899709;
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -69,7 +70,7 @@ export default function FloorMap({
 
     const map = L.map(mapContainerRef.current, {
       center: [centerLat, centerLon],
-      zoom: 16,
+      zoom: 17,
       zoomControl: false, // Zoom controls hidden
     });
     mapRef.current = map;
@@ -82,7 +83,17 @@ export default function FloorMap({
     
     (map as any)._tileLayer = defaultLayer;
 
+    setMapReady(true);
+
+    const timer = setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 150);
+
     return () => {
+      clearTimeout(timer);
+      setMapReady(false);
       map.remove();
       mapRef.current = null;
     };
@@ -91,7 +102,7 @@ export default function FloorMap({
   // Update Tile Layer based on Map Style Toggle
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapReady) return;
     const L = require('leaflet');
 
     if ((map as any)._tileLayer) {
@@ -108,12 +119,12 @@ export default function FloorMap({
     }).addTo(map);
 
     (map as any)._tileLayer = newLayer;
-  }, [mapStyle]);
+  }, [mapStyle, mapReady]);
 
   // Sync Markers dynamically on the map
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapReady) return;
     const L = require('leaflet');
 
     const currentAssetIds = new Set(assets.map(a => a.id));
@@ -126,10 +137,13 @@ export default function FloorMap({
       }
     }
 
+    const validCoords: [number, number][] = [];
+
     // Upsert existing/new assets
     assets.forEach((asset) => {
       const lat = asset.lat ?? centerLat;
       const lon = asset.lon ?? centerLon;
+      validCoords.push([lat, lon]);
 
       // Determine online/offline status based on lastSeen (threshold 5 minutes = 300,000 ms)
       const lastSeenDate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : null;
@@ -195,7 +209,19 @@ export default function FloorMap({
         markersRef.current.set(asset.id, marker);
       }
     });
-  }, [assets, onSelectAsset]);
+
+    // Auto fit map bounds if valid coordinates exist
+    if (validCoords.length > 0) {
+      if (validCoords.length === 1) {
+        map.setView(validCoords[0], 17);
+      } else {
+        const bounds = L.latLngBounds(validCoords);
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+        }
+      }
+    }
+  }, [assets, mapReady, onSelectAsset]);
 
   const handleReset = () => {
     if (mapRef.current) {

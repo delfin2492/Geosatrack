@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
+import { getApiUrl } from '../../lib/api';
 import FloorMap, { MapAsset } from '../../components/FloorMap';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -28,7 +29,7 @@ export default function MapPage() {
     try {
       const headers: Record<string, string> = { 'x-tenant-id': tenantId || '' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`http://localhost:4000/api/assets/anchors`, { headers });
+      const res = await fetch(`${getApiUrl()}/assets/anchors`, { headers });
       if (res.ok) {
         const data = await res.json();
         setDbAnchors(data);
@@ -84,7 +85,7 @@ export default function MapPage() {
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       
-      await fetch(`http://localhost:4000/api/assets/${id}`, {
+      await fetch(`${getApiUrl()}/assets/${id}`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({
@@ -108,6 +109,8 @@ export default function MapPage() {
           status: 'static',
           x: 34,
           y: 8,
+          lat: -6.1689,
+          lon: 106.8995,
           tag: {
             id: 'tag-439201',
             name: 'Teltonika Tag #1',
@@ -115,6 +118,7 @@ export default function MapPage() {
             humidity: 52.0,
             battery: 3.6,
             rssi: -62,
+            lastSeen: new Date().toISOString(),
           },
         },
         {
@@ -125,6 +129,8 @@ export default function MapPage() {
           status: 'tilt_warning',
           x: 42,
           y: 10,
+          lat: -6.1691,
+          lon: 106.8998,
           tag: {
             id: 'tag-439202',
             name: 'Teltonika Tag #3',
@@ -132,6 +138,7 @@ export default function MapPage() {
             humidity: 61.5,
             battery: 3.2,
             rssi: -84,
+            lastSeen: new Date().toISOString(),
           },
         },
         {
@@ -142,6 +149,8 @@ export default function MapPage() {
           status: 'static',
           x: 32,
           y: 22,
+          lat: -6.1688,
+          lon: 106.8999,
           tag: {
             id: 'tag-439205',
             name: 'Teltonika Tag #5',
@@ -149,6 +158,7 @@ export default function MapPage() {
             humidity: 55.0,
             battery: 3.5,
             rssi: -68,
+            lastSeen: new Date().toISOString(),
           },
         },
         {
@@ -159,6 +169,8 @@ export default function MapPage() {
           status: 'moving',
           x: 32,
           y: 28,
+          lat: -6.1692,
+          lon: 106.8994,
           tag: {
             id: 'tag-439204',
             name: 'Teltonika Tag #4',
@@ -166,23 +178,27 @@ export default function MapPage() {
             humidity: 48.0,
             battery: 3.6,
             rssi: -58,
+            lastSeen: new Date().toISOString(),
           },
         },
       ];
       const time = Date.now() / 2500;
       const mesh4 = mockNodes.find((m) => m.meshLabel === 'Mesh 4');
       if (mesh4) {
-        mesh4.x = 32 + Math.sin(time) * 6;
-        mesh4.y = 28 + Math.cos(time) * 4;
+        mesh4.lat = -6.1692 + Math.sin(time) * 0.0003;
+        mesh4.lon = 106.8994 + Math.cos(time) * 0.0003;
       }
       return mockNodes;
     }
 
-    const physicalAssets = assets.filter(
-      (a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING'
+    const displayableAssets = assets.filter(
+      (a) => !a.type.startsWith('AGENT_') && a.type !== 'CITY' && a.type !== 'BUILDING'
     );
 
-    return physicalAssets.map((a) => {
+    const baseLat = -6.168911;
+    const baseLon = 106.899709;
+
+    return displayableAssets.map((a) => {
       let x = 30;
       let y = 20;
       if (a.latitude !== null && a.latitude !== undefined) x = Number(a.latitude);
@@ -286,6 +302,22 @@ export default function MapPage() {
         statusVal = 'moving';
       }
 
+      // Convert coordinate to GPS lat/lon
+      let realLat = a.latitude !== null && a.latitude !== undefined ? Number(a.latitude) : baseLat;
+      let realLon = a.longitude !== null && a.longitude !== undefined ? Number(a.longitude) : baseLon;
+      
+      // If coordinate is in indoor 2D plan meters (positive number like 26.6m, 20.9m), offset from site base GPS
+      if (!isNaN(realLat) && !isNaN(realLon) && realLat > 0 && realLat < 90 && realLon > 0 && realLon < 90) {
+        const meterX = realLon;
+        const meterY = realLat;
+        realLat = baseLat + (meterY * 0.000009);
+        realLon = baseLon + (meterX * 0.000009);
+      } else if (isNaN(realLat) || realLat === 0) {
+        realLat = baseLat;
+      } else if (isNaN(realLon) || realLon === 0) {
+        realLon = baseLon;
+      }
+
       return {
         id: a.id,
         name: a.name,
@@ -294,8 +326,8 @@ export default function MapPage() {
         status: statusVal,
         x,
         y,
-        lat: x,
-        lon: y,
+        lat: realLat,
+        lon: realLon,
         tag: tagData,
       };
     });

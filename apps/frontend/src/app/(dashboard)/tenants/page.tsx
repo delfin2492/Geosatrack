@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -71,7 +72,7 @@ export default function TenantsPage() {
   const fetchTenants = async () => {
     setLoading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/tenants`);
       if (res.ok) {
         const data = await res.json();
@@ -100,7 +101,7 @@ export default function TenantsPage() {
 
     setIsSubmitting(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/tenants/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,7 +160,7 @@ export default function TenantsPage() {
     setIsSubmitting(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/tenants/${editingTenantId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -196,7 +197,7 @@ export default function TenantsPage() {
     }
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+      const apiUrl = getApiUrl();
       const res = await fetch(`${apiUrl}/tenants/${id}`, {
         method: 'DELETE',
       });

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -13,6 +13,8 @@ export class AuthService {
           select: {
             id: true,
             name: true,
+            logoUrl: true,
+            adminEmail: true,
           },
         },
       },
@@ -43,5 +45,28 @@ export class AuthService {
       },
       tenant: user.tenant,
     };
+  }
+
+  async changePassword(email: string, oldPassword?: string, newPassword?: string) {
+    if (!newPassword || newPassword.trim().length < 6) {
+      throw new BadRequestException('Password baru minimal 6 karakter.');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new NotFoundException(`Akun dengan email "${email}" tidak ditemukan.`);
+    }
+
+    // Verify old password if user has one stored
+    if (user.password && oldPassword && user.password !== oldPassword) {
+      throw new UnauthorizedException('Password lama tidak sesuai.');
+    }
+
+    await this.prisma.user.update({
+      where: { email },
+      data: { password: newPassword },
+    });
+
+    return { message: 'Password berhasil diubah.' };
   }
 }

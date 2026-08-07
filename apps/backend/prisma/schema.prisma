@@ -20,12 +20,15 @@ model Tenant {
   status      String    @default("active") // active, inactive, suspended
   agentLimit  Int       @default(5)
   assetLimit  Int       @default(100)
+  logoUrl     String?
+  adminEmail  String?
   users       User[]
   sites       Site[]
   gateways    Gateway[]
   anchors     Anchor[]
   assets      Asset[]
   alerts      Alert[]
+  rules       RuleFlow[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -64,6 +67,8 @@ model Zone {
   floorPlanUrl String?  // URL/Path denah lantai (PNG/SVG)
   width        Float    @default(100.0) // Lebar denah dalam meter (sumbu X)
   height       Float    @default(100.0) // Tinggi denah dalam meter (sumbu Y)
+  offsetX      Float    @default(0.0)   // Posisi X zona pada building plan (meter)
+  offsetY      Float    @default(0.0)   // Posisi Y zona pada building plan (meter)
   siteId       String
   site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   anchors      Anchor[]
@@ -193,4 +198,34 @@ model Telemetry {
   hall        Int?
 
   @@id([timestamp, tagId])
+}
+
+model TelemetryLog {
+  timestamp DateTime
+  tagId     String
+  attrName  String
+  value     Float
+
+  @@id([timestamp, tagId, attrName])
+}
+
+model RuleFlow {
+  id          String    @id @default(cuid())
+  name        String
+  isActive    Boolean   @default(true)
+  flowGraph   String    @db.Text
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logs        RuleLog[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model RuleLog {
+  id          String    @id @default(cuid())
+  ruleId      String
+  rule        RuleFlow  @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  status      String    // "SUCCESS" | "FAILED"
+  message     String    @db.Text
+  createdAt   DateTime  @default(now())
 }

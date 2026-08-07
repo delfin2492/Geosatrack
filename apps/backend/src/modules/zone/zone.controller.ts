@@ -21,8 +21,10 @@ export class ZoneController {
     @Body('floorPlanUrl') floorPlanUrl?: string,
     @Body('width') width?: number,
     @Body('height') height?: number,
+    @Body('offsetX') offsetX?: number,
+    @Body('offsetY') offsetY?: number,
   ) {
-    return this.zoneService.create(tenantId, siteId, name, floorPlanUrl, width, height);
+    return this.zoneService.create(tenantId, siteId, name, floorPlanUrl, width, height, offsetX, offsetY);
   }
 
   @Get()
@@ -47,8 +49,10 @@ export class ZoneController {
     @Body('floorPlanUrl') floorPlanUrl?: string,
     @Body('width') width?: number,
     @Body('height') height?: number,
+    @Body('offsetX') offsetX?: number,
+    @Body('offsetY') offsetY?: number,
   ) {
-    return this.zoneService.update(tenantId, id, name, siteId, floorPlanUrl, width, height);
+    return this.zoneService.update(tenantId, id, name, siteId, floorPlanUrl, width, height, offsetX, offsetY);
   }
 
   @Delete(':id')
