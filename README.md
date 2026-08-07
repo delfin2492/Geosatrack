@@ -298,4 +298,59 @@ gantt
 
 ---
 
+## 11. Panduan Instalasi & Menjalankan Platform
+
+Seluruh infrastruktur dan aplikasi GeoMesh (PostgreSQL, TimescaleDB, Redis, EMQX Broker, Keycloak, Nginx, NestJS Backend, dan Next.js Frontend) dikemas dan dapat dijalankan dengan mudah menggunakan Docker Compose.
+
+### 📋 Prasyarat Sistem
+*   [Docker Desktop](https://www.docker.com/products/docker-desktop/) (aktif & running WSL2 / Hyper-V)
+*   [Node.js v20+](https://nodejs.org/) (jika ingin melakukan pengembangan lokal di luar kontainer)
+*   [Git](https://git-scm.com/)
+
+### 🚀 Langkah-Langkah Instalasi
+
+1.  **Kloning Repositori**:
+    ```bash
+    git clone https://github.com/delfin2492/Geosatrack.git
+    cd Geosatrack
+    ```
+
+2.  **Konfigurasi Environment Variable**:
+    Salin file contoh konfigurasi `.env.example` menjadi `.env` di root folder:
+    ```bash
+    cp .env.example .env
+    ```
+    *Sesuaikan nilai port, IP host, kredensial database, JWT key, dan setting email SMTP jika diperlukan.*
+
+3.  **Jalankan Stack dengan Docker Compose**:
+    Jalankan perintah berikut di root folder untuk membangun image kontainer produksi dan mengaktifkan semua service di background:
+    ```bash
+    docker compose up --build -d
+    ```
+
+4.  **Inisialisasi Database (Prisma Sync)**:
+    Untuk memastikan skema database PostgreSQL/TimescaleDB terbuat dan tersinkronisasi sempurna dengan skema Prisma:
+    ```bash
+    docker compose exec backend npx prisma db push
+    ```
+
+5.  **Periksa Status Container**:
+    Pastikan semua container dalam status `Up` / `Running`:
+    ```bash
+    docker compose ps
+    ```
+
+### 🌐 Port Akses Layanan (NGINX Reverse Proxy)
+Aplikasi GeoMesh menggunakan **NGINX Reverse Proxy** sebagai pintu gerbang tunggal untuk menyatukan port akses sehingga terbebas dari masalah CORS dan SSL mismatch:
+*   **Web Dashboard Portal (Frontend & API Backend)**: [`http://localhost:3300`](http://localhost:3300)
+*   **Keycloak IAM Console**: [`http://localhost:8080`](http://localhost:8080)
+*   **EMQX MQTT Broker Dashboard**: [`http://localhost:18083`](http://localhost:18083) (Username: `admin`, Password: `public/password`)
+
+### ☁️ Konfigurasi Cloudflare Tunnel (Akses Publik)
+Untuk mempublikasikan server lokal ke publik, buatlah tunnel di Cloudflare Dashboard lalu hubungkan subdomain berikut ke localhost:
+1.  **Aplikasi Utama**: `geomesh.vantara.my.id` ➔ `http://localhost:3300`
+2.  **Keycloak Auth**: `geomesh-auth.vantara.my.id` ➔ `http://localhost:8080`
+
+---
+
 *Dikembangkan oleh Tim IoT Geomesh. Untuk informasi lebih lanjut mengenai dokumentasi API dan lisensi, silakan hubungi tim pengembang atau buka bagian `apps/backend/docs`.*
