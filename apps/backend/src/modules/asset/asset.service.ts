@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
+import { WebsocketGateway } from '../websocket/websocket.gateway';
+
 @Injectable()
 export class AssetService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly websocketGateway: WebsocketGateway,
+  ) {}
 
   async getQuota(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({
@@ -119,20 +124,48 @@ export class AssetService {
       }
     }
 
-    return this.prisma.asset.create({
+    let finalLat = latitude !== undefined ? latitude : null;
+    let finalLon = longitude !== undefined ? longitude : null;
+
+    if ((finalLat === null || finalLon === null) && description) {
+      try {
+        const parsed = JSON.parse(description);
+        const locAttr = parsed.attributes?.find((a: any) => a.dataType === 'GeoPoint' || a.name === 'location' || a.name === 'coordinates');
+        if (locAttr && locAttr.value && typeof locAttr.value === 'string' && locAttr.value.includes(',')) {
+          const parts = locAttr.value.split(',').map((s: string) => parseFloat(s.trim()));
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            finalLat = parts[0];
+            finalLon = parts[1];
+          }
+        }
+      } catch (e) {}
+    }
+
+    const createdAsset = await this.prisma.asset.create({
       data: {
         name,
         description,
         type: type ?? 'FORKLIFT',
         status: status ?? 'static',
-        latitude: latitude !== undefined ? latitude : null,
-        longitude: longitude !== undefined ? longitude : null,
+        latitude: finalLat,
+        longitude: finalLon,
         tenantId,
         zoneId: zoneId || null,
         tagId: tagId || null,
         parentId: parentId || null,
       },
     });
+
+    this.websocketGateway.sendToTenant(tenantId, 'systemLog', {
+      level: 'success',
+      source: 'ASSET_MANAGER',
+      deviceName: name,
+      message: `Asset [${type ?? 'FORKLIFT'}] successfully created`,
+      data: createdAsset,
+      timestamp: new Date().toISOString()
+    });
+
+    return createdAsset;
   }
 
   async findAll(
@@ -279,6 +312,23 @@ export class AssetService {
       }
     }
 
+    let finalLat = latitude;
+    let finalLon = longitude;
+
+    if (description && (finalLat === undefined || finalLon === undefined || finalLat === null || finalLon === null)) {
+      try {
+        const parsed = JSON.parse(description);
+        const locAttr = parsed.attributes?.find((a: any) => a.dataType === 'GeoPoint' || a.name === 'location' || a.name === 'coordinates');
+        if (locAttr && locAttr.value && typeof locAttr.value === 'string' && locAttr.value.includes(',')) {
+          const parts = locAttr.value.split(',').map((s: string) => parseFloat(s.trim()));
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            finalLat = parts[0];
+            finalLon = parts[1];
+          }
+        }
+      } catch (e) {}
+    }
+
     return this.prisma.asset.update({
       where: { id },
       data: {
@@ -288,8 +338,8 @@ export class AssetService {
         zoneId: zoneId !== undefined ? zoneId : undefined,
         tagId: tagId !== undefined ? tagId : undefined,
         type: type !== undefined ? type : undefined,
-        latitude: latitude !== undefined ? latitude : undefined,
-        longitude: longitude !== undefined ? longitude : undefined,
+        latitude: finalLat !== undefined ? finalLat : undefined,
+        longitude: finalLon !== undefined ? finalLon : undefined,
         parentId: parentId !== undefined ? parentId : undefined,
       },
     });

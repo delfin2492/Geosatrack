@@ -4,11 +4,14 @@ import { RulesEngineService } from '../rule/rules-engine.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { WebsocketGateway } from '../websocket/websocket.gateway';
+
 @Injectable()
 export class FloorplanService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rulesEngine: RulesEngineService,
+    private readonly websocketGateway: WebsocketGateway,
   ) {}
 
   // ─── Floor Plan Upload ──────────────────────────────────────────────
@@ -91,13 +94,12 @@ export class FloorplanService {
 
     // Map asset anchors
     const mappedAssetAnchors = assetAnchorsInZone.map((a) => {
-      // Priority: planX/planY -> latitude/longitude -> default center
       const posX = a.planX !== null && a.planX !== undefined
         ? Number(a.planX)
-        : (a.latitude !== null && a.latitude !== undefined ? Number(a.latitude) : zone.width / 2);
+        : zone.width / 2;
       const posY = a.planY !== null && a.planY !== undefined
         ? Number(a.planY)
-        : (a.longitude !== null && a.longitude !== undefined ? Number(a.longitude) : zone.height / 2);
+        : zone.height / 2;
 
       return {
         id: a.id,
@@ -149,8 +151,10 @@ export class FloorplanService {
       id: a.id,
       name: a.name,
       tagId: a.tagId,
-      x: a.latitude !== null ? Number(a.latitude) : 0,
-      y: a.longitude !== null ? Number(a.longitude) : 0,
+      x: a.planX !== null && a.planX !== undefined ? Number(a.planX) : 0,
+      y: a.planY !== null && a.planY !== undefined ? Number(a.planY) : 0,
+      latitude: a.latitude !== null && a.latitude !== undefined ? Number(a.latitude) : null,
+      longitude: a.longitude !== null && a.longitude !== undefined ? Number(a.longitude) : null,
       status: a.status || 'online',
       zoneId: a.zoneId,
       zone: a.zone,
@@ -202,8 +206,8 @@ export class FloorplanService {
         where: { id: anchorId },
         data: {
           zoneId,
-          latitude: posX,
-          longitude: posY,
+          planX: posX,
+          planY: posY,
         },
       });
     }
@@ -235,7 +239,7 @@ export class FloorplanService {
     if (assetAnchor) {
       return this.prisma.asset.update({
         where: { id: anchorId },
-        data: { zoneId: null },
+        data: { zoneId: null, planX: null, planY: null },
       });
     }
 
@@ -715,6 +719,14 @@ export class FloorplanService {
             geofenceId: geofence.id,
             geofenceName: geofence.name,
           });
+          this.websocketGateway.sendToTenant(tenantId, 'systemLog', {
+            level: 'warning',
+            source: 'GEOFENCE_ENGINE',
+            deviceName: assetName,
+            message: `Asset entered zone [${geofence.name}]`,
+            data: { assetId, geofenceId: geofence.id, event: 'ENTER' },
+            timestamp: new Date().toISOString()
+          });
         } else if (prevInside && !newInside) {
           // EXIT event
           await this.rulesEngine.processEvent(tenantId, 'GEOFENCE_EXIT', {
@@ -723,10 +735,60 @@ export class FloorplanService {
             geofenceId: geofence.id,
             geofenceName: geofence.name,
           });
+          this.websocketGateway.sendToTenant(tenantId, 'systemLog', {
+            level: 'info',
+            source: 'GEOFENCE_ENGINE',
+            deviceName: assetName,
+            message: `Asset exited zone [${geofence.name}]`,
+            data: { assetId, geofenceId: geofence.id, event: 'EXIT' },
+            timestamp: new Date().toISOString()
+          });
         }
       } catch (err) {
         // Skip errors in rule execution so they don't break asset tracking
       }
     }
+  }
+
+  // ─── 3D Scene Builder Layout Management ──────────────────────────────
+  async getZone3DLayout(tenantId: string, zoneId: string) {
+    const zone = await this.prisma.zone.findFirst({
+      where: { id: zoneId, site: { tenantId } },
+    });
+    if (!zone) {
+      throw new NotFoundException(`Zone "${zoneId}" not found for this tenant.`);
+    }
+
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'floorplans');
+    const layoutPath = path.join(uploadsDir, `${zoneId}_layout3d.json`);
+
+    if (fs.existsSync(layoutPath)) {
+      try {
+        const data = fs.readFileSync(layoutPath, 'utf-8');
+        return JSON.parse(data);
+      } catch (err) {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  async saveZone3DLayout(tenantId: string, zoneId: string, layout: any[]) {
+    const zone = await this.prisma.zone.findFirst({
+      where: { id: zoneId, site: { tenantId } },
+    });
+    if (!zone) {
+      throw new NotFoundException(`Zone "${zoneId}" not found for this tenant.`);
+    }
+
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'floorplans');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const layoutPath = path.join(uploadsDir, `${zoneId}_layout3d.json`);
+    fs.writeFileSync(layoutPath, JSON.stringify(layout, null, 2), 'utf-8');
+
+    return { success: true, count: Array.isArray(layout) ? layout.length : 0, zoneId };
   }
 }

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -51,6 +52,25 @@ export class FloorplanController {
     @Param('zoneId') zoneId: string,
   ) {
     return this.floorplanService.getZoneWithGeofences(tenantId, zoneId);
+  }
+
+  // ─── 3D Scene Builder Layout ────────────────────────────────────────
+  @Get('zones/:zoneId/layout3d')
+  getZone3DLayout(
+    @GetTenantId() tenantId: string,
+    @Param('zoneId') zoneId: string,
+  ) {
+    return this.floorplanService.getZone3DLayout(tenantId, zoneId);
+  }
+
+  @Put('zones/:zoneId/layout3d')
+  saveZone3DLayout(
+    @GetTenantId() tenantId: string,
+    @Param('zoneId') zoneId: string,
+    @Body() body: any,
+  ) {
+    const layoutArray = Array.isArray(body) ? body : (body?.layout || []);
+    return this.floorplanService.saveZone3DLayout(tenantId, zoneId, layoutArray);
   }
 
   // ─── Anchor Management on Floor Plan ──────────────────────────────

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import GlobalAlerts from '../components/GlobalAlerts';
 import { useTheme } from '../context/ThemeContext';
 import { getApiUrl, getBackendUrl } from '../lib/api';
 import { 
@@ -21,9 +22,11 @@ import {
   PenTool,
   ChevronRight,
   X,
-  Loader2,
-  Settings
+  Terminal,
+  Settings,
+  Loader2
 } from 'lucide-react';
+import NotificationDropdown from '../components/NotificationDropdown';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -88,6 +91,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Assets', href: '/assets', icon: Boxes },
     { name: 'RTLS Planner', href: '/planner', icon: PenTool },
     { name: 'Automation Rules', href: '/rules', icon: ShieldAlert },
+    { name: 'Live Logs', href: '/logs', icon: Terminal },
     { name: 'Insights', href: '/insights', icon: Activity },
     // Settings hanya untuk Admin
     ...(isAdmin ? [{ name: 'Settings', href: '/settings', icon: Settings }] : []),
@@ -113,6 +117,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
+      <GlobalAlerts />
       
       {/* SIDEBAR (OpenRemote Inspired) */}
       <aside className="w-64 bg-card border-r border-border flex flex-col justify-between shrink-0">
@@ -248,6 +253,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-4">
+            <NotificationDropdown />
+            
             {/* Theme Toggle Button positioned at top-right corner */}
             <button
               onClick={toggleTheme}

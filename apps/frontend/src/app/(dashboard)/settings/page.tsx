@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 
 import { getApiUrl, getBackendUrl } from '../../lib/api';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const API_URL = getApiUrl();
 const BASE_URL = getBackendUrl();
@@ -211,6 +212,7 @@ function UsersTab({ tenantId, currentUserId }: { tenantId: string; currentUserId
   const [saving, setSaving] = useState(false);
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   const fetchUsers = async () => {
@@ -263,8 +265,7 @@ function UsersTab({ tenantId, currentUserId }: { tenantId: string; currentUserId
     } finally { setUpdatingRole(null); }
   };
 
-  const handleDelete = async (userId: string, userEmail: string) => {
-    if (!confirm(`Hapus user "${userEmail}"?`)) return;
+  const handleDelete = async (userId: string) => {
     setDeleting(userId);
     try {
       const res = await fetch(`${API_URL}/tenants/users/${userId}`, {
@@ -276,7 +277,10 @@ function UsersTab({ tenantId, currentUserId }: { tenantId: string; currentUserId
       fetchUsers();
     } catch (e: any) {
       setStatus({ type: 'error', msg: e.message });
-    } finally { setDeleting(null); }
+    } finally { 
+      setDeleting(null);
+      setDeleteTarget(null);
+    }
   };
 
   return (
@@ -419,7 +423,7 @@ function UsersTab({ tenantId, currentUserId }: { tenantId: string; currentUserId
 
                 {u.id !== currentUserId && (
                   <button
-                    onClick={() => handleDelete(u.id, u.email)}
+                    onClick={() => setDeleteTarget({ id: u.id, email: u.email })}
                     disabled={deleting === u.id}
                     className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer disabled:opacity-50 opacity-0 group-hover:opacity-100"
                   >
@@ -431,6 +435,18 @@ function UsersTab({ tenantId, currentUserId }: { tenantId: string; currentUserId
           ))}
         </div>
       )}
+
+      {/* Custom Confirm Modal */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete User"
+        message={`Are you sure you want to delete user "${deleteTarget?.email}"? This action cannot be undone.`}
+        confirmText="Delete User"
+        cancelText="Cancel"
+        variant="danger"
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget.id)}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

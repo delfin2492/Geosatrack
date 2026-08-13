@@ -52,7 +52,7 @@ interface Alert {
 
 interface SocketContextType {
   socket: Socket | null;
-  socketStatus: 'connected' | 'disconnected' | 'connecting';
+  socketStatus: 'connected' | 'disconnected' | 'connecting' | 'error';
   assets: Asset[];
   alerts: Alert[];
   telemetryLogs: any[];
@@ -81,7 +81,7 @@ export const useSocket = () => useContext(SocketContext);
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { initialized, tenantId, token } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [socketStatus, setSocketStatus] = useState<'connected' | 'disconnected' | 'connecting'>('disconnected');
+  const [socketStatus, setSocketStatus] = useState<'connected' | 'disconnected' | 'connecting' | 'error'>('disconnected');
   const [assets, setAssets] = useState<Asset[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [telemetryLogs, setTelemetryLogs] = useState<any[]>([]);
@@ -106,7 +106,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setAssets([]);
       }
 
-      const alertsRes = await fetch(`${apiUrl}/assets/alerts?unresolvedOnly=true`, { headers });
+      const alertsRes = await fetch(`${apiUrl}/alerts?unresolvedOnly=true`, { headers });
       if (alertsRes.ok) {
         const alertsData = await alertsRes.json();
         setAlerts(alertsData);
@@ -120,12 +120,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   useEffect(() => {
-    if (initialized && tenantId) {
-      fetchInitialData();
-    }
-  }, [initialized, tenantId, token]);
-
-  useEffect(() => {
     if (!initialized || !tenantId) return;
 
     setSocketStatus('connecting');
@@ -134,19 +128,25 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const socketIo = io(wsUrl, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
+      auth: token ? { token } : undefined,
+      query: { tenantId }
     });
 
     socketIo.on('connect', () => {
       setSocketStatus('connected');
       socketIo.emit('joinTenant', { tenantId });
+      fetchInitialData();
     });
 
     socketIo.on('disconnect', () => {
       setSocketStatus('disconnected');
     });
 
+    socketIo.on('connect_error', (err) => {
+      setSocketStatus('error');
+    });
+
     socketIo.on('assetUpdate', (updatedAsset: Asset) => {
-      console.log('🔌 WebSocket assetUpdate received:', updatedAsset);
       setAssets((prev) => 
         prev.map((a) => (a.id === updatedAsset.id ? { ...a, ...updatedAsset } : a))
       );
@@ -164,8 +164,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     return () => {
       socketIo.disconnect();
+      setSocket(null);
     };
-  }, [initialized, tenantId]);
+  }, [initialized, tenantId, token]);
 
   // Simulator hook
   useEffect(() => {

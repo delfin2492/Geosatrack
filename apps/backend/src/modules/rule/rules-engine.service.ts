@@ -59,6 +59,7 @@ export class RulesEngineService {
 
     for (const rule of activeRules) {
       try {
+        if (!rule.flowGraph) continue;
         const graph: FlowGraph = JSON.parse(rule.flowGraph);
         if (!graph.nodes || !graph.edges) continue;
 
@@ -98,7 +99,22 @@ export class RulesEngineService {
             logMessages.push(`[ERROR] Flow execution stopped: ${executionErr.message}`);
           } finally {
             // Write rule execution audit log to database
-            await this.ruleService.createLog(rule.id, status, logMessages.join('\n'));
+            const fullLog = logMessages.join('\n');
+            await this.ruleService.createLog(rule.id, status, fullLog);
+
+            // Broadcast to live terminal
+            this.websocketGateway.sendToTenant(tenantId, 'systemLog', {
+              level: status === 'SUCCESS' ? 'success' : 'error',
+              source: `RULES_ENGINE`,
+              deviceName: payload.assetName || rule.name,
+              message: status === 'SUCCESS' ? `Flow execution completed for rule "${rule.name}"` : `Flow execution stopped: ${logMessages[logMessages.length - 1] || 'Error'}`,
+              data: {
+                ruleId: rule.id,
+                payload,
+                executionLogs: logMessages
+              },
+              timestamp: new Date().toISOString()
+            });
           }
         }
       } catch (err: any) {
@@ -146,12 +162,12 @@ export class RulesEngineService {
       try {
         const message =
           currentNode.data.messageTemplate ||
-          `Asset ${payload.assetName} triggered alarm: ${payload.geofenceName || payload.attributeName}`;
+          `Critical alert: Asset ${payload.assetName || 'Device'} ${payload.geofenceName ? `triggered ${payload.geofenceName}` : (payload.attributeName || 'threshold triggered')}`;
         
         const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
         const createdAlert = await this.prisma.alert.create({
           data: {
-            type: payload.geofenceId ? 'geofence_violation' : 'sensor_critical',
+            type: payload.geofenceId ? 'alert_alarm' : 'alert_alarm',
             message: this.interpolateTemplate(message, payload),
             tenantId: targetTenantId,
             assetId: payload.assetId,
@@ -193,6 +209,17 @@ export class RulesEngineService {
           html: `<p>${body.replace(/\n/g, '<br/>')}</p>`,
         });
 
+        const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
+        const createdAlert = await this.prisma.alert.create({
+          data: {
+            type: 'email',
+            message: `Email Sent to ${toEmail}: ${subject}`,
+            tenantId: targetTenantId,
+            assetId: payload.assetId,
+          },
+        });
+        this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
+
         logMessages.push(`[ACTION] Successfully sent alert email to ${toEmail}`);
       } catch (err: any) {
         logMessages.push(`[ACTION_ERROR] Failed to send SMTP email: ${err.message}`);
@@ -225,6 +252,17 @@ export class RulesEngineService {
           const errBody = await res.json();
           throw new Error(errBody.description || `Telegram API returned status ${res.status}`);
         }
+
+        const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
+        const createdAlert = await this.prisma.alert.create({
+          data: {
+            type: 'telegram',
+            message: `Telegram Sent (${chatId}): ${messageText.replace(/\*/g, '')}`,
+            tenantId: targetTenantId,
+            assetId: payload.assetId,
+          },
+        });
+        this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
 
         logMessages.push(`[ACTION] Successfully sent Telegram notification message to chat ${chatId}`);
       } catch (err: any) {

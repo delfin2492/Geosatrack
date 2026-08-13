@@ -212,8 +212,10 @@ model TelemetryLog {
 model RuleFlow {
   id          String    @id @default(cuid())
   name        String
+  ruleType    String    @default("FLOW") // "WHEN_THEN" | "FLOW"
   isActive    Boolean   @default(true)
-  flowGraph   String    @db.Text
+  flowGraph   String?   @db.Text
+  ruleConfig  String?   @db.Text
   tenantId    String
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   logs        RuleLog[]

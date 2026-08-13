@@ -17,9 +17,11 @@ export class RuleController {
   create(
     @GetTenantId() tenantId: string,
     @Body('name') name: string,
+    @Body('ruleType') ruleType: string,
     @Body('flowGraph') flowGraph: string,
+    @Body('ruleConfig') ruleConfig: string,
   ) {
-    return this.ruleService.create(tenantId, name, flowGraph);
+    return this.ruleService.create(tenantId, name, ruleType, flowGraph, ruleConfig);
   }
 
   @Get()
@@ -36,7 +38,7 @@ export class RuleController {
   update(
     @GetTenantId() tenantId: string,
     @Param('id') id: string,
-    @Body() data: { name?: string; isActive?: boolean; flowGraph?: string },
+    @Body() data: { name?: string; isActive?: boolean; ruleType?: string; flowGraph?: string; ruleConfig?: string },
   ) {
     return this.ruleService.update(tenantId, id, data);
   }

@@ -25,6 +25,7 @@ import {
   Trash2,
   CheckCircle2,
 } from 'lucide-react';
+import ConfirmModal from '../../components/ConfirmModal';
 
 interface TenantItem {
   id: string;
@@ -68,6 +69,13 @@ export default function TenantsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [msgError, setMsgError] = useState<string | null>(null);
   const [msgSuccess, setMsgSuccess] = useState<string | null>(null);
+  const [tenantConfirm, setTenantConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant?: 'danger' | 'warning' | 'info';
+    confirmText?: string;
+  } | null>(null);
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -191,27 +199,43 @@ export default function TenantsPage() {
     }
   };
 
-  const handleDeleteTenant = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete tenant "${name}"? All associated assets and users will be permanently deleted.`)) {
-      return;
-    }
+  const handleDeleteTenant = (id: string, name: string) => {
+    setTenantConfirm({
+      title: 'Hapus Tenant',
+      message: `Are you sure you want to delete tenant "${name}"? All associated assets and users will be permanently deleted.`,
+      variant: 'danger',
+      confirmText: 'Delete Tenant',
+      onConfirm: async () => {
+        try {
+          const apiUrl = getApiUrl();
+          const res = await fetch(`${apiUrl}/tenants/${id}`, {
+            method: 'DELETE',
+          });
 
-    try {
-      const apiUrl = getApiUrl();
-      const res = await fetch(`${apiUrl}/tenants/${id}`, {
-        method: 'DELETE',
-      });
+          if (!res.ok) {
+            const result = await res.json();
+            throw new Error(result.message || 'Failed to delete tenant.');
+          }
 
-      if (!res.ok) {
-        const result = await res.json();
-        throw new Error(result.message || 'Failed to delete tenant.');
+          setTenantConfirm({
+            title: 'Berhasil',
+            message: `Tenant "${name}" successfully deleted.`,
+            variant: 'info',
+            confirmText: 'OK',
+            onConfirm: () => setTenantConfirm(null),
+          });
+          fetchTenants();
+        } catch (err: any) {
+          setTenantConfirm({
+            title: 'Gagal',
+            message: err.message || 'An error occurred during deletion.',
+            variant: 'danger',
+            confirmText: 'OK',
+            onConfirm: () => setTenantConfirm(null),
+          });
+        }
       }
-
-      alert(`Tenant "${name}" successfully deleted.`);
-      fetchTenants();
-    } catch (err: any) {
-      alert(err.message || 'An error occurred during deletion.');
-    }
+    });
   };
 
   const filteredTenants = tenants.filter((t) =>
@@ -609,6 +633,18 @@ export default function TenantsPage() {
           </Card>
         </div>
       )}
+
+      {/* Custom Confirm Modal for Tenants */}
+      <ConfirmModal
+        isOpen={!!tenantConfirm}
+        title={tenantConfirm?.title || 'Konfirmasi'}
+        message={tenantConfirm?.message || ''}
+        confirmText={tenantConfirm?.confirmText || 'OK'}
+        cancelText="Cancel"
+        variant={tenantConfirm?.variant || 'danger'}
+        onConfirm={() => tenantConfirm?.onConfirm()}
+        onCancel={() => setTenantConfirm(null)}
+      />
     </div>
   );
 }

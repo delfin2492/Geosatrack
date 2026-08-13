@@ -260,6 +260,18 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     
     try {
       const assets = await this.prisma.asset.findMany({});
+      
+      const agent = assets.find(a => a.id === agentId);
+      if (agent) {
+        this.websocketGateway.sendToTenant(agent.tenantId, 'systemLog', {
+          level: 'info',
+          source: 'MQTT',
+          deviceName: agent.name,
+          message: `Message received on topic: ${topic}`,
+          data: rawPayload,
+          timestamp: new Date().toISOString()
+        });
+      }
 
       for (const asset of assets) {
         if (!asset.description) continue;
@@ -268,7 +280,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         // A. Asset-Level Ingestion
         if (parsed.mqttTopic && parsed.mqttAgentId === agentId && mqttTopicMatch(parsed.mqttTopic, topic)) {
           if (parsed.mqttDecodeFunctionCode) {
-            const outMsg = await this.runSandboxedScript(parsed.mqttDecodeFunctionCode, topic, rawPayload);
+            const outMsg = await this.runSandboxedScript(parsed.mqttDecodeFunctionCode, topic, rawPayload, asset.tenantId);
             if (outMsg && outMsg.payload) {
               const decoded = outMsg.payload;
               const sourceNodeId = decoded.node || decoded.source_address;
@@ -327,7 +339,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
             if (attr.mqttTopic && attr.mqttAgentId === agentId && mqttTopicMatch(attr.mqttTopic, topic)) {
               if (attr.mqttDecodeFunctionCode) {
-                const outMsg = await this.runSandboxedScript(attr.mqttDecodeFunctionCode, topic, rawPayload);
+                const outMsg = await this.runSandboxedScript(attr.mqttDecodeFunctionCode, topic, rawPayload, asset.tenantId);
                 if (outMsg && outMsg.payload !== undefined) {
                   
                   const decodedNode = outMsg.payload.node || outMsg.payload.source_address;
@@ -359,6 +371,41 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
                   };
                   decodedObj[attr.name] = formattedValue;
                   hasUpdates = true;
+
+                  // Sync coordinates to Asset table if this is a GeoPoint attribute
+                  if (attr.dataType === 'GeoPoint' || attr.name === 'location' || attr.name === 'coordinates' || attr.name === 'maps') {
+                    let latNum: number | null = null;
+                    let lonNum: number | null = null;
+
+                    if (typeof formattedValue === 'string' && formattedValue.includes(',')) {
+                      const parts = formattedValue.split(',').map((s: string) => parseFloat(s.trim()));
+                      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        latNum = parts[0];
+                        lonNum = parts[1];
+                      }
+                    } else if (typeof extractedVal === 'object' && extractedVal !== null) {
+                      const lat = extractedVal.lat ?? extractedVal.latitude;
+                      const lon = extractedVal.lng ?? extractedVal.lon ?? extractedVal.longitude;
+                      if (lat !== undefined && lon !== undefined) {
+                        latNum = parseFloat(String(lat));
+                        lonNum = parseFloat(String(lon));
+                      }
+                    }
+
+                    if (latNum !== null && lonNum !== null && !isNaN(latNum) && !isNaN(lonNum)) {
+                      try {
+                        await this.prisma.asset.update({
+                          where: { id: asset.id },
+                          data: {
+                            latitude: latNum,
+                            longitude: lonNum,
+                          },
+                        });
+                      } catch (err) {
+                        this.logger.error(`Failed to update Asset GPS coordinates from GeoPoint attribute:`, err);
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -387,7 +434,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async runSandboxedScript(code: string, topic: string, rawPayload: string): Promise<any> {
+  private async runSandboxedScript(code: string, topic: string, rawPayload: string, tenantId?: string): Promise<any> {
     try {
       let payload: any = rawPayload;
       try {
@@ -428,6 +475,15 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       return result || sandbox.msg;
     } catch (err) {
       this.logger.error('Failed to execute sandboxed JS function:', err);
+      if (tenantId) {
+        this.websocketGateway.sendToTenant(tenantId, 'systemLog', {
+          level: 'error',
+          source: 'DATA_PROCESSOR',
+          message: `Data extraction failed: ${(err as Error).message}`,
+          data: { topic, payload: rawPayload },
+          timestamp: new Date().toISOString()
+        });
+      }
       return null;
     }
   }
@@ -447,6 +503,15 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     try {
       const parsedJson = JSON.parse(rawPayload);
 
+      this.websocketGateway.sendToTenant(tenantId, 'systemLog', {
+        level: 'info',
+        source: 'WIREPAS',
+        deviceName: gateway.name || gatewayId,
+        message: `Wirepas packet on ep:${endpointId} from node [${tagId}]`,
+        data: parsedJson,
+        timestamp: new Date().toISOString()
+      });
+
       if (endpointId === 11) {
         const telemetry = this.decoder.decodeTelemetry(parsedJson);
         await this.processTelemetry(tenantId, tagId, telemetry);
@@ -464,6 +529,16 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     if (dataType === 'Integer') return parseInt(String(val), 10);
     if (dataType === 'Boolean') return String(val).toLowerCase() === 'true' || val === true || val === 1;
     if (dataType === 'String' || dataType === 'Text') return String(val);
+    if (dataType === 'GeoPoint' || dataType === 'Coordinates') {
+      if (typeof val === 'object' && val !== null) {
+        const lat = val.lat ?? val.latitude ?? (Array.isArray(val) ? val[1] : null);
+        const lng = val.lng ?? val.lon ?? val.longitude ?? (Array.isArray(val) ? val[0] : null);
+        if (lat !== null && lng !== null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+          return `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}`;
+        }
+      }
+      return String(val);
+    }
     if (dataType === 'JSON') {
       try {
         return typeof val === 'string' ? JSON.parse(val) : val;

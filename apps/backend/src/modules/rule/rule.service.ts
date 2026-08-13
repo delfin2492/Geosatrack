@@ -5,11 +5,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class RuleService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(tenantId: string, name: string, flowGraph: string) {
+  async create(tenantId: string, name: string, ruleType: string, flowGraph?: string, ruleConfig?: string) {
     return this.prisma.ruleFlow.create({
       data: {
         name,
+        ruleType: ruleType || 'FLOW',
         flowGraph,
+        ruleConfig,
         tenantId,
       },
     });
@@ -35,7 +37,7 @@ export class RuleService {
   async update(
     tenantId: string,
     id: string,
-    data: { name?: string; isActive?: boolean; flowGraph?: string },
+    data: { name?: string; isActive?: boolean; ruleType?: string; flowGraph?: string; ruleConfig?: string },
   ) {
     const rule = await this.findOne(tenantId, id);
     return this.prisma.ruleFlow.update({
@@ -43,7 +45,9 @@ export class RuleService {
       data: {
         name: data.name ?? undefined,
         isActive: data.isActive ?? undefined,
+        ruleType: data.ruleType ?? undefined,
         flowGraph: data.flowGraph ?? undefined,
+        ruleConfig: data.ruleConfig ?? undefined,
       },
     });
   }

@@ -182,31 +182,38 @@ return msg;`;
 // Default attributes for each asset type used for auto-initialization
 const defaultAttributesLookup: Record<string, { name: string; dataType: string; unit: string }[]> = {
   CITY: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'country', dataType: 'String', unit: '' },
     { name: 'region', dataType: 'String', unit: '' }
   ],
   BUILDING: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'address', dataType: 'String', unit: '' },
     { name: 'floors', dataType: 'Integer', unit: 'floor(s)' }
   ],
   LIGHT: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'switchMac', dataType: 'String', unit: '' },
     { name: 'powerState', dataType: 'Boolean', unit: '' },
     { name: 'brightness', dataType: 'Integer', unit: '%' }
   ],
   ENVIRONMENT: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'temperature', dataType: 'Number', unit: '°C' },
     { name: 'humidity', dataType: 'Number', unit: '%' }
   ],
   WEATHER: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'windSpeed', dataType: 'Number', unit: 'm/s' },
     { name: 'pressure', dataType: 'Number', unit: 'hPa' }
   ],
   ANCHOR: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'anchorId', dataType: 'String', unit: '' },
     { name: 'txPower', dataType: 'Integer', unit: 'dBm' }
   ],
   FORKLIFT: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'vehicleCode', dataType: 'String', unit: '' },
     { name: 'operator', dataType: 'String', unit: '' },
     { name: 'temperature', dataType: 'Number', unit: '°C' },
@@ -214,11 +221,13 @@ const defaultAttributesLookup: Record<string, { name: string; dataType: string; 
     { name: 'battery', dataType: 'Number', unit: 'V' }
   ],
   MACHINE: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'machineCode', dataType: 'String', unit: '' },
     { name: 'temperature', dataType: 'Number', unit: '°C' },
     { name: 'status', dataType: 'String', unit: '' }
   ],
   MESH_EYE_SENSOR: [
+    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'temperature', dataType: 'Number', unit: '°C' },
     { name: 'humidity', dataType: 'Number', unit: '%' },
     { name: 'voltage', dataType: 'Number', unit: 'V' },
@@ -408,6 +417,14 @@ export default function AssetsPage() {
   const [attributes, setAttributes] = useState<AssetAttribute[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
+  // Map Picker Modal state
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [mapPickerTargetIndex, setMapPickerTargetIndex] = useState<number | null>(null);
+  const [mapPickerCoords, setMapPickerCoords] = useState<{ lat: number; lng: number }>({ lat: -6.168911, lng: 106.899709 });
+  const mapPickerContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapPickerInstanceRef = useRef<any>(null);
+  const mapPickerMarkerRef = useRef<any>(null);
+
   // Asset-level Ingestion parameters
   const [mqttAgentId, setMqttAgentId] = useState('');
   const [mqttTopic, setMqttTopic] = useState('');
@@ -429,17 +446,33 @@ export default function AssetsPage() {
   const selectedAsset = assets.find((a) => a.id === selectedAssetId);
 
   const activeAttributes = (() => {
-    if (!selectedAsset) return [];
-    if (!selectedAsset.description || !selectedAsset.description.startsWith('{')) return [];
-    try {
-      const parsed = JSON.parse(selectedAsset.description);
-      if (parsed.attributes && Array.isArray(parsed.attributes)) {
-        return parsed.attributes;
+    let attrs: any[] = [];
+    if (selectedAsset && selectedAsset.description && selectedAsset.description.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(selectedAsset.description);
+        if (parsed.attributes && Array.isArray(parsed.attributes)) {
+          attrs = [...parsed.attributes];
+        }
+      } catch (e) {
+        // ignore
       }
-    } catch (e) {
-      // ignore
     }
-    return [];
+    
+    // Inject RTLS Virtual Attributes
+    if (selectedAsset && selectedAsset.type === 'MESH_EYE_SENSOR') {
+      const planX = selectedAsset.planX ?? 0;
+      const planY = selectedAsset.planY ?? 0;
+      
+      const pxIndex = attrs.findIndex((a: any) => a.name === 'position_x');
+      if (pxIndex >= 0) attrs[pxIndex].value = planX;
+      else attrs.push({ name: 'position_x', dataType: 'float', unit: 'm', value: planX });
+      
+      const pyIndex = attrs.findIndex((a: any) => a.name === 'position_y');
+      if (pyIndex >= 0) attrs[pyIndex].value = planY;
+      else attrs.push({ name: 'position_y', dataType: 'float', unit: 'm', value: planY });
+    }
+    
+    return attrs;
   })();
 
   // Fetch telemetry history when selection/filter changes
@@ -512,9 +545,6 @@ export default function AssetsPage() {
 
     return { linePath, areaPath, minVal, maxVal, latestVal };
   };
-
-  // Leaflet form map ref
-  const formMapRef = useRef<HTMLDivElement | null>(null);
 
   // Leaflet view-only map ref
   const viewMapRef = useRef<HTMLDivElement | null>(null);
@@ -591,18 +621,33 @@ export default function AssetsPage() {
           setAttributes([]);
         } else {
           setCustomFields({});
+          let loadedAttrs: AssetAttribute[] = [];
           if (parsed.attributes && Array.isArray(parsed.attributes)) {
-            setAttributes(parsed.attributes);
-            if (parsed.attributes.length > 0) {
-              setSelectedHistoryAttr(parsed.attributes[0].name);
-            }
+            loadedAttrs = [...parsed.attributes];
           } else {
             const defaults = defaultAttributesLookup[asset.type] || [];
-            const mapped = defaults.map(d => ({ ...d, value: '' }));
-            setAttributes(mapped);
-            if (mapped.length > 0) {
-              setSelectedHistoryAttr(mapped[0].name);
-            }
+            loadedAttrs = defaults.map(d => ({ ...d, value: '' }));
+          }
+
+          // Ensure location attribute exists and is populated with asset's latitude & longitude if available
+          const hasLocation = loadedAttrs.some(a => a.dataType === 'GeoPoint' || a.name === 'location' || a.name === 'coordinates');
+          if (!hasLocation) {
+            const locVal = asset.latitude && asset.longitude ? `${asset.latitude}, ${asset.longitude}` : '';
+            loadedAttrs.unshift({ name: 'location', dataType: 'GeoPoint', unit: 'GPS', value: locVal });
+          } else {
+            loadedAttrs = loadedAttrs.map(a => {
+              if ((a.dataType === 'GeoPoint' || a.name === 'location' || a.name === 'coordinates') && (!a.value || a.value === '')) {
+                if (asset.latitude && asset.longitude) {
+                  return { ...a, value: `${asset.latitude}, ${asset.longitude}` };
+                }
+              }
+              return a;
+            });
+          }
+
+          setAttributes(loadedAttrs);
+          if (loadedAttrs.length > 0) {
+            setSelectedHistoryAttr(loadedAttrs[0].name);
           }
         }
       } else {
@@ -613,10 +658,13 @@ export default function AssetsPage() {
         setMqttPublishTopic('');
         setMqttDecodeFunctionCode('');
         const defaults = defaultAttributesLookup[asset.type] || [];
-        const mapped = defaults.map(d => ({ ...d, value: '' }));
-        setAttributes(mapped);
-        if (mapped.length > 0) {
-          setSelectedHistoryAttr(mapped[0].name);
+        let loadedAttrs = defaults.map(d => ({ ...d, value: '' }));
+        if (asset.latitude && asset.longitude) {
+          loadedAttrs = loadedAttrs.map(a => (a.dataType === 'GeoPoint' || a.name === 'location' || a.name === 'coordinates') ? { ...a, value: `${asset.latitude}, ${asset.longitude}` } : a);
+        }
+        setAttributes(loadedAttrs);
+        if (loadedAttrs.length > 0) {
+          setSelectedHistoryAttr(loadedAttrs[0].name);
         }
       }
     } catch (e) {
@@ -743,6 +791,19 @@ export default function AssetsPage() {
         });
       }
 
+      // Extract GPS coordinates from GeoPoint / location attribute if present
+      let extractedLat = latitude ? parseFloat(latitude) : null;
+      let extractedLon = longitude ? parseFloat(longitude) : null;
+
+      const locAttr = attributes.find(a => a.dataType === 'GeoPoint' || a.name === 'location' || a.name === 'coordinates');
+      if (locAttr && locAttr.value && typeof locAttr.value === 'string' && locAttr.value.includes(',')) {
+        const parts = locAttr.value.split(',').map(s => parseFloat(s.trim()));
+        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          extractedLat = parts[0];
+          extractedLon = parts[1];
+        }
+      }
+
       const res = await fetch(`${getApiUrl()}/assets/${selectedAssetId}`, {
         method: 'PATCH',
         headers,
@@ -751,8 +812,8 @@ export default function AssetsPage() {
           type,
           parentId: parentId || null,
           tagId: tagId || null,
-          latitude: latitude ? parseFloat(latitude) : null,
-          longitude: longitude ? parseFloat(longitude) : null,
+          latitude: extractedLat,
+          longitude: extractedLon,
           description: serializedDescription
         })
       });
@@ -836,66 +897,71 @@ export default function AssetsPage() {
     }));
   };
 
-  // Leaflet form map initialization inside form container
+  // Leaflet Map Picker Modal initialization
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (!mapPickerOpen || typeof window === 'undefined') return;
 
-    const mapContainer = formMapRef.current;
-    if (!mapContainer) return;
+    const timer = setTimeout(() => {
+      const container = mapPickerContainerRef.current;
+      if (!container) return;
 
-    const L = require('leaflet');
+      const L = require('leaflet');
 
-    if ((mapContainer as any)._leaflet_id) {
-      (mapContainer as any)._leaflet_id = null;
-    }
-
-    const initialLat = latitude ? parseFloat(latitude) : -6.2444;
-    const initialLng = longitude ? parseFloat(longitude) : 106.8505;
-
-    const customIcon = L.icon({
-      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowSize: [41, 41]
-    });
-
-    const map = L.map(mapContainer).setView([initialLat, initialLng], 12);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    let marker: any = null;
-    if (latitude && longitude) {
-      marker = L.marker([initialLat, initialLng], { icon: customIcon }).addTo(map);
-    }
-
-    map.on('click', (e: any) => {
-      const { lat, lng } = e.latlng;
-      setLatitude(lat.toFixed(6));
-      setLongitude(lng.toFixed(6));
-
-      if (marker) {
-        marker.setLatLng(e.latlng);
-      } else {
-        marker = L.marker(e.latlng, { icon: customIcon }).addTo(map);
+      if ((container as any)._leaflet_id) {
+        (container as any)._leaflet_id = null;
       }
-    });
+
+      const map = L.map(container, {
+        center: [mapPickerCoords.lat, mapPickerCoords.lng],
+        zoom: 15,
+      });
+      mapPickerInstanceRef.current = map;
+
+      L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        attribution: '© Google Maps',
+        maxZoom: 20,
+      }).addTo(map);
+
+      const customIcon = L.icon({
+        iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
+      });
+
+      const marker = L.marker([mapPickerCoords.lat, mapPickerCoords.lng], {
+        icon: customIcon,
+        draggable: true,
+      }).addTo(map);
+      mapPickerMarkerRef.current = marker;
+
+      marker.on('dragend', (e: any) => {
+        const { lat, lng } = e.target.getLatLng();
+        setMapPickerCoords({ lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) });
+      });
+
+      map.on('click', (e: any) => {
+        const { lat, lng } = e.latlng;
+        marker.setLatLng(e.latlng);
+        setMapPickerCoords({ lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) });
+      });
+
+      map.invalidateSize();
+    }, 150);
 
     return () => {
-      try {
-        map.remove();
-      } catch (e) {
-        console.warn('Leaflet cleanup warning:', e);
-      }
-      if (mapContainer) {
-        (mapContainer as any)._leaflet_id = null;
+      clearTimeout(timer);
+      if (mapPickerInstanceRef.current) {
+        try {
+          mapPickerInstanceRef.current.remove();
+        } catch (e) {}
+        mapPickerInstanceRef.current = null;
       }
     };
-  }, [showAddModal, mode]);
+  }, [mapPickerOpen]);
 
   // Leaflet view-only map initialization inside inspector panel
   useEffect(() => {
@@ -1201,27 +1267,6 @@ export default function AssetsPage() {
                 </div>
               </div>
 
-              {/* Coordinates interactive leaflet selection map */}
-              <div className="grid grid-cols-1 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-muted-foreground flex items-center justify-between">
-                    <span>Coordinates Selection *</span>
-                    <span className="text-[10px] text-primary italic font-normal">Click on the map to select locations</span>
-                  </label>
-                  <div ref={formMapRef} className="h-44 w-full bg-secondary/15 rounded-xl border border-border overflow-hidden z-10"></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
-                    <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
-                      <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Latitude</span>
-                      <span className="font-mono text-xs text-foreground font-extrabold">{latitude || '(Not Selected)'}</span>
-                    </div>
-                    <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
-                      <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Longitude</span>
-                      <span className="font-mono text-xs text-foreground font-extrabold">{longitude || '(Not Selected)'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Dynamic Connection Credentials Form (For Agents) */}
               {type.startsWith('AGENT_') && currentEditFieldsConfig.length > 0 && (
                 <div className="space-y-4 pt-4 border-t border-border/60">
@@ -1409,6 +1454,7 @@ export default function AssetsPage() {
                                 >
                                   <option value="Number">Number</option>
                                   <option value="String">String</option>
+                                  <option value="GeoPoint">GeoPoint (GPS)</option>
                                   <option value="JSON">JSON</option>
                                   <option value="Text">Text</option>
                                   <option value="Integer">Integer</option>
@@ -1428,6 +1474,70 @@ export default function AssetsPage() {
                                   placeholder="e.g. °C"
                                 />
                               </div>
+                            </div>
+
+                            {/* Value / GPS Coordinates Picker Input */}
+                            <div className="pt-2 border-t border-border/30">
+                              {attr.dataType === 'GeoPoint' || attr.name === 'location' || attr.name === 'coordinates' || attr.name === 'maps' ? (
+                                <div className="space-y-2 bg-primary/5 border border-primary/20 p-3 rounded-lg">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-primary text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                      <MapPin className="h-3.5 w-3.5" />
+                                      <span>GPS Coordinates (WGS84)</span>
+                                    </label>
+                                    <span className="text-[10px] text-muted-foreground italic font-normal">Format: Latitude, Longitude</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      type="text"
+                                      value={typeof attr.value === 'object' && attr.value !== null ? `${attr.value.lat ?? ''}, ${attr.value.lng ?? ''}` : (attr.value ?? '')}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, value: val } : a));
+                                      }}
+                                      placeholder="e.g. -6.168911, 106.899709"
+                                      className="font-mono text-xs bg-background/80"
+                                    />
+                                    <Button
+                                      type="button"
+                                      onClick={() => {
+                                        setMapPickerTargetIndex(idx);
+                                        let initialLat = -6.168911;
+                                        let initialLng = 106.899709;
+                                        const rawVal = typeof attr.value === 'object' && attr.value !== null 
+                                          ? `${attr.value.lat ?? ''}, ${attr.value.lng ?? ''}` 
+                                          : (attr.value ?? '');
+                                        if (rawVal && typeof rawVal === 'string' && rawVal.includes(',')) {
+                                          const parts = rawVal.split(',').map((s: string) => parseFloat(s.trim()));
+                                          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                                            initialLat = parts[0];
+                                            initialLng = parts[1];
+                                          }
+                                        }
+                                        setMapPickerCoords({ lat: initialLat, lng: initialLng });
+                                        setMapPickerOpen(true);
+                                      }}
+                                      className="shrink-0 h-9 px-3.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                    >
+                                      <MapPin className="h-4 w-4" />
+                                      Pilih di Peta
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Initial / Fallback Value</label>
+                                  <Input
+                                    type="text"
+                                    value={attr.value ?? ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, value: val } : a));
+                                    }}
+                                    placeholder="Initial or fallback value"
+                                  />
+                                </div>
+                              )}
                             </div>
 
                             {/* Agent Link selection */}
@@ -1482,7 +1592,6 @@ export default function AssetsPage() {
                                 </div>
                               )}
                             </div>
-
                             {/* Sub-parameters for Agent Ingestions */}
                             {attr.mqttAgentId && (
                               <div className="space-y-3.5 pt-2">
@@ -2142,27 +2251,6 @@ export default function AssetsPage() {
                     </div>
                   </div>
 
-                  {/* Coordinates interactive leaflet selection map */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5 col-span-2">
-                      <label className="text-muted-foreground flex items-center justify-between">
-                        <span>Coordinates Selection *</span>
-                        <span className="text-[10px] text-primary italic font-normal">Click on the map to select locations</span>
-                      </label>
-                      <div ref={formMapRef} className="h-44 w-full bg-secondary/15 rounded-xl border border-border overflow-hidden z-10"></div>
-                      <div className="grid grid-cols-2 gap-2 mt-1.5">
-                        <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
-                          <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Latitude</span>
-                          <span className="font-mono text-xs text-foreground font-extrabold">{latitude || '(Not Selected)'}</span>
-                        </div>
-                        <div className="bg-secondary/25 border border-border p-2 rounded-lg text-center">
-                          <span className="text-[9px] text-muted-foreground block font-bold uppercase tracking-wider">Longitude</span>
-                          <span className="font-mono text-xs text-foreground font-extrabold">{longitude || '(Not Selected)'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Dynamic Connection Credentials Form (For Agents inside creation modal) */}
                   {addModalTab === 'AGENT' && currentFieldsConfig.length > 0 && (
                     <div className="space-y-3 pt-3 border-t border-border/60">
@@ -2266,6 +2354,83 @@ export default function AssetsPage() {
               </Button>
               <Button variant="destructive" onClick={executeDeleteAsset}>
                 Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LEAFLET MAP PICKER MODAL */}
+      {mapPickerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-secondary/20">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Pilih Titik Koordinat GPS (WGS84)</h3>
+                  <p className="text-[10.5px] text-muted-foreground">Klik pada peta atau geser pin untuk menentukan lokasi aset</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMapPickerOpen(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body / Leaflet Map */}
+            <div className="p-4 space-y-3">
+              <div
+                ref={mapPickerContainerRef}
+                className="w-full h-80 bg-secondary/20 rounded-xl border border-border overflow-hidden relative z-10"
+              />
+
+              {/* Selected Coords info bar */}
+              <div className="grid grid-cols-2 gap-3 bg-secondary/30 border border-border/80 p-3 rounded-xl">
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block">Latitude</span>
+                  <span className="font-mono text-xs font-bold text-foreground">{mapPickerCoords.lat.toFixed(6)}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider block">Longitude</span>
+                  <span className="font-mono text-xs font-bold text-foreground">{mapPickerCoords.lng.toFixed(6)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3.5 bg-secondary/15 border-t border-border flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setMapPickerOpen(false)}
+                className="h-8.5 text-xs font-bold"
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (mapPickerTargetIndex !== null) {
+                    const coordString = `${mapPickerCoords.lat.toFixed(6)}, ${mapPickerCoords.lng.toFixed(6)}`;
+                    setAttributes((prev) =>
+                      prev.map((a, i) => (i === mapPickerTargetIndex ? { ...a, value: coordString } : a))
+                    );
+                    setLatitude(mapPickerCoords.lat.toFixed(6));
+                    setLongitude(mapPickerCoords.lng.toFixed(6));
+                  }
+                  setMapPickerOpen(false);
+                }}
+                className="h-8.5 text-xs font-bold gap-1.5"
+              >
+                <MapPin className="h-3.5 w-3.5" />
+                Gunakan Titik Koordinat Ini
               </Button>
             </div>
           </div>

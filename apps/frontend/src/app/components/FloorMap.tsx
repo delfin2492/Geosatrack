@@ -60,6 +60,10 @@ export default function FloorMap({
 
   const centerLat = -6.168911;
   const centerLon = 106.899709;
+  const indonesiaBounds: [[number, number], [number, number]] = [
+    [-11.5, 94.5], // Batas Barat Daya Indonesia
+    [6.5, 141.5],  // Batas Timur Laut Indonesia
+  ];
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -70,8 +74,13 @@ export default function FloorMap({
 
     const map = L.map(mapContainerRef.current, {
       center: [centerLat, centerLon],
-      zoom: 17,
+      zoom: 16,
+      minZoom: 5,
+      maxZoom: 20,
+      maxBounds: indonesiaBounds,
+      maxBoundsViscosity: 1.0,
       zoomControl: false, // Zoom controls hidden
+      worldCopyJump: false,
     });
     mapRef.current = map;
 
@@ -79,6 +88,9 @@ export default function FloorMap({
     const defaultLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
       attribution: '© Google Maps',
       maxZoom: 20,
+      minZoom: 5,
+      bounds: indonesiaBounds,
+      noWrap: true,
     }).addTo(map);
     
     (map as any)._tileLayer = defaultLayer;
@@ -116,6 +128,9 @@ export default function FloorMap({
     const newLayer = L.tileLayer(url, {
       attribution: mapStyle === 'osm_standard' ? '© OpenStreetMap contributors' : '© Google Maps',
       maxZoom: 20,
+      minZoom: 5,
+      bounds: indonesiaBounds,
+      noWrap: true,
     }).addTo(map);
 
     (map as any)._tileLayer = newLayer;
@@ -141,8 +156,14 @@ export default function FloorMap({
 
     // Upsert existing/new assets
     assets.forEach((asset) => {
-      const lat = asset.lat ?? centerLat;
-      const lon = asset.lon ?? centerLon;
+      let lat = asset.lat ?? centerLat;
+      let lon = asset.lon ?? centerLon;
+
+      // Filter out invalid GPS coordinates outside Indonesia region
+      if (isNaN(lat) || isNaN(lon) || lat < -11.5 || lat > 6.5 || lon < 94.5 || lon > 141.5) {
+        lat = centerLat;
+        lon = centerLon;
+      }
       validCoords.push([lat, lon]);
 
       // Determine online/offline status based on lastSeen (threshold 5 minutes = 300,000 ms)
@@ -217,9 +238,11 @@ export default function FloorMap({
       } else {
         const bounds = L.latLngBounds(validCoords);
         if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+          map.fitBounds(bounds, { padding: [60, 60], maxZoom: 18 });
         }
       }
+    } else {
+      map.setView([centerLat, centerLon], 16);
     }
   }, [assets, mapReady, onSelectAsset]);
 

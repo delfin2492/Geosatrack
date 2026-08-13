@@ -60,8 +60,10 @@ export default function MapPage() {
         return {
           id: a.id,
           name: a.name,
-          x: a.latitude !== null ? Number(a.latitude) : 10,
-          y: a.longitude !== null ? Number(a.longitude) : 10,
+          x: a.planX !== null && a.planX !== undefined ? Number(a.planX) : 10,
+          y: a.planY !== null && a.planY !== undefined ? Number(a.planY) : 10,
+          latitude: a.latitude !== null && a.latitude !== undefined ? Number(a.latitude) : null,
+          longitude: a.longitude !== null && a.longitude !== undefined ? Number(a.longitude) : null,
           anchorId,
         };
       });
@@ -85,12 +87,13 @@ export default function MapPage() {
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       
-      await fetch(`${getApiUrl()}/assets/${id}`, {
+      await fetch(`${getApiUrl()}/floorplans/anchors/position`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({
-          latitude: Number(x.toFixed(2)),
-          longitude: Number(y.toFixed(2)),
+          anchorId: id,
+          x: Number(x.toFixed(2)),
+          y: Number(y.toFixed(2)),
         }),
       });
     } catch (e) {
@@ -201,8 +204,8 @@ export default function MapPage() {
     return displayableAssets.map((a) => {
       let x = 30;
       let y = 20;
-      if (a.latitude !== null && a.latitude !== undefined) x = Number(a.latitude);
-      if (a.longitude !== null && a.longitude !== undefined) y = Number(a.longitude);
+      if (a.planX !== null && a.planX !== undefined) x = Number(a.planX);
+      if (a.planY !== null && a.planY !== undefined) y = Number(a.planY);
 
       let tagData: any = a.tag ? {
         id: a.tag.id,
@@ -302,20 +305,25 @@ export default function MapPage() {
         statusVal = 'moving';
       }
 
-      // Convert coordinate to GPS lat/lon
-      let realLat = a.latitude !== null && a.latitude !== undefined ? Number(a.latitude) : baseLat;
-      let realLon = a.longitude !== null && a.longitude !== undefined ? Number(a.longitude) : baseLon;
-      
-      // If coordinate is in indoor 2D plan meters (positive number like 26.6m, 20.9m), offset from site base GPS
-      if (!isNaN(realLat) && !isNaN(realLon) && realLat > 0 && realLat < 90 && realLon > 0 && realLon < 90) {
-        const meterX = realLon;
-        const meterY = realLat;
-        realLat = baseLat + (meterY * 0.000009);
-        realLon = baseLon + (meterX * 0.000009);
-      } else if (isNaN(realLat) || realLat === 0) {
-        realLat = baseLat;
-      } else if (isNaN(realLon) || realLon === 0) {
-        realLon = baseLon;
+      // Determine GPS lat/lon for the global Leaflet map
+      let realLat = baseLat;
+      let realLon = baseLon;
+
+      // 1. If asset has valid explicitly set GPS coordinates
+      const hasExplicitGps = 
+        a.latitude !== null && a.latitude !== undefined && 
+        a.longitude !== null && a.longitude !== undefined &&
+        !isNaN(Number(a.latitude)) && !isNaN(Number(a.longitude)) &&
+        (Number(a.latitude) <= 15 && Number(a.latitude) >= -15 && Number(a.longitude) >= 90 && Number(a.longitude) <= 145);
+
+      if (hasExplicitGps) {
+        realLat = Number(a.latitude);
+        realLon = Number(a.longitude);
+      } else {
+        // 2. Relative offset from site base GPS using calculated/assigned indoor meter coordinates (x, y)
+        // 1 meter in latitude ~ 0.000009 degrees, in longitude ~ 0.000009 degrees
+        realLat = baseLat + (y * 0.000009);
+        realLon = baseLon + (x * 0.000009);
       }
 
       return {

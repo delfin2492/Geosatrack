@@ -29,7 +29,10 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Box,
 } from 'lucide-react';
+import ThreeFloorPlanView from '../../components/ThreeFloorPlanView';
+import ConfirmModal from '../../components/ConfirmModal';
 
 // ─── Types ────────────────────────────────────────────────────────────
 interface ZoneData {
@@ -83,6 +86,14 @@ export default function PlannerPage() {
   const [allTenantMesh, setAllTenantMesh] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [simulateToggle, setSimulateToggle] = useState(false);
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+  const [plannerConfirm, setPlannerConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    variant?: 'danger' | 'warning' | 'info';
+    confirmText?: string;
+  } | null>(null);
 
   // New Zone Form state
   const [showNewZoneForm, setShowNewZoneForm] = useState(false);
@@ -697,23 +708,32 @@ export default function PlannerPage() {
   };
 
   // ─── Delete Zone ──────────────────────────────────────────────────
-  const handleDeleteZone = async (zoneId: string, zoneName: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus denah "${zoneName}"? Semua data anchor dan geofence pada denah ini akan dihapus.`)) return;
-    try {
-      const res = await fetch(`${getApiUrl()}/zones/${zoneId}`, {
-        method: 'DELETE',
-        headers: apiHeaders(),
-      });
-      if (res.ok) {
-        if (selectedZoneId === zoneId) {
-          setSelectedZoneId(null);
-          setSelectedZone(null);
+  const handleDeleteZone = (zoneId: string, zoneName: string) => {
+    setPlannerConfirm({
+      title: 'Hapus Denah',
+      message: `Apakah Anda yakin ingin menghapus denah "${zoneName}"? Semua data anchor dan geofence pada denah ini akan dihapus.`,
+      variant: 'danger',
+      confirmText: 'Hapus Denah',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${getApiUrl()}/zones/${zoneId}`, {
+            method: 'DELETE',
+            headers: apiHeaders(),
+          });
+          if (res.ok) {
+            if (selectedZoneId === zoneId) {
+              setSelectedZoneId(null);
+              setSelectedZone(null);
+            }
+            fetchSitesAndZones();
+          }
+        } catch (err) {
+          console.error('Failed to delete zone:', err);
+        } finally {
+          setPlannerConfirm(null);
         }
-        fetchSitesAndZones();
       }
-    } catch (err) {
-      console.error('Failed to delete zone:', err);
-    }
+    });
   };
 
   // ─── Save zone position from drag ────────────────────────────────
@@ -805,31 +825,40 @@ export default function PlannerPage() {
   };
 
   // ─── Delete Anchor Permanently from Database ──────────────────────
-  const handleDeleteAnchor = async (anchorId: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus Anchor ini secara permanen dari database?')) return;
-    try {
-      // Since anchors are registered as assets (type: ANCHOR)
-      const res = await fetch(`${getApiUrl()}/assets/${anchorId}`, {
-        method: 'DELETE',
-        headers: apiHeaders(),
-      });
-      if (res.ok) {
-        fetchAllAnchors();
-        if (selectedZoneId) fetchZoneDetails(selectedZoneId);
-      } else {
-        // Fallback for table anchors
-        const res2 = await fetch(`${getApiUrl()}/floorplan/anchors/${anchorId}`, {
-          method: 'DELETE',
-          headers: apiHeaders(),
-        });
-        if (res2.ok) {
-          fetchAllAnchors();
-          if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+  const handleDeleteAnchor = (anchorId: string) => {
+    setPlannerConfirm({
+      title: 'Hapus Anchor Permanen',
+      message: 'Apakah Anda yakin ingin menghapus Anchor ini secara permanen dari database?',
+      variant: 'danger',
+      confirmText: 'Hapus Permanen',
+      onConfirm: async () => {
+        try {
+          // Since anchors are registered as assets (type: ANCHOR)
+          const res = await fetch(`${getApiUrl()}/assets/${anchorId}`, {
+            method: 'DELETE',
+            headers: apiHeaders(),
+          });
+          if (res.ok) {
+            fetchAllAnchors();
+            if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+          } else {
+            // Fallback for table anchors
+            const res2 = await fetch(`${getApiUrl()}/floorplan/anchors/${anchorId}`, {
+              method: 'DELETE',
+              headers: apiHeaders(),
+            });
+            if (res2.ok) {
+              fetchAllAnchors();
+              if (selectedZoneId) fetchZoneDetails(selectedZoneId);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to delete anchor:', err);
+        } finally {
+          setPlannerConfirm(null);
         }
       }
-    } catch (err) {
-      console.error('Failed to delete anchor:', err);
-    }
+    });
   };
 
   // ─── Assign Mesh/Asset to Selected Zone ───────────────────────────
@@ -890,7 +919,13 @@ export default function PlannerPage() {
         fetchAllMesh();
       } else {
         const errData = await res.json();
-        alert(errData.message || 'Belum ada data nilai RSSI Anchor asli yang masuk ke Mesh ini.');
+        setPlannerConfirm({
+          title: 'Informasi Kalibrasi',
+          message: errData.message || 'Belum ada data nilai RSSI Anchor asli yang masuk ke Mesh ini.',
+          variant: 'warning',
+          confirmText: 'Tutup',
+          onConfirm: () => setPlannerConfirm(null),
+        });
       }
     } catch (err) {
       console.error('Failed to recalculate RSSI:', err);
@@ -1356,12 +1391,12 @@ export default function PlannerPage() {
             <CardContent>
               <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 hover:bg-secondary/30 transition-all">
                 <Upload className="h-6 w-6 text-muted-foreground mb-1" />
-                <span className="text-[10px] text-muted-foreground">
-                  Click to upload a PNG, JPG, or SVG file
+                <span className="text-[10px] text-muted-foreground text-center px-2">
+                  Click to upload a 2D image (PNG, JPG, SVG) or 3D model (GLB, GLTF)
                 </span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.glb,.gltf"
                   className="hidden"
                   onChange={handleFileUpload}
                 />
@@ -1442,74 +1477,75 @@ export default function PlannerPage() {
 
               {/* Anchors List */}
               <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                {allTenantAnchors.map((an) => {
-                  const isPlacedOnCurrent = an.zoneId === selectedZoneId;
-                  const isPlacedElsewhere = an.zoneId && !isPlacedOnCurrent;
+                {(() => {
+                  const filteredAnchors = allTenantAnchors.filter((an) => !an.zoneId || an.zoneId === selectedZoneId);
 
-                  return (
-                    <div
-                      key={an.id}
-                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${isPlacedOnCurrent
-                        ? 'bg-cyan-950/20 border-cyan-500/30 text-cyan-300'
-                        : 'bg-secondary/40 border-border text-foreground'
-                        }`}
-                    >
-                      <div className="flex items-center gap-2 truncate mr-2">
-                        <Radio className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-cyan-400' : 'text-muted-foreground'}`} />
-                        <div className="truncate">
-                          <div className="font-bold text-[11px] truncate">{an.name}</div>
-                          <div className="text-[9px] text-muted-foreground font-mono">
-                            {isPlacedOnCurrent
-                              ? `Pos: (${an.x}m, ${an.y}m)`
-                              : isPlacedElsewhere
-                                ? `On ${an.zone?.name || 'Other Zone'}`
-                                : 'Unplaced'}
+                  if (filteredAnchors.length === 0) {
+                    return (
+                      <p className="text-[10px] text-muted-foreground italic py-2 text-center">
+                        Tidak ada anchor yang tersedia (semua anchor sudah ditempatkan pada denah lain).
+                      </p>
+                    );
+                  }
+
+                  return filteredAnchors.map((an) => {
+                    const isPlacedOnCurrent = an.zoneId === selectedZoneId;
+
+                    return (
+                      <div
+                        key={an.id}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${isPlacedOnCurrent
+                          ? 'bg-cyan-950/20 border-cyan-500/30 text-cyan-300'
+                          : 'bg-secondary/40 border-border text-foreground'
+                          }`}
+                      >
+                        <div className="flex items-center gap-2 truncate mr-2">
+                          <Radio className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-cyan-400' : 'text-muted-foreground'}`} />
+                          <div className="truncate">
+                            <div className="font-bold text-[11px] truncate">{an.name}</div>
+                            <div className="text-[9px] text-muted-foreground font-mono">
+                              {isPlacedOnCurrent ? `Pos: (${an.x}m, ${an.y}m)` : 'Belum Ditempatkan'}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {isAdmin && (
-                        isPlacedOnCurrent ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
-                            onClick={() => handleUnassignAnchor(an.id)}
-                            title="Delete from floor plan"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
+                        {isAdmin && (
+                          isPlacedOnCurrent ? (
                             <Button
                               size="sm"
                               variant="ghost"
                               className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
-                              onClick={() => handleDeleteAnchor(an.id)}
-                              title="Permanently Delete Anchor"
+                              onClick={() => handleUnassignAnchor(an.id)}
+                              title="Hapus penempatan dari denah ini"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-[10px] border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 cursor-pointer flex-shrink-0"
-                              onClick={() => handleAssignAnchor(an.id)}
-                            >
-                              <Plus className="h-3 w-3 mr-1" /> Place
-                            </Button>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  );
-                })}
-
-                {allTenantAnchors.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground italic">
-                    No Anchors are registered in this tenant.
-                  </p>
-                )}
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
+                                onClick={() => handleDeleteAnchor(an.id)}
+                                title="Hapus Anchor Permanen"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[10px] border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 cursor-pointer flex-shrink-0"
+                                onClick={() => handleAssignAnchor(an.id)}
+                              >
+                                <Plus className="h-3 w-3 mr-1" /> Place
+                              </Button>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -1534,86 +1570,89 @@ export default function PlannerPage() {
                 Select a Mesh/Asset to place on the floor plan. Drag the marker on the map to update the position.
               </p>
               <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                {allTenantMesh.map((ms) => {
-                  const isPlacedOnCurrent = ms.zoneId === selectedZoneId;
-                  const isPlacedElsewhere = ms.zoneId && !isPlacedOnCurrent;
+                {(() => {
+                  const filteredMesh = allTenantMesh.filter((ms) => !ms.zoneId || ms.zoneId === selectedZoneId);
 
-                  return (
-                    <div
-                      key={ms.id}
-                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${isPlacedOnCurrent
-                        ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
-                        : 'bg-secondary/40 border-border text-foreground'
-                        }`}
-                    >
-                      <div className="flex items-center gap-2 truncate mr-2">
-                        <Tag className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-emerald-400' : 'text-muted-foreground'}`} />
-                        <div className="truncate">
-                          <div className="font-bold text-[11px] truncate">{ms.name}</div>
-                          <div className="text-[9px] text-muted-foreground font-mono">
-                            {isPlacedOnCurrent
-                              ? `Pos: (${ms.planX?.toFixed(1) ?? '?'}m, ${ms.planY?.toFixed(1) ?? '?'}m)`
-                              : isPlacedElsewhere
-                                ? `On ${ms.zone?.name || 'Other Zone'}`
+                  if (filteredMesh.length === 0) {
+                    return (
+                      <p className="text-[10px] text-muted-foreground italic py-2 text-center">
+                        Tidak ada aset mesh yang tersedia (semua aset sudah ditempatkan pada denah lain).
+                      </p>
+                    );
+                  }
+
+                  return filteredMesh.map((ms) => {
+                    const isPlacedOnCurrent = ms.zoneId === selectedZoneId;
+
+                    return (
+                      <div
+                        key={ms.id}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${isPlacedOnCurrent
+                          ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                          : 'bg-secondary/40 border-border text-foreground'
+                          }`}
+                      >
+                        <div className="flex items-center gap-2 truncate mr-2">
+                          <Tag className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+                          <div className="truncate">
+                            <div className="font-bold text-[11px] truncate">{ms.name}</div>
+                            <div className="text-[9px] text-muted-foreground font-mono">
+                              {isPlacedOnCurrent
+                                ? `Pos: (${ms.planX?.toFixed(1) ?? '?'}m, ${ms.planY?.toFixed(1) ?? '?'}m)`
                                 : ms.type || 'MESH'}
+                            </div>
+                            {isPlacedOnCurrent && ms.tag?.signals && (() => {
+                              try {
+                                const sigs = JSON.parse(ms.tag.signals);
+                                if (Array.isArray(sigs) && sigs.length > 0) {
+                                  return (
+                                    <div className="mt-1 space-y-0.5 text-[8px] bg-emerald-950/40 p-1 rounded border border-emerald-500/20 text-left">
+                                      <span className="font-bold text-[8px] text-emerald-400">Anchor Signals:</span>
+                                      {sigs.map((s: any) => (
+                                        <div key={s.anchorId} className="flex justify-between gap-1 text-[8px]">
+                                          <span className="truncate max-w-[80px]">{s.anchorName}</span>
+                                          <span className="font-bold text-emerald-300">{s.rssi} dBm</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                }
+                              } catch (e) { }
+                              return null;
+                            })()}
                           </div>
-                          {isPlacedOnCurrent && ms.tag?.signals && (() => {
-                            try {
-                              const sigs = JSON.parse(ms.tag.signals);
-                              if (Array.isArray(sigs) && sigs.length > 0) {
-                                return (
-                                  <div className="mt-1 space-y-0.5 text-[8px] bg-emerald-950/40 p-1 rounded border border-emerald-500/20 text-left">
-                                    <span className="font-bold text-[8px] text-emerald-400">Anchor Signals:</span>
-                                    {sigs.map((s: any) => (
-                                      <div key={s.anchorId} className="flex justify-between gap-1 text-[8px]">
-                                        <span className="truncate max-w-[80px]">{s.anchorName}</span>
-                                        <span className="font-bold text-emerald-300">{s.rssi} dBm</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                );
-                              }
-                            } catch (e) { }
-                            return null;
-                          })()}
                         </div>
+
+                        {isAdmin && (
+                          isPlacedOnCurrent ? (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
+                                onClick={() => handleUnassignMesh(ms.id)}
+                                title="Hapus penempatan dari denah ini"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[10px] border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer flex-shrink-0"
+                                onClick={() => handleAssignMesh(ms.id)}
+                              >
+                                <Plus className="h-3 w-3 mr-1" /> Place
+                              </Button>
+                            </div>
+                          )
+                        )}
                       </div>
-
-                      {isAdmin && (
-                        isPlacedOnCurrent ? (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
-                              onClick={() => handleUnassignMesh(ms.id)}
-                              title="Delete from floor plan"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-[10px] border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer flex-shrink-0"
-                              onClick={() => handleAssignMesh(ms.id)}
-                            >
-                              <Plus className="h-3 w-3 mr-1" /> Place
-                            </Button>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  );
-                })}
-
-                {allTenantMesh.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground italic">
-                    No Mesh/Asset are registered in this tenant.
-                  </p>
-                )}
+                    );
+                  });
+                })()}
               </div>
             </CardContent>
           </Card>
@@ -1941,6 +1980,34 @@ export default function PlannerPage() {
             RTLS Planner {selectedZone ? ' · ' + selectedZone.name : ''}
           </span>
           <div className="flex-1" />
+
+          {/* 2D / 3D Mode Toggle Switcher */}
+          {selectedZoneId && (
+            <div className="flex items-center bg-secondary/80 border border-border p-0.5 rounded-lg mr-2">
+              <button
+                type="button"
+                onClick={() => setViewMode('2d')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${viewMode === '2d'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                2D Plan
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('3d')}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${viewMode === '3d'
+                  ? 'bg-cyan-500 text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                <Box className="h-3.5 w-3.5" />
+                3D Twin
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => {
@@ -2080,9 +2147,33 @@ export default function PlannerPage() {
               <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           )}
-          <div ref={mapContainerRef} className="w-full h-full min-h-[500px]" />
+          {selectedZoneId && selectedZone && viewMode === '3d' ? (
+            <ThreeFloorPlanView
+              zone={selectedZone}
+              anchors={allTenantAnchors.filter((a) => a.zoneId === selectedZone.id)}
+              assets={assets.filter((a) => a.zoneId === selectedZone.id || selectedZone.assets?.some((za: any) => za.id === a.id))}
+              isAdmin={isAdmin}
+              getBackendUrl={getBackendUrl}
+              getApiUrl={getApiUrl}
+              apiHeaders={apiHeaders}
+            />
+          ) : (
+            <div ref={mapContainerRef} className="w-full h-full min-h-[500px]" />
+          )}
         </div>
       </div>
+
+      {/* Custom Confirm Modal for Planner */}
+      <ConfirmModal
+        isOpen={!!plannerConfirm}
+        title={plannerConfirm?.title || 'Konfirmasi'}
+        message={plannerConfirm?.message || ''}
+        confirmText={plannerConfirm?.confirmText || 'OK'}
+        cancelText="Batal"
+        variant={plannerConfirm?.variant || 'danger'}
+        onConfirm={() => plannerConfirm?.onConfirm()}
+        onCancel={() => setPlannerConfirm(null)}
+      />
     </div>
   );
 }

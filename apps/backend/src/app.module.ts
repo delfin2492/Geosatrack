@@ -18,6 +18,7 @@ import {
 } from 'nest-keycloak-connect';
 
 import { AuthModule } from './modules/auth/auth.module';
+import { AlertModule } from './modules/alert/alert.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AuthModule } from './modules/auth/auth.module';
     AssetModule,
     FloorplanModule,
     RuleModule,
+    AlertModule,
   ],
   controllers: [AppController],
   providers: [AppService],
