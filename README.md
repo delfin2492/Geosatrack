@@ -353,4 +353,45 @@ Untuk mempublikasikan server lokal ke publik, buatlah tunnel di Cloudflare Dashb
 
 ---
 
+## 12. Cara Memperbarui Codingan (Pull Git Updates)
+
+Jika terdapat pembaruan kode terbaru pada repositori GeoMesh, ikuti langkah-langkah berikut untuk melakukan sinkronisasi dan memperbarui platform di server / komputer lokal Anda:
+
+### 1. Ambil Perubahan Terbaru dari Git
+Jalankan perintah berikut pada terminal di dalam folder utama proyek `Geosatrack`:
+```bash
+git checkout main
+git pull origin main
+```
+
+### 2. Hentikan dan Hapus Container Lama
+Hentikan container yang sedang berjalan saat ini agar port dilepaskan secara bersih:
+```bash
+docker compose down
+```
+
+### 3. Rebuild dan Jalankan Container Baru
+Gunakan perintah `--build` agar Docker menyusun ulang citra (*container image*) menggunakan berkas kode terbaru yang baru saja ditarik dari Git:
+```bash
+docker compose up --build -d
+```
+
+### 4. Sinkronisasi Skema Database (Prisma)
+Jika terdapat perubahan skema database atau penambahan tabel/model baru di `schema.prisma`, lakukan sinkronisasi ke PostgreSQL kontainer:
+```bash
+docker compose exec backend npx prisma db push
+```
+
+### 5. Verifikasi Status Layanan
+Pastikan seluruh container telah berjalan normal (`Up`):
+```bash
+docker compose ps
+```
+*(Opsional)* Anda dapat memantau log backend untuk memastikan koneksi database dan broker EMQX berhasil terhubung:
+```bash
+docker compose logs -f backend
+```
+
+---
+
 *Dikembangkan oleh Tim IoT Geomesh. Untuk informasi lebih lanjut mengenai dokumentasi API dan lisensi, silakan hubungi tim pengembang atau buka bagian `apps/backend/docs`.*
