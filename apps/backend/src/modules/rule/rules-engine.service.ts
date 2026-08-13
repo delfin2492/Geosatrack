@@ -183,9 +183,23 @@ export class RulesEngineService {
       }
     } else if (nodeType === 'action_email') {
       try {
-        const { smtpHost, smtpPort, smtpUser, smtpPass, toEmail, subjectTemplate, bodyTemplate } = currentNode.data;
-        if (!smtpHost || !smtpUser || !smtpPass || !toEmail) {
-          throw new Error('Email configuration is missing required SMTP credentials.');
+        const { toEmail, subjectTemplate, bodyTemplate } = currentNode.data;
+        if (!toEmail) {
+          throw new Error('Email configuration is missing recipient email (toEmail).');
+        }
+
+        const settings = await this.prisma.systemSetting.findMany({
+          where: {
+            key: { in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'] }
+          }
+        });
+        const smtpHost = settings.find(s => s.key === 'SMTP_HOST')?.value;
+        const smtpPort = settings.find(s => s.key === 'SMTP_PORT')?.value;
+        const smtpUser = settings.find(s => s.key === 'SMTP_USER')?.value;
+        const smtpPass = settings.find(s => s.key === 'SMTP_PASS')?.value;
+
+        if (!smtpHost || !smtpUser || !smtpPass) {
+          throw new Error('Global SMTP credentials are not configured in System Settings.');
         }
 
         const transporter = nodemailer.createTransport({
@@ -198,15 +212,44 @@ export class RulesEngineService {
           },
         });
 
-        const subject = this.interpolateTemplate(subjectTemplate || 'Alert Notification', payload);
-        const body = this.interpolateTemplate(bodyTemplate || 'Alert triggered.', payload);
+        const rawSubject = this.interpolateTemplate(subjectTemplate || 'Alert Notification', payload);
+        const subject = `[GEOMESH ALARM] Alert: ${rawSubject}`;
+        
+        const rawBody = this.interpolateTemplate(bodyTemplate || 'Alert triggered.', payload);
+        const formattedBody = rawBody
+          .split('\n')
+          .map(line => {
+            const colonIndex = line.indexOf(':');
+            if (colonIndex !== -1) {
+              const key = line.substring(0, colonIndex);
+              const value = line.substring(colonIndex + 1);
+              return `<strong>${key}</strong>:${value}`;
+            }
+            return line;
+          })
+          .join('<br/>');
+
+        const htmlContent = `
+<div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+  <h2 style="color: #d32f2f; margin-top: 0; display: flex; align-items: center; font-size: 18px;">
+    🚨 GeoMesh Alarm Alert
+  </h2>
+  <p style="font-size: 14px; margin-bottom: 20px;">
+    Alarm <strong>"${rawSubject}"</strong> has been triggered.
+  </p>
+  <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+  <div style="font-size: 14px; line-height: 1.8;">
+    ${formattedBody}
+  </div>
+</div>
+        `;
 
         await transporter.sendMail({
-          from: `"GeoMesh RTLS" <${smtpUser}>`,
+          from: `"GeoMesh Platform" <${smtpUser}>`,
           to: toEmail,
           subject: subject,
-          text: body,
-          html: `<p>${body.replace(/\n/g, '<br/>')}</p>`,
+          text: rawBody,
+          html: htmlContent,
         });
 
         const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
@@ -227,9 +270,18 @@ export class RulesEngineService {
       }
     } else if (nodeType === 'action_telegram') {
       try {
-        const { botToken, chatId, messageTemplate } = currentNode.data;
-        if (!botToken || !chatId) {
-          throw new Error('Telegram Bot Token or Chat ID is missing.');
+        const { chatId, messageTemplate } = currentNode.data;
+        if (!chatId) {
+          throw new Error('Telegram Chat ID is missing.');
+        }
+
+        const botTokenSetting = await this.prisma.systemSetting.findUnique({
+          where: { key: 'TELEGRAM_BOT_TOKEN' }
+        });
+        const botToken = botTokenSetting?.value;
+
+        if (!botToken) {
+          throw new Error('Global Telegram Bot Token is not configured in System Settings.');
         }
 
         const messageText = this.interpolateTemplate(

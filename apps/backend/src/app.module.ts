@@ -19,6 +19,7 @@ import {
 
 import { AuthModule } from './modules/auth/auth.module';
 import { AlertModule } from './modules/alert/alert.module';
+import { SystemSettingModule } from './modules/system-setting/system-setting.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { AlertModule } from './modules/alert/alert.module';
     FloorplanModule,
     RuleModule,
     AlertModule,
+    SystemSettingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

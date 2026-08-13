@@ -101,7 +101,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navigation = isSuperAdmin
     ? (isImpersonating 
         ? [...baseNavigation, { name: 'Tenants Manager', href: '/tenants', icon: Building2 }]
-        : [{ name: 'Tenants Manager', href: '/tenants', icon: Building2 }])
+        : [
+            { name: 'Tenants Manager', href: '/tenants', icon: Building2 },
+            { name: 'System Settings', href: '/system-settings', icon: Settings }
+          ])
     : baseNavigation;
 
   const handleExitImpersonation = () => {

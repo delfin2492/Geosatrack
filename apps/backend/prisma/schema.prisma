@@ -231,3 +231,13 @@ model RuleLog {
   message     String    @db.Text
   createdAt   DateTime  @default(now())
 }
+
+// ------------------------------------------------------------------------------
+// 7. SYSTEM SETTINGS
+// ------------------------------------------------------------------------------
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

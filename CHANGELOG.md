@@ -7,6 +7,9 @@ All notable changes and updates to the GeoMesh Industrial Asset Tracking Platfor
 ## [1.1.0] - 2026-08-13
 
 ### Added
+- **Global System Settings (`/system-settings`):**
+  - Added a centralized configuration panel (accessible only to Superadmin) to manage platform-wide integration credentials securely.
+  - Supported integrations: **Global SMTP Configuration** (Host, Port, User, Password) and **Telegram Bot Integration** (Bot Token).
 - **Live Debug Logs Console (`/logs`):**
   - Fully redesigned the Live Logs screen into a modern macOS-inspired terminal console window.
   - Added an **Auto-scroll** toggle switch to pause and resume automatic scrolling.
@@ -23,6 +26,10 @@ All notable changes and updates to the GeoMesh Industrial Asset Tracking Platfor
   - Created a sleek, custom confirmation modal featuring a dark/light responsive layout, backdrop blur, smooth animated entry/exit, and clear action button variants (`danger`, `warning`, `info`).
 
 ### Changed
+- **Automation Rules Engine (`/rules`):**
+  - **Node Simplification:** Removed redundant authentication inputs from `action_email` (SMTP Host/Port) and `action_telegram` (Bot Token) nodes. The engine now dynamically fetches credentials from the Global System Settings.
+  - **Email Template:** Upgraded the raw-text outbound email to a professional HTML format featuring the "GeoMesh Alarm Alert" layout with bold styling for dynamic variables.
+  - **Helper Tooltips:** Added a smart helper box on messaging nodes detailing exactly which text-interpolation variables are supported by the backend payload (e.g. `{assetName}`, `{geofenceName}`, `{time}`) along with formatting instructions and clickable bot integration links.
 - **Header Notification Dropdown (`NotificationDropdown.tsx`):**
   - Simplified dropdown design: removed date filter and merged "New Alerts" and "History" into a single, unified feed showing the **10 latest notifications**.
   - Local Dismissal Logic: deleting or clearing items from the dropdown dismisses them locally from the dropdown view only (saved in `localStorage`), preserving the raw history in the database so it remains fully readable on the main history page.

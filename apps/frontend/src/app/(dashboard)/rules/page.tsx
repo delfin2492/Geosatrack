@@ -101,26 +101,26 @@ const getAssetIcon = (type: string) => {
 
 const getAssetAttributes = (asset: any) => {
   let attrs = [{ name: 'status', type: 'string' }]; // 'status' is a native Prisma field
-  
+
   if (asset && asset.description) {
     try {
       const parsed = JSON.parse(asset.description);
       if (parsed.attributes && Array.isArray(parsed.attributes)) {
         parsed.attributes.forEach((a: any) => {
-           if (a.name) {
-             let type = 'string';
-             const dt = (a.dataType || '').toLowerCase();
-             if (dt.includes('int') || dt.includes('double') || dt.includes('float') || dt.includes('number')) type = 'number';
-             if (dt.includes('bool')) type = 'boolean';
-             
-             // Prevent duplicates
-             if (!attrs.find(x => x.name === a.name)) {
-                attrs.push({ name: a.name, type });
-             }
-           }
+          if (a.name) {
+            let type = 'string';
+            const dt = (a.dataType || '').toLowerCase();
+            if (dt.includes('int') || dt.includes('double') || dt.includes('float') || dt.includes('number')) type = 'number';
+            if (dt.includes('bool')) type = 'boolean';
+
+            // Prevent duplicates
+            if (!attrs.find(x => x.name === a.name)) {
+              attrs.push({ name: a.name, type });
+            }
+          }
         });
       }
-    } catch(e) {
+    } catch (e) {
       console.warn("Failed to parse asset description JSON for attributes", e);
     }
   }
@@ -135,7 +135,7 @@ const getAssetAttributes = (asset: any) => {
 };
 
 // Reusable Searchable Select Component with Portal-like floating style
-const SearchableSelect = ({ options, value, onChange, placeholder = "Select...", alwaysSearchable = false }: { options: {label: string, value: string, icon?: React.ElementType}[], value: string, onChange: (val: string) => void, placeholder?: string, alwaysSearchable?: boolean }) => {
+const SearchableSelect = ({ options, value, onChange, placeholder = "Select...", alwaysSearchable = false }: { options: { label: string, value: string, icon?: React.ElementType }[], value: string, onChange: (val: string) => void, placeholder?: string, alwaysSearchable?: boolean }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -153,7 +153,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
   const selectedOption = options.find(o => o.value === value);
   const SelectedIcon = selectedOption?.icon;
 
-  const filteredOptions = alwaysSearchable || options.length > 5 
+  const filteredOptions = alwaysSearchable || options.length > 5
     ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
     : options;
 
@@ -161,7 +161,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <div 
+      <div
         className="w-full h-8 bg-secondary/35 border border-border px-2.5 py-1.5 rounded-lg text-xs cursor-pointer flex justify-between items-center transition-colors hover:border-primary/50"
         onClick={() => setOpen(!open)}
       >
@@ -171,15 +171,15 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
         </div>
         <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
       </div>
-      
+
       {open && (
         <div className="absolute z-[999] top-full mt-1 w-full left-0 bg-card border border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
           {showSearch && (
             <div className="p-2 border-b border-border bg-secondary/20 flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-muted-foreground" />
-              <input 
-                type="text" 
-                placeholder="Search..." 
+              <input
+                type="text"
+                placeholder="Search..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full bg-transparent border-none outline-none text-[11px] font-medium"
@@ -194,7 +194,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
               filteredOptions.map(o => {
                 const Icon = o.icon;
                 return (
-                  <div 
+                  <div
                     key={o.value}
                     className="flex items-center px-3 py-2 text-xs hover:bg-secondary cursor-pointer rounded-lg truncate transition-colors"
                     onClick={() => { onChange(o.value); setOpen(false); setSearch(""); }}
@@ -445,21 +445,21 @@ export default function RulesPage() {
       case 'logic_filter': label = 'Filter Logic'; initialData = { conditionType: 'GT', thresholdValue: '40' }; break;
       case 'process_math': label = 'Math Operation'; initialData = { operation: 'ADD' }; break;
       case 'action_alarm': label = 'Create Alarm'; initialData = { messageTemplate: 'Critical alert: Asset {assetName}' }; break;
-      case 'action_email': label = 'SMTP Email'; initialData = { smtpHost: 'smtp.gmail.com', smtpPort: '587' }; break;
-      case 'action_telegram': label = 'Telegram Bot'; initialData = { botToken: '', chatId: '' }; break;
+      case 'action_email': label = 'SMTP Email'; initialData = { toEmail: '', subjectTemplate: 'Alert Notification', bodyTemplate: 'Asset {assetName} triggered an alert.' }; break;
+      case 'action_telegram': label = 'Telegram Bot'; initialData = { chatId: '', messageTemplate: '⚠️ *GeoMesh Alert*\\nAsset: *{assetName}*\\nEvent: *{attributeName}* triggered with value {value}.' }; break;
     }
-    
+
     const nodePosition = position || { x: 100 + Math.random() * 150, y: 150 + Math.random() * 150 };
     setNodes((prev) => [...prev, { id, type: 'customNode', position: nodePosition, data: { label, type, ...initialData } }]);
   }, [setNodes]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
-      event.preventDefault();
-      const type = event.dataTransfer.getData('application/reactflow') as NodeType;
-      if (typeof type === 'undefined' || !type || !reactFlowInstance) return;
+    event.preventDefault();
+    const type = event.dataTransfer.getData('application/reactflow') as NodeType;
+    if (typeof type === 'undefined' || !type || !reactFlowInstance) return;
 
-      const position = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      addNodeToFlow(type, position);
+    const position = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    addNodeToFlow(type, position);
   }, [reactFlowInstance, addNodeToFlow]);
 
   const updateNodeData = (nodeId: string, key: string, value: any) => {
@@ -472,7 +472,7 @@ export default function RulesPage() {
       return node;
     }));
   };
-  
+
   const deleteSelectedNode = () => {
     if (!selectedNode) return;
     setNodes((prev) => prev.filter((n) => n.id !== selectedNode.id));
@@ -538,7 +538,7 @@ export default function RulesPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-2 border-border shadow-md rounded-2xl flex flex-col">
             <CardHeader className="py-3.5 border-b border-border">
-              <CardTitle className="text-xs font-bold text-foreground">Daftar Automation Rules</CardTitle>
+              <CardTitle className="text-xs font-bold text-foreground">List of Automation Rules</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {rules.length === 0 ? (
@@ -587,16 +587,16 @@ export default function RulesPage() {
             <CardContent className="p-4 space-y-3">
               {!selectedLogRule ? <div className="text-center text-xs text-muted-foreground italic py-8">Select a rule to view logs.</div>
                 : loadingLogs ? <div className="text-center py-8 text-xs">Loading...</div>
-                : logs.length === 0 ? <div className="text-center text-xs text-muted-foreground italic py-8">No logs yet.</div>
-                : logs.map((log) => (
-                  <div key={log.id} className="p-3 rounded-xl border border-border bg-secondary/20 space-y-1.5">
-                    <div className="flex justify-between">
-                      <Badge className={log.status === 'SUCCESS' ? 'bg-green-500/10 text-green-500' : 'bg-destructive/10 text-destructive'}>{log.status}</Badge>
-                      <span className="text-[9px] text-muted-foreground font-mono">{new Date(log.createdAt).toLocaleString()}</span>
-                    </div>
-                    <pre className="text-[9px] font-mono text-foreground whitespace-pre-wrap">{log.message}</pre>
-                  </div>
-                ))
+                  : logs.length === 0 ? <div className="text-center text-xs text-muted-foreground italic py-8">No logs yet.</div>
+                    : logs.map((log) => (
+                      <div key={log.id} className="p-3 rounded-xl border border-border bg-secondary/20 space-y-1.5">
+                        <div className="flex justify-between">
+                          <Badge className={log.status === 'SUCCESS' ? 'bg-green-500/10 text-green-500' : 'bg-destructive/10 text-destructive'}>{log.status}</Badge>
+                          <span className="text-[9px] text-muted-foreground font-mono">{new Date(log.createdAt).toLocaleString()}</span>
+                        </div>
+                        <pre className="text-[9px] font-mono text-foreground whitespace-pre-wrap">{log.message}</pre>
+                      </div>
+                    ))
               }
             </CardContent>
           </Card>
@@ -621,57 +621,57 @@ export default function RulesPage() {
                   const selectedAsset = assets.find(a => a.id === cond.assetId);
                   const attrOptions = getAssetAttributes(selectedAsset).map(a => ({ label: a.name, value: a.name }));
                   const selectedAttrInfo = getAssetAttributes(selectedAsset).find(a => a.name === cond.attribute);
-                  
+
                   return (
-                  <div key={cond.id} className="border-l-2 border-border pl-4 ml-2 relative group">
-                    {i > 0 && <div className="absolute -top-4 left-[-11px] bg-background text-amber-500 border border-border text-[9px] font-black px-1.5 py-0.5 rounded-full z-10">AND</div>}
-                    <button onClick={() => setWtConditions(c => c.filter(x => x.id !== cond.id))} className="absolute top-0 right-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-4 w-4" /></button>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1 pr-6">
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Asset</label>
-                        <SearchableSelect 
-                          options={assetOptions} 
-                          value={cond.assetId} 
-                          onChange={(val) => { const n = [...wtConditions]; n[i].assetId = val; n[i].attribute = ''; setWtConditions(n); }} 
-                          placeholder="Select Asset..." 
-                          alwaysSearchable={true}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Attribute</label>
-                        <SearchableSelect 
-                          options={attrOptions}
-                          value={cond.attribute} 
-                          onChange={(val) => { const n = [...wtConditions]; n[i].attribute = val; setWtConditions(n); }} 
-                          placeholder="Select Attribute..." 
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Operator</label>
-                        <SearchableSelect 
-                          options={[
-                            { label: "Greater than", value: ">" },
-                            { label: "Less than", value: "<" },
-                            { label: "Equal to", value: "==" },
-                            { label: "Not equal to", value: "!=" }
-                          ]}
-                          value={cond.operator} 
-                          onChange={(val) => { const n = [...wtConditions]; n[i].operator = val; setWtConditions(n); }} 
-                          placeholder="Select Operator..."
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Value</label>
-                        <Input 
-                          type={selectedAttrInfo?.type === 'number' ? 'number' : 'text'}
-                          className="h-8 text-xs" 
-                          value={cond.value} 
-                          onChange={(e) => { const n = [...wtConditions]; n[i].value = e.target.value; setWtConditions(n); }} 
-                        />
+                    <div key={cond.id} className="border-l-2 border-border pl-4 ml-2 relative group">
+                      {i > 0 && <div className="absolute -top-4 left-[-11px] bg-background text-amber-500 border border-border text-[9px] font-black px-1.5 py-0.5 rounded-full z-10">AND</div>}
+                      <button onClick={() => setWtConditions(c => c.filter(x => x.id !== cond.id))} className="absolute top-0 right-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-4 w-4" /></button>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1 pr-6">
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Asset</label>
+                          <SearchableSelect
+                            options={assetOptions}
+                            value={cond.assetId}
+                            onChange={(val) => { const n = [...wtConditions]; n[i].assetId = val; n[i].attribute = ''; setWtConditions(n); }}
+                            placeholder="Select Asset..."
+                            alwaysSearchable={true}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Attribute</label>
+                          <SearchableSelect
+                            options={attrOptions}
+                            value={cond.attribute}
+                            onChange={(val) => { const n = [...wtConditions]; n[i].attribute = val; setWtConditions(n); }}
+                            placeholder="Select Attribute..."
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Operator</label>
+                          <SearchableSelect
+                            options={[
+                              { label: "Greater than", value: ">" },
+                              { label: "Less than", value: "<" },
+                              { label: "Equal to", value: "==" },
+                              { label: "Not equal to", value: "!=" }
+                            ]}
+                            value={cond.operator}
+                            onChange={(val) => { const n = [...wtConditions]; n[i].operator = val; setWtConditions(n); }}
+                            placeholder="Select Operator..."
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Value</label>
+                          <Input
+                            type={selectedAttrInfo?.type === 'number' ? 'number' : 'text'}
+                            className="h-8 text-xs"
+                            value={cond.value}
+                            onChange={(e) => { const n = [...wtConditions]; n[i].value = e.target.value; setWtConditions(n); }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
                   );
                 })}
               </div>
@@ -689,7 +689,7 @@ export default function RulesPage() {
                 </div>
                 <span className="text-[10px] text-muted-foreground font-bold tracking-wider">ALWAYS</span>
               </div>
-              
+
               <div className="space-y-4">
                 {wtActions.map((act, i) => {
                   const targetAsset = assets.find(a => a.id === act.assetId);
@@ -697,77 +697,77 @@ export default function RulesPage() {
                   const selectedAttrInfo = getAssetAttributes(targetAsset).find(a => a.name === act.attribute);
 
                   return (
-                  <div key={act.id} className="border-l-2 border-border pl-4 ml-2 relative group">
-                    {i > 0 && <div className="absolute -top-4 left-[-11px] bg-background text-blue-500 border border-border text-[9px] font-black px-1.5 py-0.5 rounded-full z-10">AND</div>}
-                    <button onClick={() => setWtActions(a => a.filter(x => x.id !== act.id))} className="absolute top-0 right-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-4 w-4" /></button>
-                    
-                    <div className="mb-4 pr-6">
-                      <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Action Type</label>
-                      <SearchableSelect 
-                        options={[
-                          { label: "Trigger Asset Attribute", value: "trigger_asset" },
-                          { label: "Dashboard Alarm", value: "alarm" },
-                          { label: "Send Notification", value: "notification" }
-                        ]}
-                        value={act.actionType} 
-                        onChange={(val) => { const n = [...wtActions]; n[i].actionType = val; setWtActions(n); }} 
-                        placeholder="Select Action Type..."
-                      />
+                    <div key={act.id} className="border-l-2 border-border pl-4 ml-2 relative group">
+                      {i > 0 && <div className="absolute -top-4 left-[-11px] bg-background text-blue-500 border border-border text-[9px] font-black px-1.5 py-0.5 rounded-full z-10">AND</div>}
+                      <button onClick={() => setWtActions(a => a.filter(x => x.id !== act.id))} className="absolute top-0 right-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-4 w-4" /></button>
+
+                      <div className="mb-4 pr-6">
+                        <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Action Type</label>
+                        <SearchableSelect
+                          options={[
+                            { label: "Trigger Asset Attribute", value: "trigger_asset" },
+                            { label: "Dashboard Alarm", value: "alarm" },
+                            { label: "Send Notification", value: "notification" }
+                          ]}
+                          value={act.actionType}
+                          onChange={(val) => { const n = [...wtActions]; n[i].actionType = val; setWtActions(n); }}
+                          placeholder="Select Action Type..."
+                        />
+                      </div>
+
+                      {act.actionType === 'trigger_asset' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pr-6">
+                          <div>
+                            <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Target Asset</label>
+                            <SearchableSelect
+                              options={assetOptions}
+                              value={act.assetId}
+                              onChange={(val) => { const n = [...wtActions]; n[i].assetId = val; n[i].attribute = ''; setWtActions(n); }}
+                              placeholder="Select Target Asset..."
+                              alwaysSearchable={true}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Target Attribute</label>
+                            <SearchableSelect
+                              options={targetAttrOptions}
+                              value={act.attribute}
+                              onChange={(val) => { const n = [...wtActions]; n[i].attribute = val; setWtActions(n); }}
+                              placeholder="Select Attribute..."
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Command Value</label>
+                            {selectedAttrInfo?.type === 'boolean' ? (
+                              <SearchableSelect
+                                options={[
+                                  { label: "True / ON", value: "true" },
+                                  { label: "False / OFF", value: "false" }
+                                ]}
+                                value={act.command}
+                                onChange={(val) => { const n = [...wtActions]; n[i].command = val; setWtActions(n); }}
+                                placeholder="Select Boolean..."
+                              />
+                            ) : (
+                              <Input
+                                type={selectedAttrInfo?.type === 'number' ? 'number' : 'text'}
+                                className="h-8 text-xs"
+                                placeholder={`e.g. ${selectedAttrInfo?.type === 'number' ? '50' : 'ON'}`}
+                                value={act.command}
+                                onChange={(e) => { const n = [...wtActions]; n[i].command = e.target.value; setWtActions(n); }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {act.actionType === 'alarm' && (
+                        <div className="pr-6">
+                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Alarm Message</label>
+                          <Input className="h-8 text-xs" value={act.message} onChange={(e) => { const n = [...wtActions]; n[i].message = e.target.value; setWtActions(n); }} />
+                        </div>
+                      )}
                     </div>
-
-                    {act.actionType === 'trigger_asset' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pr-6">
-                        <div>
-                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Target Asset</label>
-                          <SearchableSelect 
-                            options={assetOptions} 
-                            value={act.assetId} 
-                            onChange={(val) => { const n = [...wtActions]; n[i].assetId = val; n[i].attribute = ''; setWtActions(n); }} 
-                            placeholder="Select Target Asset..." 
-                            alwaysSearchable={true}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Target Attribute</label>
-                          <SearchableSelect 
-                            options={targetAttrOptions}
-                            value={act.attribute} 
-                            onChange={(val) => { const n = [...wtActions]; n[i].attribute = val; setWtActions(n); }} 
-                            placeholder="Select Attribute..." 
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Command Value</label>
-                          {selectedAttrInfo?.type === 'boolean' ? (
-                            <SearchableSelect 
-                              options={[
-                                { label: "True / ON", value: "true" },
-                                { label: "False / OFF", value: "false" }
-                              ]}
-                              value={act.command} 
-                              onChange={(val) => { const n = [...wtActions]; n[i].command = val; setWtActions(n); }} 
-                              placeholder="Select Boolean..."
-                            />
-                          ) : (
-                            <Input 
-                              type={selectedAttrInfo?.type === 'number' ? 'number' : 'text'}
-                              className="h-8 text-xs" 
-                              placeholder={`e.g. ${selectedAttrInfo?.type === 'number' ? '50' : 'ON'}`} 
-                              value={act.command} 
-                              onChange={(e) => { const n = [...wtActions]; n[i].command = e.target.value; setWtActions(n); }} 
-                            />
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {act.actionType === 'alarm' && (
-                      <div className="pr-6">
-                        <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Alarm Message</label>
-                        <Input className="h-8 text-xs" value={act.message} onChange={(e) => { const n = [...wtActions]; n[i].message = e.target.value; setWtActions(n); }} />
-                      </div>
-                    )}
-                  </div>
                   );
                 })}
               </div>
@@ -781,8 +781,8 @@ export default function RulesPage() {
         // FLOW EDITOR
         <div className="flex flex-col lg:flex-row gap-4 h-[700px] relative">
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-card border border-border p-2 px-4 shadow-lg rounded-xl flex flex-col md:flex-row items-center gap-3">
-             <span className="text-xs font-bold text-muted-foreground whitespace-nowrap hidden md:inline">Flow Name:</span>
-             <Input value={ruleName} onChange={(e) => setRuleName(e.target.value)} className="h-8 rounded-lg font-bold text-sm bg-secondary/30 min-w-[200px] md:min-w-[250px]" placeholder="Flow Name" />
+            <span className="text-xs font-bold text-muted-foreground whitespace-nowrap hidden md:inline">Flow Name:</span>
+            <Input value={ruleName} onChange={(e) => setRuleName(e.target.value)} className="h-8 rounded-lg font-bold text-sm bg-secondary/30 min-w-[200px] md:min-w-[250px]" placeholder="Flow Name" />
           </div>
 
           {/* SIDEBAR NODE PALETTE */}
@@ -795,7 +795,7 @@ export default function RulesPage() {
                 <div draggable onDragStart={(e) => onDragStart(e, 'trigger_geofence')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Geofence Event</div>
               </div>
             </div>
-            
+
             <div className="shrink-0 min-w-[100px]">
               <div className="text-[10px] font-bold text-green-500 uppercase tracking-wider mb-2">Processors</div>
               <div className="flex lg:grid lg:grid-cols-2 gap-1.5">
@@ -833,176 +833,208 @@ export default function RulesPage() {
               <Controls />
             </ReactFlow>
           </div>
-          
+
           {/* FLOW PROPERTIES PANEL */}
           {selectedNode && (
             <Card className="w-full lg:w-80 border-border shadow-md rounded-2xl flex flex-col lg:shrink-0 absolute lg:relative z-30 bottom-0 lg:bottom-auto max-h-[50%] lg:max-h-full">
               <CardHeader className="py-3 border-b border-border flex flex-row items-center justify-between">
                 <CardTitle className="text-xs font-bold text-foreground">Node Config</CardTitle>
                 <Button size="sm" variant="ghost" className="h-6 text-red-500 hover:text-red-600 font-bold p-1" onClick={deleteSelectedNode}>
-                   Hapus Node
+                  Hapus Node
                 </Button>
               </CardHeader>
               <CardContent className="p-4 space-y-4 overflow-y-auto flex-1 text-xs bg-card">
+                <div className="space-y-3">
+                  <div className="p-2.5 rounded-xl bg-secondary/35 border border-border font-bold text-[10px] uppercase text-center text-foreground">
+                    {selectedNode.data.label || selectedNode.id}
+                  </div>
+
+                  {/* GEOFENCE TRIGGER CONFIGURATION */}
+                  {selectedNode.data.type === 'trigger_geofence' && (
                     <div className="space-y-3">
-                      <div className="p-2.5 rounded-xl bg-secondary/35 border border-border font-bold text-[10px] uppercase text-center text-foreground">
-                        {selectedNode.data.label || selectedNode.id}
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Select Asset</label>
+                        <SearchableSelect
+                          options={[{ label: "Any Assets", value: "ANY" }, ...assetOptions]}
+                          value={selectedNode.data.assetId || 'ANY'}
+                          onChange={(val) => updateNodeData(selectedNode.id, 'assetId', val)}
+                          alwaysSearchable={true}
+                        />
                       </div>
 
-                      {/* GEOFENCE TRIGGER CONFIGURATION */}
-                      {selectedNode.data.type === 'trigger_geofence' && (
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Select Asset</label>
-                            <SearchableSelect 
-                              options={[{label: "Any Assets", value: "ANY"}, ...assetOptions]}
-                              value={selectedNode.data.assetId || 'ANY'}
-                              onChange={(val) => updateNodeData(selectedNode.id, 'assetId', val)}
-                              alwaysSearchable={true}
-                            />
-                          </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Event Type</label>
+                        <SearchableSelect
+                          options={[
+                            { label: "Any Event (Enter / Exit)", value: "ANY" },
+                            { label: "Asset Enter Geofence", value: "GEOFENCE_ENTER" },
+                            { label: "Asset Exit Geofence", value: "GEOFENCE_EXIT" }
+                          ]}
+                          value={selectedNode.data.eventType}
+                          onChange={(val) => updateNodeData(selectedNode.id, 'eventType', val)}
+                          placeholder="Select Event Type..."
+                        />
+                      </div>
 
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Event Type</label>
-                            <SearchableSelect 
-                              options={[
-                                { label: "Any Event (Enter / Exit)", value: "ANY" },
-                                { label: "Asset Enter Geofence", value: "GEOFENCE_ENTER" },
-                                { label: "Asset Exit Geofence", value: "GEOFENCE_EXIT" }
-                              ]}
-                              value={selectedNode.data.eventType}
-                              onChange={(val) => updateNodeData(selectedNode.id, 'eventType', val)}
-                              placeholder="Select Event Type..."
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Select Geofence Zone</label>
-                            <SearchableSelect 
-                              options={[{label: "Any Geofence", value: "ANY"}, ...geofenceOptions]}
-                              value={selectedNode.data.geofenceId}
-                              onChange={(val) => updateNodeData(selectedNode.id, 'geofenceId', val)}
-                              alwaysSearchable={true}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* TELEMETRY / INPUT CONFIGURATION */}
-                      {(selectedNode.data.type === 'trigger_telemetry' || selectedNode.data.type === 'input_attribute') && (
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Select Asset</label>
-                            <SearchableSelect 
-                              options={[{label: "Any Assets", value: "ANY"}, ...assetOptions]}
-                              value={selectedNode.data.assetId}
-                              onChange={(val) => updateNodeData(selectedNode.id, 'assetId', val)}
-                              alwaysSearchable={true}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Attribute Name</label>
-                            {selectedNode.data.assetId === 'ANY' ? (
-                              <Input value={selectedNode.data.attributeName} onChange={(e) => updateNodeData(selectedNode.id, 'attributeName', e.target.value)} className="h-8 rounded-lg text-xs" placeholder="Type attribute manually..." />
-                            ) : (
-                              <SearchableSelect
-                                options={(() => {
-                                  const asset = assets.find(a => a.id === selectedNode.data.assetId);
-                                  return getAssetAttributes(asset).map(a => ({ label: a.name, value: a.name }));
-                                })()}
-                                value={selectedNode.data.attributeName}
-                                onChange={(val) => updateNodeData(selectedNode.id, 'attributeName', val)}
-                                placeholder="Select Attribute..."
-                              />
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ACTION ALARM CONFIGURATION */}
-                      {selectedNode.data.type === 'action_alarm' && (
-                        <div className="space-y-1.5">
-                          <label className="text-muted-foreground font-semibold">Alarm Message</label>
-                          <textarea
-                            value={selectedNode.data.messageTemplate}
-                            onChange={(e) => updateNodeData(selectedNode.id, 'messageTemplate', e.target.value)}
-                            rows={4}
-                            className="w-full bg-secondary/35 border border-border px-2.5 py-1.5 rounded-lg text-foreground text-xs font-semibold"
-                          />
-                        </div>
-                      )}
-
-                      {/* FILTER LOGIC CONFIGURATION */}
-                      {selectedNode.data.type === 'logic_filter' && (
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Condition Type</label>
-                            <SearchableSelect 
-                              options={[
-                                { label: "Greater Than (>)", value: "GT" },
-                                { label: "Less Than (<)", value: "LT" },
-                                { label: "Equal To (==)", value: "EQ" }
-                              ]}
-                              value={selectedNode.data.conditionType}
-                              onChange={(val) => updateNodeData(selectedNode.id, 'conditionType', val)}
-                              placeholder="Condition..."
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Threshold Value</label>
-                            <Input type="number" value={selectedNode.data.thresholdValue} onChange={(e) => updateNodeData(selectedNode.id, 'thresholdValue', e.target.value)} className="h-8 rounded-lg text-xs" />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* PROCESS MATH CONFIGURATION */}
-                      {selectedNode.data.type === 'process_math' && (
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Operation</label>
-                            <SearchableSelect 
-                              options={[
-                                { label: "Add (+)", value: "ADD" },
-                                { label: "Subtract (-)", value: "SUB" },
-                                { label: "Multiply (*)", value: "MUL" },
-                                { label: "Divide (/)", value: "DIV" }
-                              ]}
-                              value={selectedNode.data.operation}
-                              onChange={(val) => updateNodeData(selectedNode.id, 'operation', val)}
-                              placeholder="Select Operation..."
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ACTION EMAIL CONFIGURATION */}
-                      {selectedNode.data.type === 'action_email' && (
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">SMTP Host</label>
-                            <Input value={selectedNode.data.smtpHost} onChange={(e) => updateNodeData(selectedNode.id, 'smtpHost', e.target.value)} className="h-8 rounded-lg text-xs" />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">SMTP Port</label>
-                            <Input type="number" value={selectedNode.data.smtpPort} onChange={(e) => updateNodeData(selectedNode.id, 'smtpPort', e.target.value)} className="h-8 rounded-lg text-xs" />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ACTION TELEGRAM CONFIGURATION */}
-                      {selectedNode.data.type === 'action_telegram' && (
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Bot Token</label>
-                            <Input value={selectedNode.data.botToken} onChange={(e) => updateNodeData(selectedNode.id, 'botToken', e.target.value)} className="h-8 rounded-lg text-xs" />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Chat ID</label>
-                            <Input value={selectedNode.data.chatId} onChange={(e) => updateNodeData(selectedNode.id, 'chatId', e.target.value)} className="h-8 rounded-lg text-xs" />
-                          </div>
-                        </div>
-                      )}
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Select Geofence Zone</label>
+                        <SearchableSelect
+                          options={[{ label: "Any Geofence", value: "ANY" }, ...geofenceOptions]}
+                          value={selectedNode.data.geofenceId}
+                          onChange={(val) => updateNodeData(selectedNode.id, 'geofenceId', val)}
+                          alwaysSearchable={true}
+                        />
+                      </div>
                     </div>
+                  )}
+
+                  {/* TELEMETRY / INPUT CONFIGURATION */}
+                  {(selectedNode.data.type === 'trigger_telemetry' || selectedNode.data.type === 'input_attribute') && (
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Select Asset</label>
+                        <SearchableSelect
+                          options={[{ label: "Any Assets", value: "ANY" }, ...assetOptions]}
+                          value={selectedNode.data.assetId}
+                          onChange={(val) => updateNodeData(selectedNode.id, 'assetId', val)}
+                          alwaysSearchable={true}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Attribute Name</label>
+                        {selectedNode.data.assetId === 'ANY' ? (
+                          <Input value={selectedNode.data.attributeName} onChange={(e) => updateNodeData(selectedNode.id, 'attributeName', e.target.value)} className="h-8 rounded-lg text-xs" placeholder="Type attribute manually..." />
+                        ) : (
+                          <SearchableSelect
+                            options={(() => {
+                              const asset = assets.find(a => a.id === selectedNode.data.assetId);
+                              return getAssetAttributes(asset).map(a => ({ label: a.name, value: a.name }));
+                            })()}
+                            value={selectedNode.data.attributeName}
+                            onChange={(val) => updateNodeData(selectedNode.id, 'attributeName', val)}
+                            placeholder="Select Attribute..."
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ACTION ALARM CONFIGURATION */}
+                  {selectedNode.data.type === 'action_alarm' && (
+                    <div className="space-y-1.5">
+                      <label className="text-muted-foreground font-semibold">Alarm Message</label>
+                      <textarea
+                        value={selectedNode.data.messageTemplate}
+                        onChange={(e) => updateNodeData(selectedNode.id, 'messageTemplate', e.target.value)}
+                        rows={4}
+                        className="w-full bg-secondary/35 border border-border px-2.5 py-1.5 rounded-lg text-foreground text-xs font-semibold"
+                      />
+                    </div>
+                  )}
+
+                  {/* FILTER LOGIC CONFIGURATION */}
+                  {selectedNode.data.type === 'logic_filter' && (
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Condition Type</label>
+                        <SearchableSelect
+                          options={[
+                            { label: "Greater Than (>)", value: "GT" },
+                            { label: "Less Than (<)", value: "LT" },
+                            { label: "Equal To (==)", value: "EQ" }
+                          ]}
+                          value={selectedNode.data.conditionType}
+                          onChange={(val) => updateNodeData(selectedNode.id, 'conditionType', val)}
+                          placeholder="Condition..."
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Threshold Value</label>
+                        <Input type="number" value={selectedNode.data.thresholdValue} onChange={(e) => updateNodeData(selectedNode.id, 'thresholdValue', e.target.value)} className="h-8 rounded-lg text-xs" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PROCESS MATH CONFIGURATION */}
+                  {selectedNode.data.type === 'process_math' && (
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Operation</label>
+                        <SearchableSelect
+                          options={[
+                            { label: "Add (+)", value: "ADD" },
+                            { label: "Subtract (-)", value: "SUB" },
+                            { label: "Multiply (*)", value: "MUL" },
+                            { label: "Divide (/)", value: "DIV" }
+                          ]}
+                          value={selectedNode.data.operation}
+                          onChange={(val) => updateNodeData(selectedNode.id, 'operation', val)}
+                          placeholder="Select Operation..."
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ACTION EMAIL CONFIGURATION */}
+                  {selectedNode.data.type === 'action_email' && (
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Recipient Email (To)</label>
+                        <Input value={selectedNode.data.toEmail || ''} onChange={(e) => updateNodeData(selectedNode.id, 'toEmail', e.target.value)} placeholder="e.g. manager@company.com" className="h-8 rounded-lg text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Subject Template</label>
+                        <Input value={selectedNode.data.subjectTemplate || ''} onChange={(e) => updateNodeData(selectedNode.id, 'subjectTemplate', e.target.value)} placeholder="e.g. Alert: {assetName}" className="h-8 rounded-lg text-xs" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Message Body</label>
+                        <textarea
+                          value={selectedNode.data.bodyTemplate || ''}
+                          onChange={(e) => updateNodeData(selectedNode.id, 'bodyTemplate', e.target.value)}
+                          rows={6}
+                          className="w-full bg-secondary/35 border border-border px-2.5 py-1.5 rounded-lg text-foreground text-xs font-semibold"
+                          placeholder="e.g. Alert: Asset {assetName} triggered event {attributeName} with value {value} at {time}."
+                        />
+                        <div className="mt-1.5 p-2 bg-blue-500/10 border border-blue-500/20 rounded-md text-[10px] text-blue-500/90 leading-tight space-y-1">
+                          <div><strong className="font-bold">Available variables:</strong> <code>{'{assetName}'}</code>, <code>{'{geofenceName}'}</code>, <code>{'{attributeName}'}</code>, <code>{'{value}'}</code>, <code>{'{time}'}</code></div>
+                          <div className="opacity-90 italic">
+                            <strong>Example:</strong> "Alert: Asset {'{assetName}'} triggered event {'{attributeName}'} with value {'{value}'} at {'{time}'}."
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ACTION TELEGRAM CONFIGURATION */}
+                  {selectedNode.data.type === 'action_telegram' && (
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Chat ID</label>
+                        <Input value={selectedNode.data.chatId || ''} onChange={(e) => updateNodeData(selectedNode.id, 'chatId', e.target.value)} placeholder="e.g. -100123456789" className="h-8 rounded-lg text-xs" />
+                        <div className="mt-1 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-md text-[10px] text-yellow-600 dark:text-yellow-500 leading-tight">
+                          To get Chat ID, send a message to bot <a href="https://t.me/userinfobot?start=start" target="_blank" rel="noopener noreferrer" className="text-yellow-600 font-bold">@userinfobot</a> on Telegram.<br />
+                          Click the following link <a href="https://t.me/GeoMeshBot?start=start" target="_blank" rel="noopener noreferrer" className="text-yellow-600 font-bold">@GeoMeshBot</a> to allow GeoMesh bot to send notifications.
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Message Template</label>
+                        <textarea
+                          value={selectedNode.data.messageTemplate || ''}
+                          onChange={(e) => updateNodeData(selectedNode.id, 'messageTemplate', e.target.value)}
+                          rows={6}
+                          className="w-full bg-secondary/35 border border-border px-2.5 py-1.5 rounded-lg text-foreground text-xs font-semibold"
+                          placeholder={'e.g. 🚨 *GeoMesh Alert*\\nAsset: *{assetName}*\\nEvent: *{attributeName}* triggered with value {value}.'}
+                        />
+                        <div className="mt-1.5 p-2 bg-blue-500/10 border border-blue-500/20 rounded-md text-[10px] text-blue-500/90 leading-tight space-y-1">
+                          <div><strong className="font-bold">Available variables:</strong> <code>{'{assetName}'}</code>, <code>{'{geofenceName}'}</code>, <code>{'{attributeName}'}</code>, <code>{'{value}'}</code>, <code>{'{time}'}</code></div>
+                          <div className="opacity-90 italic">
+                            <strong>Formatting:</strong> You can use Telegram Markdown formatting, e.g. *bold* or _italic_.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}
