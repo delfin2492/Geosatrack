@@ -346,10 +346,6 @@ Aplikasi GeoMesh menggunakan **NGINX Reverse Proxy** sebagai pintu gerbang tungg
 *   **Keycloak IAM Console**: [`http://localhost:8080`](http://localhost:8080)
 *   **EMQX MQTT Broker Dashboard**: [`http://localhost:18083`](http://localhost:18083) (Username: `admin`, Password: `public/password`)
 
-### ☁️ Konfigurasi Cloudflare Tunnel (Akses Publik)
-Untuk mempublikasikan server lokal ke publik, buatlah tunnel di Cloudflare Dashboard lalu hubungkan subdomain berikut ke localhost:
-1.  **Aplikasi Utama**: `geomesh.vantara.my.id` ➔ `http://localhost:3300`
-2.  **Keycloak Auth**: `geomesh-auth.vantara.my.id` ➔ `http://localhost:8080`
 
 ---
 
