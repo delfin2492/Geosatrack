@@ -12,8 +12,11 @@ export default function GlobalAlerts() {
     if (alerts.length > 0) {
       const latestAlert = alerts[0]; // SocketContext prepends new alerts to the front (index 0)
       
+      // Prevent popups on page refresh for old alerts. Only show if created within the last 15 seconds.
+      const isHistorical = latestAlert.createdAt && (Date.now() - new Date(latestAlert.createdAt).getTime() > 15000);
+      
       // Check if we already showed this alert
-      if (!activeToasts.find(t => t.id === latestAlert.id)) {
+      if (!isHistorical && !activeToasts.find(t => t.id === latestAlert.id)) {
         const newToast = {
           ...latestAlert,
           showTime: Date.now()

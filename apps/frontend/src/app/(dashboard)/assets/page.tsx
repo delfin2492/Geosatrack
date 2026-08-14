@@ -464,12 +464,18 @@ export default function AssetsPage() {
       const planY = selectedAsset.planY ?? 0;
       
       const pxIndex = attrs.findIndex((a: any) => a.name === 'position_x');
-      if (pxIndex >= 0) attrs[pxIndex].value = planX;
-      else attrs.push({ name: 'position_x', dataType: 'float', unit: 'm', value: planX });
+      if (pxIndex >= 0) {
+        attrs[pxIndex].value = planX;
+        attrs[pxIndex].lastUpdated = selectedAsset.updatedAt;
+      }
+      else attrs.push({ name: 'position_x', dataType: 'float', unit: 'm', value: planX, lastUpdated: selectedAsset.updatedAt });
       
       const pyIndex = attrs.findIndex((a: any) => a.name === 'position_y');
-      if (pyIndex >= 0) attrs[pyIndex].value = planY;
-      else attrs.push({ name: 'position_y', dataType: 'float', unit: 'm', value: planY });
+      if (pyIndex >= 0) {
+        attrs[pyIndex].value = planY;
+        attrs[pyIndex].lastUpdated = selectedAsset.updatedAt;
+      }
+      else attrs.push({ name: 'position_y', dataType: 'float', unit: 'm', value: planY, lastUpdated: selectedAsset.updatedAt });
     }
     
     return attrs;

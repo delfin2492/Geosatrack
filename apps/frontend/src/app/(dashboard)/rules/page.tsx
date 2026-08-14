@@ -9,7 +9,7 @@ import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import {
   ShieldAlert, Plus, Trash2, Save, X, ToggleLeft, ToggleRight,
-  Settings, ClipboardList, ChevronDown, Search,
+  Settings, ClipboardList, ChevronDown, Search, Copy,
   Building, Map as MapIcon, Monitor, DoorClosed, Car, Battery, Zap, Plug, Box, Activity,
   Download, Filter, Calculator, BellRing, Mail, Send
 } from 'lucide-react';
@@ -345,6 +345,29 @@ export default function RulesPage() {
     }
   };
 
+  const handleDuplicateRule = async (rule: Rule) => {
+    try {
+      const res = await fetch(`${getApiUrl()}/rules`, {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({
+          name: `${rule.name} (Copy)`,
+          ruleType: rule.ruleType,
+          flowGraph: rule.flowGraph,
+          ruleConfig: rule.ruleConfig
+        }),
+      });
+      if (res.ok) {
+        fetchRules();
+      } else {
+        const err = await res.json();
+        setAlertModal({ title: 'Gagal Duplikat', message: err.message || 'Gagal menduplikasi rule.', variant: 'danger' });
+      }
+    } catch (err: any) {
+      setAlertModal({ title: 'Terjadi Kesalahan', message: err.message || 'Gagal menduplikasi rule.', variant: 'danger' });
+    }
+  };
+
   const handleCreateNewFlow = () => {
     setEditingRule(null);
     setRuleName('New Flow Rule');
@@ -544,35 +567,55 @@ export default function RulesPage() {
               {rules.length === 0 ? (
                 <div className="p-8 text-center text-xs text-muted-foreground italic">No automation flow rules have been created yet.</div>
               ) : (
-                <div className="divide-y divide-border">
-                  {rules.map((rule) => (
-                    <div
-                      key={rule.id}
-                      onClick={() => { setSelectedLogRule(rule); fetchLogs(rule.id); }}
-                      className={`p-4 flex flex-col md:flex-row md:items-center justify-between hover:bg-secondary/20 transition-all cursor-pointer gap-3 ${selectedLogRule?.id === rule.id ? 'bg-secondary/40 border-l-2 border-primary' : ''}`}
-                    >
-                      <div className="space-y-1">
-                        <div className="text-xs font-bold text-foreground flex items-center gap-2">
-                          {rule.name}
-                          <Badge variant="outline" className="text-[9px] py-0">{rule.ruleType}</Badge>
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">Dibuat: {new Date(rule.createdAt).toLocaleString()}</div>
-                      </div>
-                      {isAdmin && (
-                        <div className="flex items-center gap-3 self-end md:self-auto" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => handleToggleActive(rule)} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer" title={rule.isActive ? 'Nonaktifkan' : 'Aktifkan'}>
-                            {rule.isActive ? <ToggleRight className="h-6 w-6 text-green-500" /> : <ToggleLeft className="h-6 w-6 text-muted-foreground" />}
-                          </button>
-                          <Button size="sm" variant="outline" className="h-7 text-[10px] cursor-pointer rounded-lg border-border" onClick={() => handleEditRule(rule)}>
-                            <Settings className="h-3 w-3 mr-1" /> Edit
-                          </Button>
-                          <button onClick={() => setDeleteTargetRule({ id: rule.id, name: rule.name })} className="p-1.5 rounded-lg border border-border bg-destructive/10 text-destructive hover:bg-destructive/25 transition-all cursor-pointer">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-secondary/50 text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold w-[25%] whitespace-nowrap">Rules Name</th>
+                        <th className="px-4 py-3 font-semibold w-[15%] whitespace-nowrap">Type Rules</th>
+                        <th className="px-4 py-3 font-semibold w-[25%] whitespace-nowrap">Timestamp Update</th>
+                        <th className="px-4 py-3 font-semibold w-[10%] whitespace-nowrap text-center">Status</th>
+                        {isAdmin && <th className="px-4 py-3 font-semibold w-[25%] whitespace-nowrap text-right">Manage</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {rules.map((rule) => (
+                        <tr
+                          key={rule.id}
+                          onClick={() => { setSelectedLogRule(rule); fetchLogs(rule.id); }}
+                          className={`hover:bg-secondary/20 transition-all cursor-pointer ${selectedLogRule?.id === rule.id ? 'bg-secondary/40 border-l-2 border-primary' : 'border-l-2 border-transparent'}`}
+                        >
+                          <td className="px-4 py-3 font-bold text-foreground">{rule.name}</td>
+                          <td className="px-4 py-3"><Badge variant="outline" className="text-[9px] py-0">{rule.ruleType === 'WHEN_THEN' ? 'WHEN-THEN' : 'FLOW'}</Badge></td>
+                          <td className="px-4 py-3 text-[10px] text-muted-foreground">{new Date(rule.updatedAt || rule.createdAt).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleToggleActive(rule); }}
+                              className={`w-9 h-4.5 rounded-full relative transition-colors duration-300 ease-in-out cursor-pointer inline-block align-middle ${rule.isActive ? 'bg-green-500' : 'bg-secondary border border-border'}`}
+                              title={rule.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                            >
+                              <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-[1px] transition-transform duration-300 ease-in-out shadow-sm ${rule.isActive ? 'translate-x-5' : 'translate-x-[1px]'}`} />
+                            </button>
+                          </td>
+                          {isAdmin && (
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                                <button onClick={() => handleEditRule(rule)} className="p-1.5 rounded-lg border border-border bg-secondary/30 text-foreground hover:bg-secondary transition-all cursor-pointer" title="Edit">
+                                  <Settings className="h-3.5 w-3.5" />
+                                </button>
+                                <button onClick={() => handleDuplicateRule(rule)} className="p-1.5 rounded-lg border border-border bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all cursor-pointer" title="Duplicate">
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                                <button onClick={() => setDeleteTargetRule({ id: rule.id, name: rule.name })} className="p-1.5 rounded-lg border border-border bg-destructive/10 text-destructive hover:bg-destructive/25 transition-all cursor-pointer" title="Delete">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </CardContent>

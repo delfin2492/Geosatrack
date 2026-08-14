@@ -457,13 +457,21 @@ export default function MapPage() {
                         } catch(e) {}
                       }
   
+                      const getUnit = (attrNames: string[], fallback: string = '') => {
+                        const attr = customAttrs.find((a: any) => attrNames.includes(a.name));
+                        return attr?.unit ? ` ${attr.unit}` : fallback;
+                      };
+
+                      const co2Val = customAttrs.find((a: any) => a.name === 'co2')?.value;
+                      const coVal = customAttrs.find((a: any) => a.name === 'co')?.value;
+
                       const itemsToRender = [
-                        { label: 'CO2 Level (ppm)', value: customAttrs.find((a: any) => a.name === 'co2')?.value || '--' },
-                        { label: 'CO Level (ppm)', value: customAttrs.find((a: any) => a.name === 'co')?.value || '--' },
-                        { label: 'Temperature', value: selectedAsset.tag && selectedAsset.tag.temperature !== null ? `${selectedAsset.tag.temperature} °C` : '--' },
-                        { label: 'Humidity', value: selectedAsset.tag && selectedAsset.tag.humidity !== null ? `${selectedAsset.tag.humidity} %` : '--' },
-                        { label: 'Battery/Voltage', value: selectedAsset.tag && selectedAsset.tag.battery !== null ? `${selectedAsset.tag.battery} V` : '--' },
-                        { label: 'RSSI', value: selectedAsset.tag && selectedAsset.tag.rssi !== null ? `${selectedAsset.tag.rssi} dBm` : '--' },
+                        { label: 'CO2 Level', value: co2Val !== undefined && co2Val !== null ? `${co2Val}${getUnit(['co2'], ' ppm')}` : '--' },
+                        { label: 'CO Level', value: coVal !== undefined && coVal !== null ? `${coVal}${getUnit(['co'], ' ppm')}` : '--' },
+                        { label: 'Temperature', value: selectedAsset.tag && selectedAsset.tag.temperature !== null ? `${selectedAsset.tag.temperature}${getUnit(['temperature'], ' °C')}` : '--' },
+                        { label: 'Humidity', value: selectedAsset.tag && selectedAsset.tag.humidity !== null ? `${selectedAsset.tag.humidity}${getUnit(['humidity'], ' %')}` : '--' },
+                        { label: 'Battery/Voltage', value: selectedAsset.tag && selectedAsset.tag.battery !== null ? `${selectedAsset.tag.battery}${getUnit(['battery', 'voltage'], ' V')}` : '--' },
+                        { label: 'RSSI', value: selectedAsset.tag && selectedAsset.tag.rssi !== null ? `${selectedAsset.tag.rssi}${getUnit(['rssi', 'gateway_rssi'], ' dBm')}` : '--' },
                         { label: 'Coordinates (Lat, Lon)', value: `${selectedAsset.x.toFixed(6)}, ${selectedAsset.y.toFixed(6)}` },
                       ];
 
@@ -500,7 +508,7 @@ export default function MapPage() {
 
                 {/* Meta info */}
                 <div className="pt-2 border-t border-border/60 flex justify-between items-center text-[9px] text-muted-foreground/80 font-mono">
-                  <span>Updated: {selectedAsset.tag?.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleTimeString() : '--:--:--'}</span>
+                  <span>Updated: {selectedAsset.tag?.lastSeen ? new Date(selectedAsset.tag.lastSeen).toLocaleString() : '--:--:--'}</span>
                   <a 
                     href={`/assets?id=${selectedAsset.id}`}
                     className="text-primary hover:underline font-bold text-[10px] tracking-wider transition-all uppercase"
