@@ -20,6 +20,7 @@ import {
 import { AuthModule } from './modules/auth/auth.module';
 import { AlertModule } from './modules/alert/alert.module';
 import { SystemSettingModule } from './modules/system-setting/system-setting.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { SystemSettingModule } from './modules/system-setting/system-setting.mod
     RuleModule,
     AlertModule,
     SystemSettingModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

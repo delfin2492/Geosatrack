@@ -15,22 +15,23 @@ datasource db {
 // ------------------------------------------------------------------------------
 
 model Tenant {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  status      String    @default("active") // active, inactive, suspended
-  agentLimit  Int       @default(5)
-  assetLimit  Int       @default(100)
-  logoUrl     String?
-  adminEmail  String?
-  users       User[]
-  sites       Site[]
-  gateways    Gateway[]
-  anchors     Anchor[]
-  assets      Asset[]
-  alerts      Alert[]
-  rules       RuleFlow[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id               String             @id @default(cuid())
+  name             String             @unique
+  status           String             @default("active") // active, inactive, suspended
+  agentLimit       Int                @default(5)
+  assetLimit       Int                @default(100)
+  logoUrl          String?
+  adminEmail       String?
+  users            User[]
+  sites            Site[]
+  gateways         Gateway[]
+  anchors          Anchor[]
+  assets           Asset[]
+  alerts           Alert[]
+  rules            RuleFlow[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  DashboardSection DashboardSection[]
 }
 
 model User {
@@ -62,20 +63,20 @@ model Site {
 }
 
 model Zone {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
   name         String
-  floorPlanUrl String?  // URL/Path denah lantai (PNG/SVG)
-  width        Float    @default(100.0) // Lebar denah dalam meter (sumbu X)
-  height       Float    @default(100.0) // Tinggi denah dalam meter (sumbu Y)
-  offsetX      Float    @default(0.0)   // Posisi X zona pada building plan (meter)
-  offsetY      Float    @default(0.0)   // Posisi Y zona pada building plan (meter)
+  floorPlanUrl String? // URL/Path denah lantai (PNG/SVG)
+  width        Float      @default(100.0) // Lebar denah dalam meter (sumbu X)
+  height       Float      @default(100.0) // Tinggi denah dalam meter (sumbu Y)
+  offsetX      Float      @default(0.0) // Posisi X zona pada building plan (meter)
+  offsetY      Float      @default(0.0) // Posisi Y zona pada building plan (meter)
   siteId       String
-  site         Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site         Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
   anchors      Anchor[]
   assets       Asset[]
   geofences    Geofence[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 model Gateway {
@@ -112,10 +113,10 @@ model Asset {
   description String?
   type        String   @default("FORKLIFT")
   status      String   @default("static") // static, moving, tilt_warning, fall_detected, high_vibration, offline
-  latitude    Float?   // GPS koordinat (derajat)
-  longitude   Float?   // GPS koordinat (derajat)
-  planX       Float?   // Posisi X pada denah lantai (meter, relatif ke zone)
-  planY       Float?   // Posisi Y pada denah lantai (meter, relatif ke zone)
+  latitude    Float? // GPS koordinat (derajat)
+  longitude   Float? // GPS koordinat (derajat)
+  planX       Float? // Posisi X pada denah lantai (meter, relatif ke zone)
+  planY       Float? // Posisi Y pada denah lantai (meter, relatif ke zone)
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   zoneId      String?
@@ -131,17 +132,17 @@ model Asset {
 }
 
 model Tag {
-  id          String   @id // Wirepas Node ID (misal: "node-439201")
+  id          String    @id // Wirepas Node ID (misal: "node-439201")
   name        String?
-  battery     Float?   // Tegangan baterai (Volt)
-  rssi        Int?     // Sinyal terakhir (dBm)
+  battery     Float? // Tegangan baterai (Volt)
+  rssi        Int? // Sinyal terakhir (dBm)
   temperature Float?
   humidity    Float?
-  signals     String?  // Menyimpan JSON data signal RSSI Anchor (e.g. '[{"anchorName":"Anchor A","rssi":-50}]')
+  signals     String? // Menyimpan JSON data signal RSSI Anchor (e.g. '[{"anchorName":"Anchor A","rssi":-50}]')
   lastSeen    DateTime?
   asset       Asset?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 // ------------------------------------------------------------------------------
@@ -150,7 +151,7 @@ model Tag {
 
 model Alert {
   id         String    @id @default(cuid())
-  type       String    // fall_detected, tilt_warning, low_battery, temperature_critical
+  type       String // fall_detected, tilt_warning, low_battery, temperature_critical
   message    String
   isResolved Boolean   @default(false)
   resolvedAt DateTime?
@@ -169,7 +170,7 @@ model Alert {
 model Geofence {
   id        String   @id @default(cuid())
   name      String
-  points    String   // JSON array of {x, y} coordinates (meters relative to Zone floor plan)
+  points    String // JSON array of {x, y} coordinates (meters relative to Zone floor plan)
   color     String   @default("#ef4444")
   type      String   @default("RESTRICTED") // RESTRICTED, SAFE, WARNING
   zoneId    String
@@ -210,26 +211,26 @@ model TelemetryLog {
 }
 
 model RuleFlow {
-  id          String    @id @default(cuid())
-  name        String
-  ruleType    String    @default("FLOW") // "WHEN_THEN" | "FLOW"
-  isActive    Boolean   @default(true)
-  flowGraph   String?   @db.Text
-  ruleConfig  String?   @db.Text
-  tenantId    String
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  logs        RuleLog[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  name       String
+  ruleType   String    @default("FLOW") // "WHEN_THEN" | "FLOW"
+  isActive   Boolean   @default(true)
+  flowGraph  String?   @db.Text
+  ruleConfig String?   @db.Text
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logs       RuleLog[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model RuleLog {
-  id          String    @id @default(cuid())
-  ruleId      String
-  rule        RuleFlow  @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  status      String    // "SUCCESS" | "FAILED"
-  message     String    @db.Text
-  createdAt   DateTime  @default(now())
+  id        String   @id @default(cuid())
+  ruleId    String
+  rule      RuleFlow @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  status    String // "SUCCESS" | "FAILED"
+  message   String   @db.Text
+  createdAt DateTime @default(now())
 }
 
 // ------------------------------------------------------------------------------
@@ -240,4 +241,30 @@ model SystemSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// ------------------------------------------------------------------------------
+// 8. DASHBOARD INSIGHTS
+// ------------------------------------------------------------------------------
+
+model DashboardSection {
+  id        String            @id @default(cuid())
+  name      String
+  order     Int               @default(0)
+  layout    String?           @db.Text
+  tenantId  String
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  widgets   DashboardWidget[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model DashboardWidget {
+  id        String           @id @default(cuid())
+  type      String
+  config    String?          @db.Text
+  sectionId String
+  section   DashboardSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 }

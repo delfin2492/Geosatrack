@@ -8,6 +8,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
+import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+
 import {
   Folder,
   MapPin,
@@ -439,7 +441,12 @@ export default function AssetsPage() {
   // Info/Message states
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedHistoryAttr, setSelectedHistoryAttr] = useState('temperature');
-  const [selectedHistoryRange, setSelectedHistoryRange] = useState<'1h' | '6h' | '24h' | '7d'>('1h');
+  const [selectedHistoryTimeframe, setSelectedHistoryTimeframe] = useState('1h');
+  const [selectedHistoryEndDate, setSelectedHistoryEndDate] = useState(() => {
+    const d = new Date();
+    d.setMinutes(0, 0, 0);
+    return d.toISOString().slice(0, 16);
+  });
   const [historyData, setHistoryData] = useState<{ timestamp: string; value: number }[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
@@ -481,7 +488,6 @@ export default function AssetsPage() {
     return attrs;
   })();
 
-  // Fetch telemetry history when selection/filter changes
   useEffect(() => {
     if (!selectedAssetId || selectedAsset?.type?.startsWith('AGENT_') || !selectedHistoryAttr) {
       setHistoryData([]);
@@ -494,7 +500,7 @@ export default function AssetsPage() {
         const headers: Record<string, string> = { 'x-tenant-id': tenantId || '' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
         const res = await fetch(
-          `${getApiUrl()}/assets/${selectedAssetId}/telemetry?attribute=${selectedHistoryAttr}&range=${selectedHistoryRange}`,
+          `${getApiUrl()}/assets/${selectedAssetId}/telemetry?attribute=${selectedHistoryAttr}&range=${selectedHistoryTimeframe}&endDate=${new Date(selectedHistoryEndDate).toISOString()}`,
           { headers }
         );
         if (res.ok) {
@@ -512,7 +518,7 @@ export default function AssetsPage() {
     };
 
     fetchHistory();
-  }, [selectedAssetId, selectedHistoryAttr, selectedHistoryRange, token, selectedAsset?.type, tenantId]);
+  }, [selectedAssetId, selectedHistoryAttr, selectedHistoryTimeframe, selectedHistoryEndDate, token, selectedAsset?.type, tenantId]);
 
   // SVG dynamic path builder for history chart
   const generateSvgPath = (data: { timestamp: string; value: number }[]) => {
@@ -1976,33 +1982,74 @@ export default function AssetsPage() {
                     {/* HISTORY Card */}
                     {!selectedAsset.type.startsWith('AGENT_') && selectedAsset.type !== 'CITY' && selectedAsset.type !== 'BUILDING' && (
                       <Card className="border border-border/80">
-                        <CardHeader className="py-2.5 px-4 bg-secondary/20 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                        <CardHeader className="py-3 px-4 bg-secondary/20 border-b border-border/50 flex flex-col items-start gap-3 w-full overflow-hidden">
+                          <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground w-full">
                             History
                           </CardTitle>
-                          <div className="flex items-center gap-2">
-                            <select
-                              value={selectedHistoryAttr}
-                              onChange={(e) => setSelectedHistoryAttr(e.target.value)}
-                              className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer capitalize border border-border/40 px-1.5 py-0.5 rounded"
-                            >
-                              {activeAttributes.map((attr: any) => (
-                                <option key={attr.name} value={attr.name} className="bg-background text-foreground">
-                                  {attr.name}
-                                </option>
-                              ))}
-                            </select>
-
-                            <select
-                              value={selectedHistoryRange}
-                              onChange={(e) => setSelectedHistoryRange(e.target.value as any)}
-                              className="bg-transparent text-foreground focus:outline-none text-[10px] font-bold text-muted-foreground hover:text-foreground cursor-pointer border border-border/40 px-1.5 py-0.5 rounded"
-                            >
-                              <option value="1h" className="bg-background text-foreground">1h</option>
-                              <option value="6h" className="bg-background text-foreground">6h</option>
-                              <option value="24h" className="bg-background text-foreground">24h</option>
-                              <option value="7d" className="bg-background text-foreground">7d</option>
-                            </select>
+                          <div className="flex flex-wrap items-end gap-2 w-full">
+                            <div className="flex flex-col gap-1.5 flex-1 min-w-[130px]">
+                              <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Attribute</label>
+                              <select
+                                value={selectedHistoryAttr}
+                                onChange={(e) => setSelectedHistoryAttr(e.target.value)}
+                                className="bg-secondary/20 text-foreground border border-border/40 px-3 py-2 rounded-md text-sm font-semibold focus:outline-none capitalize w-full"
+                              >
+                                {activeAttributes.map((a: any) => (
+                                  <option key={a.name} value={a.name}>{a.name} {a.unit ? `(${a.unit})` : ''}</option>
+                                ))}
+                              </select>
+                            </div>
+                            
+                            <div className="flex flex-col gap-1.5 flex-1 min-w-[90px]">
+                              <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Timeframe</label>
+                              <select
+                                value={selectedHistoryTimeframe}
+                                onChange={(e) => setSelectedHistoryTimeframe(e.target.value)}
+                                className="bg-secondary/20 text-foreground border border-border/40 px-3 py-2 rounded-md text-sm font-semibold focus:outline-none w-full"
+                              >
+                                <option value="1h">Hour</option>
+                                <option value="1d">Day</option>
+                                <option value="1w">Week</option>
+                                <option value="1m">Month</option>
+                              </select>
+                            </div>
+                            
+                            <div className="flex flex-col gap-1.5 w-full mt-1">
+                              <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Ending</label>
+                              <div className="flex items-center gap-1 bg-secondary/20 border border-border/40 rounded-md px-2 py-0.5 focus-within:ring-1 focus-within:ring-primary/50 w-full overflow-hidden">
+                                <Input 
+                                  type="datetime-local" 
+                                  value={selectedHistoryEndDate}
+                                  onChange={(e) => setSelectedHistoryEndDate(e.target.value)}
+                                  className="bg-transparent border-0 focus-visible:ring-0 text-sm font-semibold h-8 p-0 flex-1 min-w-0"
+                                />
+                                <div className="flex items-center ml-1 border border-border/50 rounded bg-background overflow-hidden h-7 shrink-0">
+                                  <button onClick={() => {
+                                    const d = new Date(selectedHistoryEndDate);
+                                    if(selectedHistoryTimeframe === '1h') d.setHours(d.getHours() - 1);
+                                    else if(selectedHistoryTimeframe === '1d') d.setDate(d.getDate() - 1);
+                                    else if(selectedHistoryTimeframe === '1w') d.setDate(d.getDate() - 7);
+                                    else if(selectedHistoryTimeframe === '1m') d.setMonth(d.getMonth() - 1);
+                                    d.setMinutes(0,0,0);
+                                    setSelectedHistoryEndDate(d.toISOString().slice(0, 16));
+                                  }} className="px-2 hover:bg-secondary/50 text-muted-foreground font-bold text-xs h-full border-r border-border/50 flex items-center justify-center">&lt;</button>
+                                  <button onClick={() => {
+                                    const d = new Date(selectedHistoryEndDate);
+                                    if(selectedHistoryTimeframe === '1h') d.setHours(d.getHours() + 1);
+                                    else if(selectedHistoryTimeframe === '1d') d.setDate(d.getDate() + 1);
+                                    else if(selectedHistoryTimeframe === '1w') d.setDate(d.getDate() + 7);
+                                    else if(selectedHistoryTimeframe === '1m') d.setMonth(d.getMonth() + 1);
+                                    d.setMinutes(0,0,0);
+                                    setSelectedHistoryEndDate(d.toISOString().slice(0, 16));
+                                  }} className="px-2 hover:bg-secondary/50 text-muted-foreground font-bold text-xs h-full border-r border-border/50 flex items-center justify-center">&gt;</button>
+                                  <button onClick={() => {
+                                    const d = new Date();
+                                    d.setMinutes(0,0,0);
+                                    setSelectedHistoryEndDate(d.toISOString().slice(0, 16));
+                                  }} className="px-2 hover:bg-secondary/50 text-muted-foreground font-bold text-xs h-full flex items-center justify-center">&gt;&gt;</button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </CardHeader>
                         <CardContent className="p-4 text-xs font-semibold">
@@ -2012,97 +2059,61 @@ export default function AssetsPage() {
                               Loading trends...
                             </div>
                           ) : historyData.length === 0 ? (
-                            <div className="h-32 w-full flex flex-col items-center justify-center bg-black/20 rounded-lg border border-border/30 text-muted-foreground/60 text-[10px] italic p-4 text-center">
+                            <div className="h-32 w-full flex flex-col items-center justify-center bg-black/5 rounded-lg border border-border/30 text-muted-foreground/60 text-[10px] italic p-4 text-center">
                               No history data found for this period.
                             </div>
                           ) : (
-                            (() => {
-                              const { linePath: _lp, areaPath: _ap, minVal, maxVal, latestVal } = generateSvgPath(historyData);
-                              const unit = activeAttributes.find((a: any) => a.name === selectedHistoryAttr)?.unit || '';
-
-                              // Build smooth cubic bezier paths
-                              const values = historyData.map(d => d.value);
-                              const valRange = (maxVal - minVal) || 1;
-                              const pts = historyData.map((d, i) => ({
-                                x: (i / Math.max(historyData.length - 1, 1)) * 100,
-                                y: 82 - ((d.value - minVal) / valRange) * 68,
-                              }));
-
-                              let smoothLine = pts.length > 0 ? `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}` : '';
-                              for (let i = 1; i < pts.length; i++) {
-                                const cp1x = ((pts[i].x - pts[i - 1].x) * 0.35 + pts[i - 1].x).toFixed(2);
-                                const cp2x = (pts[i].x - (pts[i].x - pts[i - 1].x) * 0.35).toFixed(2);
-                                smoothLine += ` C ${cp1x} ${pts[i - 1].y.toFixed(2)}, ${cp2x} ${pts[i].y.toFixed(2)}, ${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)}`;
-                              }
-                              const smoothArea = pts.length > 0 ? `${smoothLine} L 100 100 L 0 100 Z` : '';
-                              const lastPt = pts[pts.length - 1];
-
-                              return (
-                                <div className="space-y-2.5">
-                                  <div className="flex items-center justify-between">
-                                    <div className="space-y-0.5">
-                                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">{selectedHistoryAttr}</p>
-                                      <p className="text-xl font-bold text-foreground tabular-nums">
-                                        {latestVal.toFixed(1)}<span className="text-xs text-muted-foreground font-normal ml-0.5">{unit}</span>
-                                      </p>
-                                    </div>
-                                    <div className="text-right space-y-0.5">
-                                      <p className="text-[9px] text-muted-foreground font-mono">{historyData.length} data points</p>
-                                      <p className="text-[9px] text-muted-foreground/60 font-mono">
-                                        {minVal.toFixed(1)} — {maxVal.toFixed(1)}{unit}
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <div className="h-36 w-full rounded-xl overflow-hidden relative bg-gradient-to-b from-background/50 to-black/30 border border-border/20">
-                                    <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                                      <defs>
-                                        <linearGradient id={`grad-${selectedHistoryAttr}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.5" />
-                                          <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.02" />
-                                        </linearGradient>
-                                        <filter id="glow">
-                                          <feGaussianBlur stdDeviation="1.5" result="coloredBlur" />
-                                          <feMerge>
-                                            <feMergeNode in="coloredBlur" />
-                                            <feMergeNode in="SourceGraphic" />
-                                          </feMerge>
-                                        </filter>
-                                      </defs>
-                                      {/* Grid lines */}
-                                      {[25, 50, 75].map(y => (
-                                        <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="hsl(var(--border))" strokeWidth="0.5" strokeOpacity="0.4" />
-                                      ))}
-                                      {/* Area fill */}
-                                      <path d={smoothArea} fill={`url(#grad-${selectedHistoryAttr})`} />
-                                      {/* Line */}
-                                      <path
-                                        d={smoothLine}
-                                        fill="none"
-                                        stroke="hsl(var(--primary))"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        filter="url(#glow)"
-                                        vectorEffect="non-scaling-stroke"
-                                      />
-                                      {/* Latest value dot */}
-                                      {lastPt && (
-                                        <>
-                                          <circle cx={lastPt.x} cy={lastPt.y} r="2.5" fill="hsl(var(--primary))" filter="url(#glow)" />
-                                          <circle cx={lastPt.x} cy={lastPt.y} r="4" fill="none" stroke="hsl(var(--primary))" strokeWidth="1" strokeOpacity="0.4" />
-                                        </>
-                                      )}
-                                    </svg>
-                                  </div>
-
-                                  <div className="flex justify-between text-[8px] text-muted-foreground/60 font-mono">
-                                    <span>{new Date(historyData[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    <span>{new Date(historyData[Math.floor(historyData.length / 2)].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    <span>{new Date(historyData[historyData.length - 1].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                  </div>
-                                </div>
-                              );
-                            })()
+                            <div className="h-[250px] w-full mt-4 -ml-4 pr-4">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={historyData.map(d => ({ 
+                                  time: new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
+                                  fullTime: new Date(d.timestamp).toLocaleString(),
+                                  value: d.value 
+                                }))} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                                  <defs>
+                                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="5%" stopColor="#eab308" stopOpacity={0.8}/>
+                                      <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
+                                    </linearGradient>
+                                  </defs>
+                                  <XAxis 
+                                    dataKey="time" 
+                                    tickLine={false} 
+                                    axisLine={{ stroke: '#e5e7eb' }}
+                                    tick={{ fontSize: 10, fill: '#6b7280' }} 
+                                    minTickGap={30}
+                                  />
+                                  <YAxis 
+                                    tickLine={false} 
+                                    axisLine={{ stroke: '#e5e7eb' }}
+                                    tick={{ fontSize: 10, fill: '#6b7280' }}
+                                  />
+                                  <RechartsTooltip 
+                                    content={({ active, payload }) => {
+                                      if (active && payload && payload.length) {
+                                        return (
+                                          <div className="bg-[#2d2d2d] text-white p-2 rounded shadow-lg text-xs font-semibold flex flex-col gap-1 border-0">
+                                            <p className="text-[#a1a1aa]">{payload[0].payload.fullTime}</p>
+                                            <p className="text-sm">{payload[0].value} {activeAttributes.find((a: any) => a.name === selectedHistoryAttr)?.unit || ''}</p>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    }}
+                                  />
+                                  <Area 
+                                    type="monotone" 
+                                    dataKey="value" 
+                                    stroke="#eab308" 
+                                    strokeWidth={2}
+                                    fillOpacity={1} 
+                                    fill="url(#colorValue)" 
+                                    dot={{ r: 3, fill: "#eab308", strokeWidth: 0 }}
+                                    activeDot={{ r: 5, fill: "#eab308", stroke: "#fff", strokeWidth: 2 }}
+                                  />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </div>
                           )}
                         </CardContent>
                       </Card>

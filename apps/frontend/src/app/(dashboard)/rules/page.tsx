@@ -587,7 +587,7 @@ export default function RulesPage() {
                         >
                           <td className="px-4 py-3 font-bold text-foreground">{rule.name}</td>
                           <td className="px-4 py-3"><Badge variant="outline" className="text-[9px] py-0">{rule.ruleType === 'WHEN_THEN' ? 'WHEN-THEN' : 'FLOW'}</Badge></td>
-                          <td className="px-4 py-3 text-[10px] text-muted-foreground">{new Date(rule.updatedAt || rule.createdAt).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-[10px] text-muted-foreground">{new Date((rule as any).updatedAt || rule.createdAt).toLocaleString()}</td>
                           <td className="px-4 py-3 text-center">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleToggleActive(rule); }}

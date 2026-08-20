@@ -31,7 +31,6 @@ import {
   Maximize2,
   Box,
 } from 'lucide-react';
-import ThreeFloorPlanView from '../../components/ThreeFloorPlanView';
 import ConfirmModal from '../../components/ConfirmModal';
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -86,7 +85,15 @@ export default function PlannerPage() {
   const [allTenantMesh, setAllTenantMesh] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [simulateToggle, setSimulateToggle] = useState(false);
-  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+
+  // Custom Legend Visibility State
+  const [showLegend, setShowLegend] = useState(true);
+  const [layerVisibility, setLayerVisibility] = useState({
+    geofence: true,
+    anchor: true,
+    mesh: true,
+    threads: true,
+  });
   const [plannerConfirm, setPlannerConfirm] = useState<{
     title: string;
     message: string;
@@ -142,8 +149,10 @@ export default function PlannerPage() {
   const zoneRectanglesRef = useRef<Map<string, any>>(new Map());
   // Separate layer specifically for mesh/asset markers so they can update independently
   const meshLayerRef = useRef<any>(null);
+  const meshLineLayerRef = useRef<any>(null);
   // Track individual mesh Leaflet marker instances for smooth position updates
   const meshMarkersRef = useRef<Map<string, any>>(new Map());
+  const meshLinesRef = useRef<Map<string, any[]>>(new Map());
   // Geofence vertex editing layer
   const editPointsLayerRef = useRef<any>(null);
   const editPointsPolygonRef = useRef<any>(null);
@@ -316,10 +325,37 @@ export default function PlannerPage() {
       fetchZoneDetails(selectedZoneId);
     } else {
       setSelectedZone(null);
+      if (meshLayerRef.current) meshLayerRef.current.clearLayers();
+      if (meshLineLayerRef.current) meshLineLayerRef.current.clearLayers();
+      if (meshMarkersRef.current) meshMarkersRef.current.clear();
+      if (meshLinesRef.current) meshLinesRef.current.clear();
     }
   }, [selectedZoneId, fetchZoneDetails]);
 
-  // ─── Initialize Leaflet Map ────────────────────────────────────────
+  // Synchronize layer visibility with map
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+
+    if (geofenceLayerRef.current) {
+      if (layerVisibility.geofence) map.addLayer(geofenceLayerRef.current);
+      else map.removeLayer(geofenceLayerRef.current);
+    }
+    if (markerLayerRef.current) {
+      if (layerVisibility.anchor) map.addLayer(markerLayerRef.current);
+      else map.removeLayer(markerLayerRef.current);
+    }
+    if (meshLayerRef.current) {
+      if (layerVisibility.mesh) map.addLayer(meshLayerRef.current);
+      else map.removeLayer(meshLayerRef.current);
+    }
+    if (meshLineLayerRef.current) {
+      if (layerVisibility.threads) map.addLayer(meshLineLayerRef.current);
+      else map.removeLayer(meshLineLayerRef.current);
+    }
+  }, [layerVisibility, selectedZoneId]); // Trigger also on zone load
+
+  //  Initialize Leaflet Map ────────────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current) return;
     const L = require('leaflet');
@@ -336,6 +372,7 @@ export default function PlannerPage() {
       zoomControl: true,
       scrollWheelZoom: true,
       doubleClickZoom: true,
+      dragging: false,
     });
     mapRef.current = map;
 
@@ -348,6 +385,10 @@ export default function PlannerPage() {
     meshLayerRef.current = L.layerGroup().addTo(map);
     // Geofence vertex editing layer (topmost so handles are always clickable)
     editPointsLayerRef.current = L.layerGroup().addTo(map);
+    // Mesh Line layer
+    meshLineLayerRef.current = L.layerGroup().addTo(map);
+
+
 
     // Set default view to center of a 100x100 area
     map.setView([50, 50], 0);
@@ -382,6 +423,7 @@ export default function PlannerPage() {
     }
     geofenceLayerRef.current?.clearLayers();
     markerLayerRef.current?.clearLayers();
+    meshLineLayerRef.current?.clearLayers();
 
     if (!selectedZone) return;
 
@@ -398,7 +440,14 @@ export default function PlannerPage() {
       }).addTo(map);
     }
 
-    map.fitBounds(bounds, { padding: [20, 20] });
+    map.fitBounds(bounds);
+    map.setMaxBounds(bounds);
+    setTimeout(() => {
+      if (mapRef.current) {
+        const minZ = mapRef.current.getBoundsZoom(bounds, false);
+        mapRef.current.setMinZoom(minZ);
+      }
+    }, 50);
 
     // Draw existing geofence polygons
     if (selectedZone.geofences) {
@@ -428,16 +477,16 @@ export default function PlannerPage() {
         const icon = L.divIcon({
           className: 'custom-anchor-icon',
           html: `
-            <div style="display:flex;flex-direction:column;align-items:center;">
+            <div style="position: absolute; transform: translate(-50%, -100%); display:flex;flex-direction:column;align-items:center; pointer-events: auto;">
               <div style="background:#0f172a;color:#38bdf8;border:1px solid #334155;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 4px rgba(0,0,0,0.5);">
                 ⚓ ${anchor.name}
               </div>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#38bdf8" width="28" height="28" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" stroke="#ffffff" stroke-width="1"/>
               </svg>
-            </div>`,
-          iconSize: [60, 48],
-          iconAnchor: [30, 44],
+              </div>`,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
         });
 
         L.marker([anchor.y, anchor.x], { icon, draggable: true })
@@ -492,7 +541,12 @@ export default function PlannerPage() {
     const allDisplayAssets = [
       ...zoneAssets,
       ...fallbackAssets,
-    ];
+    ].filter(
+      (a: any) =>
+        a.type?.toUpperCase() !== 'ANCHOR' &&
+        !a.type?.toUpperCase().startsWith('AGENT_') &&
+        !a.name?.toUpperCase().includes('ANCHOR')
+    );
 
     const currentIds = new Set(allDisplayAssets.map((a: any) => a.id));
 
@@ -551,10 +605,10 @@ export default function PlannerPage() {
       })();
 
       const dotColor = isOnline ? '#22c55e' : '#64748b';
-      const positionMethod = rssiPos ? '🔴 RSSI Live' : '📍 Saved';
+      const positionMethod = '';
 
       const iconHtml = `
-        <div style="display:flex;flex-direction:column;align-items:center;">
+        <div style="position: absolute; transform: translate(-50%, -100%); display:flex;flex-direction:column;align-items:center; pointer-events: auto;">
           <div style="background:#0f172a;color:${dotColor};border:1px solid #334155;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 6px rgba(0,0,0,0.5);display:flex;align-items:center;gap:3px;">
             <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${dotColor};${isOnline ? 'animation:pulse 1.5s infinite;box-shadow:0 0 0 0 ' + dotColor + '66;' : ''}"></span>
             ${asset.name}
@@ -565,20 +619,20 @@ export default function PlannerPage() {
             <path d="M8.5 5.5 Q12 2 15.5 5.5" stroke="${dotColor}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
             <path d="M6 3.5 Q12 -1 18 3.5" stroke="${dotColor}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.6"/>
           </svg>
-        </div>`;
+          </div>`;
 
       const icon = L.divIcon({
         className: 'custom-mesh-icon',
         html: iconHtml,
-        iconSize: [70, 52],
-        iconAnchor: [35, 48],
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
       });
 
       const tooltipHtml = `
         <div style="font-family:sans-serif;padding:3px;min-width:140px">
           <strong style="color:${dotColor}">${asset.name}</strong><br/>
           <span style="font-size:10px;color:#64748b">Status: ${isOnline ? '🟢 Online' : '⚫ Offline'}</span><br/>
-          <span style="font-size:10px;color:#64748b">Posisi: (${x}m, ${y}m) — ${positionMethod}</span>
+          <span style="font-size:10px;color:#64748b">Position: (${x}m, ${y}m)</span>
           ${signalLines ? `<div style="margin-top:4px;border-top:1px solid #334155;padding-top:4px;font-size:9px;color:#94a3b8;"><strong>Anchor RSSI:</strong><br/>${signalLines}</div>` : ''}
         </div>`;
 
@@ -589,7 +643,7 @@ export default function PlannerPage() {
         existingMarker.setIcon(icon);
         existingMarker.setTooltipContent(tooltipHtml);
       } else {
-        const marker = L.marker([y, x], { icon, draggable: isOnline ? false : true }).addTo(meshLayer);
+        const marker = L.marker([y, x], { icon, draggable: isOnline ? false : true }).addTo(meshLayerRef.current);
         marker.bindTooltip(tooltipHtml, { sticky: true, className: 'mesh-tooltip' });
         marker.on('dragend', async function (e: any) {
           const pos = e.target.getLatLng();
@@ -607,8 +661,60 @@ export default function PlannerPage() {
         });
         meshMarkersRef.current.set(asset.id, marker);
       }
+
+      // --- NEW: Draw Pulling Threads (Polylines) ---
+      // 1. Clear old lines for this asset
+      const oldLines = meshLinesRef.current.get(asset.id);
+      if (oldLines) {
+        oldLines.forEach((l: any) => l.remove());
+      }
+      const newLines: any[] = [];
+
+      // 2. Parse signals and draw new lines
+      try {
+        if (asset.tag?.signals) {
+          const sigs = JSON.parse(asset.tag.signals);
+          if (Array.isArray(sigs)) {
+            // Calculate total weight for percentages
+            const totalWeight = sigs.reduce((sum: number, s: any) => sum + (Number(s.weight) || 0), 0);
+
+            sigs.forEach((s: any) => {
+              const matchedAnchor = zoneAnchors.find((an: any) =>
+                an.id === s.anchorId ||
+                an.name === s.anchorName ||
+                (an.tagId && String(an.tagId) === String(s.anchorId)) ||
+                (an.name && an.name.includes(String(s.anchorId)))
+              );
+              if (matchedAnchor && s.weight && totalWeight > 0) {
+                const percentage = ((Number(s.weight) / totalWeight) * 100).toFixed(1);
+                // Calculate opacity: base 0.15 + up to 0.7 based on weight
+                const opacity = 0.15 + (Number(s.weight) / totalWeight) * 0.7;
+
+                const lineColor = isOnline ? '#22c55e' : '#f97316'; // Green for online, Orange for offline
+                const line = L.polyline([[Number(y), Number(x)], [Number(matchedAnchor.y), Number(matchedAnchor.x)]], {
+                  color: lineColor,
+                  weight: 1.5,
+                  opacity: opacity,
+                  dashArray: '4, 6'
+                }).addTo(meshLineLayerRef.current);
+
+                // Add percentage tooltip
+                line.bindTooltip(`${percentage}%`, {
+                  permanent: true,
+                  direction: 'center',
+                  className: 'font-mono font-bold text-[9px] bg-transparent border-0 shadow-none text-muted-foreground'
+                });
+
+                newLines.push(line);
+              }
+            });
+          }
+        }
+      } catch (e) { }
+
+      meshLinesRef.current.set(asset.id, newLines);
     });
-  }, [assets, selectedZone, computeRssiPosition, apiHeaders]);
+  }, [assets, selectedZone, apiHeaders]);
 
   // ─── Sync selectedZone.assets list when socket updates bring zone changes ─
   // This only updates the zone's asset list (for mesh layer), NOT the Leaflet markers directly.
@@ -1462,10 +1568,10 @@ export default function PlannerPage() {
                   </div>
                   <div className="flex gap-2 pt-1">
                     <Button size="sm" className="flex-1 h-6 text-[10px] cursor-pointer" onClick={handleCreateAnchor}>
-                      Simpan & Tempatkan
+                      Save & Placed
                     </Button>
                     <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setShowNewAnchorForm(false)}>
-                      Batal
+                      Cancel
                     </Button>
                   </div>
                 </div>
@@ -1483,7 +1589,7 @@ export default function PlannerPage() {
                   if (filteredAnchors.length === 0) {
                     return (
                       <p className="text-[10px] text-muted-foreground italic py-2 text-center">
-                        Tidak ada anchor yang tersedia (semua anchor sudah ditempatkan pada denah lain).
+                        No anchors are available (all anchors have already been placed on another floor plan).
                       </p>
                     );
                   }
@@ -1504,7 +1610,7 @@ export default function PlannerPage() {
                           <div className="truncate">
                             <div className="font-bold text-[11px] truncate">{an.name}</div>
                             <div className="text-[9px] text-muted-foreground font-mono">
-                              {isPlacedOnCurrent ? `Pos: (${an.x}m, ${an.y}m)` : 'Belum Ditempatkan'}
+                              {isPlacedOnCurrent ? `Pos: (${an.x}m, ${an.y}m)` : 'Unplaced'}
                             </div>
                           </div>
                         </div>
@@ -1516,7 +1622,7 @@ export default function PlannerPage() {
                               variant="ghost"
                               className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
                               onClick={() => handleUnassignAnchor(an.id)}
-                              title="Hapus penempatan dari denah ini"
+                              title="Remove this placement from the floor plan"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
@@ -1527,7 +1633,7 @@ export default function PlannerPage() {
                                 variant="ghost"
                                 className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
                                 onClick={() => handleDeleteAnchor(an.id)}
-                                title="Hapus Anchor Permanen"
+                                title="Delete Anchor Permanently"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
@@ -1576,7 +1682,7 @@ export default function PlannerPage() {
                   if (filteredMesh.length === 0) {
                     return (
                       <p className="text-[10px] text-muted-foreground italic py-2 text-center">
-                        Tidak ada aset mesh yang tersedia (semua aset sudah ditempatkan pada denah lain).
+                        No mesh assets are available (all assets have already been placed on another floor plan).
                       </p>
                     );
                   }
@@ -1631,7 +1737,7 @@ export default function PlannerPage() {
                                 variant="ghost"
                                 className="h-6 px-1.5 text-[10px] text-destructive hover:bg-destructive/10 cursor-pointer"
                                 onClick={() => handleUnassignMesh(ms.id)}
-                                title="Hapus penempatan dari denah ini"
+                                title="Remove this placement from the floor plan"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
@@ -1980,34 +2086,6 @@ export default function PlannerPage() {
             RTLS Planner {selectedZone ? ' · ' + selectedZone.name : ''}
           </span>
           <div className="flex-1" />
-
-          {/* 2D / 3D Mode Toggle Switcher */}
-          {selectedZoneId && (
-            <div className="flex items-center bg-secondary/80 border border-border p-0.5 rounded-lg mr-2">
-              <button
-                type="button"
-                onClick={() => setViewMode('2d')}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${viewMode === '2d'
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-                  }`}
-              >
-                <Layers className="h-3.5 w-3.5" />
-                2D Plan
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('3d')}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${viewMode === '3d'
-                  ? 'bg-cyan-500 text-white shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-                  }`}
-              >
-                <Box className="h-3.5 w-3.5" />
-                3D Twin
-              </button>
-            </div>
-          )}
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => {
@@ -2075,7 +2153,7 @@ export default function PlannerPage() {
         {/* Map Canvas */}
         <div className="flex-1 rounded-2xl overflow-hidden border border-border shadow-2xl bg-card relative min-h-[500px]">
           {!selectedZoneId && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 bg-card/95 backdrop-blur-md overflow-y-auto">
+            <div className="absolute inset-0 z-[2000] flex flex-col items-center justify-center p-6 bg-card/95 backdrop-blur-md overflow-y-auto">
               <div className="max-w-2xl w-full text-center space-y-6">
                 <div className="flex flex-col items-center">
                   <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mb-3">
@@ -2147,18 +2225,57 @@ export default function PlannerPage() {
               <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           )}
-          {selectedZoneId && selectedZone && viewMode === '3d' ? (
-            <ThreeFloorPlanView
-              zone={selectedZone}
-              anchors={allTenantAnchors.filter((a) => a.zoneId === selectedZone.id)}
-              assets={assets.filter((a) => a.zoneId === selectedZone.id || selectedZone.assets?.some((za: any) => za.id === a.id))}
-              isAdmin={isAdmin}
-              getBackendUrl={getBackendUrl}
-              getApiUrl={getApiUrl}
-              apiHeaders={apiHeaders}
-            />
-          ) : (
-            <div ref={mapContainerRef} className="w-full h-full min-h-[500px]" />
+          <div ref={mapContainerRef} className="w-full h-full min-h-[500px]" />
+
+          {selectedZone && (
+            <div className="absolute top-4 right-4 z-[1000]">
+              {showLegend ? (
+                <Card className="w-64 shadow-xl border-slate-200">
+                  <CardHeader className="p-3 border-b border-slate-100 flex flex-row items-center justify-between bg-slate-50/50 space-y-0">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-slate-500" /> Layer Legend
+                    </CardTitle>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowLegend(false)}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="p-3 space-y-3">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded transition-colors">
+                      <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={layerVisibility.geofence}
+                        onChange={(e) => setLayerVisibility(prev => ({ ...prev, geofence: e.target.checked }))}
+                      />
+                      <Hexagon className="w-4 h-4 text-sky-500" /> Geofences
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded transition-colors">
+                      <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={layerVisibility.anchor}
+                        onChange={(e) => setLayerVisibility(prev => ({ ...prev, anchor: e.target.checked }))}
+                      />
+                      <MapPin className="w-4 h-4 text-blue-700" /> Anchors
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded transition-colors">
+                      <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={layerVisibility.mesh}
+                        onChange={(e) => setLayerVisibility(prev => ({ ...prev, mesh: e.target.checked }))}
+                      />
+                      <Radio className="w-4 h-4 text-slate-700" /> Mesh
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded transition-colors">
+                      <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        checked={layerVisibility.threads}
+                        onChange={(e) => setLayerVisibility(prev => ({ ...prev, threads: e.target.checked }))}
+                      />
+                      <div className="w-4 h-0 border-b-2 border-dashed border-orange-500 ml-1" /> Threads
+                    </label>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Button variant="secondary" className="shadow-md shadow-slate-200/50 bg-white" onClick={() => setShowLegend(true)}>
+                  <Layers className="w-4 h-4 mr-2" /> Legend
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>

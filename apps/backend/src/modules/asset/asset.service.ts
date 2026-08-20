@@ -408,6 +408,7 @@ export class AssetService {
     assetId: string,
     attributeName: string,
     range: string,
+    endDateParam?: string,
   ) {
     const asset = await this.prisma.asset.findFirst({
       where: { id: assetId, tenantId },
@@ -421,24 +422,27 @@ export class AssetService {
     }
 
     // Determine time range start date
-    const now = new Date();
-    let startDate = new Date(now.getTime() - 60 * 60 * 1000); // default last 1 hour
-    if (range === '6h') {
-      startDate = new Date(now.getTime() - 6 * 60 * 60 * 1000);
-    } else if (range === '24h') {
-      startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    } else if (range === '7d') {
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    } else if (range === '30d') {
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const endDt = endDateParam ? new Date(endDateParam) : new Date();
+    let startDt = new Date(endDt.getTime() - 60 * 60 * 1000); // default 1h
+
+    if (range === '1h') {
+      startDt = new Date(endDt.getTime() - 60 * 60 * 1000);
+    } else if (range === '1d' || range === '24h') {
+      startDt = new Date(endDt.getTime() - 24 * 60 * 60 * 1000);
+    } else if (range === '1w' || range === '7d') {
+      startDt = new Date(endDt.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (range === '1m' || range === '30d') {
+      startDt = new Date(endDt.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
+    
+    const timeFilter: any = { gte: startDt, lte: endDt };
 
     // 1. Try TelemetryLog first (dynamic attributes)
     const dynamicLogs = await (this.prisma as any).telemetryLog.findMany({
       where: {
         tagId: asset.tagId,
         attrName: attributeName,
-        timestamp: { gte: startDate },
+        timestamp: timeFilter,
       },
       orderBy: { timestamp: 'asc' },
     });
@@ -475,9 +479,7 @@ export class AssetService {
     const telemetryLogs = (await this.prisma.telemetry.findMany({
       where: {
         tagId: asset.tagId,
-        timestamp: {
-          gte: startDate,
-        },
+        timestamp: timeFilter,
       },
       select: {
         timestamp: true,

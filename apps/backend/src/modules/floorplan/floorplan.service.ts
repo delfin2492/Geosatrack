@@ -359,7 +359,7 @@ export class FloorplanService {
       },
       include: {
         zone: { select: { id: true, name: true } },
-        tag: { select: { id: true, rssi: true, lastSeen: true } },
+        tag: { select: { id: true, rssi: true, lastSeen: true, signals: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -422,16 +422,13 @@ export class FloorplanService {
       );
 
       if (matched && matched.zoneId) {
-        const normalizedRssi = Math.max(-100, Math.min(-30, sig.rssi));
-        const weight = Math.pow(10, (normalizedRssi + 100) / 20); // Exponential RSSI weighting
-
         matchedSignals.push({
           anchorId: matched.id,
           x: matched.x,
           y: matched.y,
           zoneId: matched.zoneId,
           rssi: sig.rssi,
-          weight,
+          weight: 0, // Will be calculated dynamically
           anchorName: matched.name,
         });
       }
@@ -443,6 +440,24 @@ export class FloorplanService {
 
     // 2. Zone Auto-Assignment: Pick zoneId of the Anchor with strongest RSSI (highest dBm value)
     matchedSignals.sort((a, b) => b.rssi - a.rssi);
+
+    // --- APPLY DYNAMIC EXPONENT WEIGHTING ---
+    let dynamicExponent = 2.0; // Default fallback
+    if (matchedSignals.length > 1) {
+      const delta = matchedSignals[0].rssi - matchedSignals[1].rssi;
+      const clampedDelta = Math.max(5, Math.min(20, delta));
+      // Interpolate delta 5..20 to Exponent 1.5..4.0
+      dynamicExponent = 1.5 + ((clampedDelta - 5) / 15) * 2.5;
+    } else if (matchedSignals.length === 1) {
+      dynamicExponent = 4.0; // If only 1 anchor, stick to it aggressively
+    }
+
+    // Calculate final weights using the dynamic exponent
+    matchedSignals.forEach(s => {
+      const normalizedRssi = Math.max(-100, Math.min(-30, s.rssi));
+      // Convert to a base 10 scale, then apply dynamic power
+      s.weight = Math.pow((normalizedRssi + 100) / 10, dynamicExponent);
+    });
     const targetZoneId = matchedSignals[0].zoneId;
     const strongestAnchorName = matchedSignals[0].anchorName;
 
@@ -475,11 +490,20 @@ export class FloorplanService {
       include: { tag: true },
     });
 
+      // --- APPLY EXPONENTIAL MOVING AVERAGE (EMA) FILTER ---
+      const alpha = 0.3; // Smoothing factor (30% new, 70% old)
+      if (dbAsset && dbAsset.planX !== null && dbAsset.planY !== null && dbAsset.zoneId === targetZoneId) {
+        calculatedX = Number(((1 - alpha) * Number(dbAsset.planX) + alpha * calculatedX).toFixed(2));
+        calculatedY = Number(((1 - alpha) * Number(dbAsset.planY) + alpha * calculatedY).toFixed(2));
+      }
+
+
     const signalsJson = JSON.stringify(
       matchedSignals.map((s) => ({
         anchorId: s.anchorId,
         anchorName: s.anchorName,
         rssi: s.rssi,
+        weight: s.weight,
       }))
     );
 
