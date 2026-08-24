@@ -440,42 +440,51 @@ export class FloorplanService {
 
     // 2. Zone Auto-Assignment: Pick zoneId of the Anchor with strongest RSSI (highest dBm value)
     matchedSignals.sort((a, b) => b.rssi - a.rssi);
-
-    // --- APPLY DYNAMIC EXPONENT WEIGHTING ---
-    let dynamicExponent = 2.0; // Default fallback
-    if (matchedSignals.length > 1) {
-      const delta = matchedSignals[0].rssi - matchedSignals[1].rssi;
-      const clampedDelta = Math.max(5, Math.min(20, delta));
-      // Interpolate delta 5..20 to Exponent 1.5..4.0
-      dynamicExponent = 1.5 + ((clampedDelta - 5) / 15) * 2.5;
-    } else if (matchedSignals.length === 1) {
-      dynamicExponent = 4.0; // If only 1 anchor, stick to it aggressively
-    }
-
-    // Calculate final weights using the dynamic exponent
-    matchedSignals.forEach(s => {
-      const normalizedRssi = Math.max(-100, Math.min(-30, s.rssi));
-      // Convert to a base 10 scale, then apply dynamic power
-      s.weight = Math.pow((normalizedRssi + 100) / 10, dynamicExponent);
-    });
     const targetZoneId = matchedSignals[0].zoneId;
     const strongestAnchorName = matchedSignals[0].anchorName;
 
     // Filter signals belonging to the target zone
     const zoneSignals = matchedSignals.filter((s) => s.zoneId === targetZoneId);
 
-    let calculatedX = zoneSignals[0].x;
-    let calculatedY = zoneSignals[0].y;
+    // ONLY use the top 3 strongest anchors in the target zone (matching frontend!)
+    const topZoneSignals = zoneSignals.slice(0, 3);
 
-    if (zoneSignals.length > 1) {
+    // --- APPLY OPTIMIZED DYNAMIC EXPONENT WEIGHTING ---
+    let exponent = 2.0;
+    if (topZoneSignals.length > 1) {
+      const delta = topZoneSignals[0].rssi - topZoneSignals[1].rssi;
+      if (delta <= 3) {
+        exponent = 2.0; // In the middle: use smooth quadratic average
+      } else if (delta >= 15) {
+        exponent = 6.0; // Very close to one anchor: snap aggressively
+      } else {
+        exponent = 2.0 + ((delta - 3) / 12) * 4.0; // Smooth transition
+      }
+    } else if (topZoneSignals.length === 1) {
+      exponent = 6.0;
+    }
+
+    // Calculate final weights using the dynamic exponent
+    matchedSignals.forEach(s => {
+      const normalizedRssi = Math.max(-100, Math.min(-30, s.rssi));
+      s.weight = Math.pow(normalizedRssi + 100, exponent);
+    });
+
+    let calculatedX = topZoneSignals[0].x;
+    let calculatedY = topZoneSignals[0].y;
+
+    if (topZoneSignals.length > 1) {
       let totalWeight = 0;
       let weightedX = 0;
       let weightedY = 0;
 
-      for (const s of zoneSignals) {
-        totalWeight += s.weight;
-        weightedX += s.x * s.weight;
-        weightedY += s.y * s.weight;
+      for (const s of topZoneSignals) {
+        const normalizedRssi = Math.max(-100, Math.min(-30, s.rssi));
+        const weight = Math.pow(normalizedRssi + 100, exponent);
+        
+        totalWeight += weight;
+        weightedX += s.x * weight;
+        weightedY += s.y * weight;
       }
 
       if (totalWeight > 0) {
@@ -491,7 +500,8 @@ export class FloorplanService {
     });
 
       // --- APPLY EXPONENTIAL MOVING AVERAGE (EMA) FILTER ---
-      const alpha = 0.3; // Smoothing factor (30% new, 70% old)
+      // We set alpha = 1.0 to disable EMA smoothing lag and snap instantly (matching frontend!)
+      const alpha = 1.0; 
       if (dbAsset && dbAsset.planX !== null && dbAsset.planY !== null && dbAsset.zoneId === targetZoneId) {
         calculatedX = Number(((1 - alpha) * Number(dbAsset.planX) + alpha * calculatedX).toFixed(2));
         calculatedY = Number(((1 - alpha) * Number(dbAsset.planY) + alpha * calculatedY).toFixed(2));

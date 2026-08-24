@@ -101,7 +101,8 @@ export class AssetController {
     @Query('attribute') attribute: string,
     @Query('range') range?: string,
     @Query('endDate') endDate?: string,
+    @Query('startDate') startDate?: string,
   ) {
-    return this.assetService.getTelemetryHistory(tenantId, id, attribute, range || '1h', endDate);
+    return this.assetService.getTelemetryHistory(tenantId, id, attribute, range || '1h', endDate, startDate);
   }
 }

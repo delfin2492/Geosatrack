@@ -749,7 +749,7 @@ export default function AssetsPage() {
           name,
           type: addModalSelectedType,
           parentId: parentId || null,
-          tagId: null,
+          tagId: tagId || null,
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
           description: serializedDescription
@@ -2267,6 +2267,20 @@ export default function AssetsPage() {
                       </select>
                     </div>
                   </div>
+
+                  {addModalTab === 'ASSET' && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-muted-foreground">Device Address (tagId / Node ID)</label>
+                        <Input
+                          type="text"
+                          value={tagId}
+                          onChange={(e) => setTagId(e.target.value)}
+                          placeholder="e.g. node-439201 or 9023206"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Dynamic Connection Credentials Form (For Agents inside creation modal) */}
                   {addModalTab === 'AGENT' && currentFieldsConfig.length > 0 && (

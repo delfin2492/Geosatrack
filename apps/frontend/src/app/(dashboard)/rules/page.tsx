@@ -63,7 +63,7 @@ const CustomNode = ({ data }: any) => {
   );
 };
 
-// Removed global nodeTypes to use useMemo inside component
+const nodeTypes = { customNode: CustomNode };
 
 // Node Types
 type NodeType = 'trigger_geofence' | 'trigger_telemetry' | 'logic_filter' | 'action_alarm' | 'action_email' | 'action_telegram' | 'input_attribute' | 'process_math';
@@ -214,7 +214,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
 
 export default function RulesPage() {
   const { tenantId, token, isAdmin } = useAuth();
-  const nodeTypes = useMemo(() => ({ customNode: CustomNode }), []);
+  
 
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(false);

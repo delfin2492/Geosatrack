@@ -215,16 +215,32 @@ export default function PlannerPage() {
 
       if (rssiList.length === 0) return null;
 
-      // Sort by strongest signal — use top 3 for centroid
+      // Sort by strongest signal - use top 3 for centroid
       rssiList.sort((a, b) => b.rssi - a.rssi);
       const top = rssiList.slice(0, 3);
 
-      // Weighted centroid: weight = (rssi + 100)^2 (linear distance proxy)
+      // --- APPLY OPTIMIZED DYNAMIC EXPONENT WEIGHTING ---
+      let exponent = 2.0;
+      if (top.length > 1) {
+        const delta = top[0].rssi - top[1].rssi;
+        if (delta <= 3) {
+          exponent = 2.0; // In the middle: use smooth quadratic average
+        } else if (delta >= 15) {
+          exponent = 6.0; // Very close to one anchor: snap aggressively
+        } else {
+          exponent = 2.0 + ((delta - 3) / 12) * 4.0; // Smooth transition
+        }
+      } else if (top.length === 1) {
+        exponent = 6.0;
+      }
+
+      // Weighted centroid: weight = (rssi + 100)^exponent (linear distance proxy)
       let totalWeight = 0;
       let weightedX = 0;
       let weightedY = 0;
       top.forEach((item) => {
-        const weight = Math.pow(item.rssi + 100, 2);
+        const normalizedRssi = Math.max(-100, Math.min(-30, item.rssi));
+        const weight = Math.pow(normalizedRssi + 100, exponent);
         weightedX += item.x * weight;
         weightedY += item.y * weight;
         totalWeight += weight;
@@ -372,7 +388,7 @@ export default function PlannerPage() {
       zoomControl: true,
       scrollWheelZoom: true,
       doubleClickZoom: true,
-      dragging: false,
+      dragging: true,
     });
     mapRef.current = map;
 
@@ -502,6 +518,9 @@ export default function PlannerPage() {
                 body: JSON.stringify({ x: newX, y: newY }),
               });
               fetchAllAnchors();
+              if (selectedZoneId) {
+                fetchZoneDetails(selectedZoneId);
+              }
             } catch (err) {
               console.error('Failed to update anchor position:', err);
             }
@@ -878,6 +897,7 @@ export default function PlannerPage() {
           latitude: selectedZone.width / 2,
           longitude: selectedZone.height / 2,
           zoneId: selectedZoneId,
+          tagId: newAnchorHardwareId || undefined,
         }),
       });
 

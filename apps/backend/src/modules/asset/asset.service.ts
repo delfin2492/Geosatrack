@@ -409,6 +409,7 @@ export class AssetService {
     attributeName: string,
     range: string,
     endDateParam?: string,
+    startDateParam?: string,
   ) {
     const asset = await this.prisma.asset.findFirst({
       where: { id: assetId, tenantId },
@@ -425,7 +426,11 @@ export class AssetService {
     const endDt = endDateParam ? new Date(endDateParam) : new Date();
     let startDt = new Date(endDt.getTime() - 60 * 60 * 1000); // default 1h
 
-    if (range === '1h') {
+    if (startDateParam) {
+      startDt = new Date(startDateParam);
+    } else if (range === 'realtime') {
+      startDt = new Date(endDt.getTime() - 10 * 60 * 1000); // last 10 mins for realtime
+    } else if (range === '1h') {
       startDt = new Date(endDt.getTime() - 60 * 60 * 1000);
     } else if (range === '1d' || range === '24h') {
       startDt = new Date(endDt.getTime() - 24 * 60 * 60 * 1000);
@@ -433,6 +438,8 @@ export class AssetService {
       startDt = new Date(endDt.getTime() - 7 * 24 * 60 * 60 * 1000);
     } else if (range === '1m' || range === '30d') {
       startDt = new Date(endDt.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else if (range === '1y') {
+      startDt = new Date(endDt.getTime() - 365 * 24 * 60 * 60 * 1000);
     }
     
     const timeFilter: any = { gte: startDt, lte: endDt };

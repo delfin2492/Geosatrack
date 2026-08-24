@@ -336,6 +336,8 @@ export default function MapPage() {
         y,
         lat: realLat,
         lon: realLon,
+        latitude: a.latitude !== null && a.latitude !== undefined ? Number(a.latitude) : null,
+        longitude: a.longitude !== null && a.longitude !== undefined ? Number(a.longitude) : null,
         tag: tagData,
       };
     });
@@ -472,7 +474,12 @@ export default function MapPage() {
                         { label: 'Humidity', value: selectedAsset.tag && selectedAsset.tag.humidity !== null ? `${selectedAsset.tag.humidity}${getUnit(['humidity'], ' %')}` : '--' },
                         { label: 'Battery/Voltage', value: selectedAsset.tag && selectedAsset.tag.battery !== null ? `${selectedAsset.tag.battery}${getUnit(['battery', 'voltage'], ' V')}` : '--' },
                         { label: 'RSSI', value: selectedAsset.tag && selectedAsset.tag.rssi !== null ? `${selectedAsset.tag.rssi}${getUnit(['rssi', 'gateway_rssi'], ' dBm')}` : '--' },
-                        { label: 'Coordinates (Lat, Lon)', value: `${selectedAsset.x.toFixed(6)}, ${selectedAsset.y.toFixed(6)}` },
+                        { 
+                          label: 'Coordinates (Lat, Lon)', 
+                          value: selectedAsset.latitude !== null && selectedAsset.latitude !== undefined && selectedAsset.longitude !== null && selectedAsset.longitude !== undefined
+                            ? `${Number(selectedAsset.latitude).toFixed(6)}, ${Number(selectedAsset.longitude).toFixed(6)}`
+                            : '--' 
+                        },
                       ];
 
                     customAttrs.forEach((attr: any) => {
