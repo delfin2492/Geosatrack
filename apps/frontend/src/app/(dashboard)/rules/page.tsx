@@ -750,7 +750,8 @@ export default function RulesPage() {
                           options={[
                             { label: "Trigger Asset Attribute", value: "trigger_asset" },
                             { label: "Dashboard Alarm", value: "alarm" },
-                            { label: "Send Notification", value: "notification" }
+                            { label: "SMTP Email", value: "email" },
+                            { label: "Telegram Bot", value: "telegram" }
                           ]}
                           value={act.actionType}
                           onChange={(val) => { const n = [...wtActions]; n[i].actionType = val; setWtActions(n); }}
@@ -807,7 +808,37 @@ export default function RulesPage() {
                       {act.actionType === 'alarm' && (
                         <div className="pr-6">
                           <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Alarm Message</label>
-                          <Input className="h-8 text-xs" value={act.message} onChange={(e) => { const n = [...wtActions]; n[i].message = e.target.value; setWtActions(n); }} />
+                          <Input className="h-8 text-xs" placeholder="e.g. Critical alert: Asset {assetName}" value={act.message || ''} onChange={(e) => { const n = [...wtActions]; n[i].message = e.target.value; setWtActions(n); }} />
+                        </div>
+                      )}
+
+                      {act.actionType === 'email' && (
+                        <div className="space-y-3 pr-6">
+                          <div>
+                            <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Recipient Email (toEmail)</label>
+                            <Input className="h-8 text-xs" placeholder="e.g. admin@example.com" value={act.toEmail || ''} onChange={(e) => { const n = [...wtActions]; n[i].toEmail = e.target.value; setWtActions(n); }} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Subject Template</label>
+                            <Input className="h-8 text-xs" placeholder="e.g. Temperature Alert: {assetName}" value={act.subjectTemplate || ''} onChange={(e) => { const n = [...wtActions]; n[i].subjectTemplate = e.target.value; setWtActions(n); }} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Body Template</label>
+                            <Input className="h-8 text-xs" placeholder="e.g. Asset {assetName} attribute {attributeName} = {value}" value={act.bodyTemplate || ''} onChange={(e) => { const n = [...wtActions]; n[i].bodyTemplate = e.target.value; setWtActions(n); }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {act.actionType === 'telegram' && (
+                        <div className="space-y-3 pr-6">
+                          <div>
+                            <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Telegram Chat ID</label>
+                            <Input className="h-8 text-xs" placeholder="e.g. 123456789" value={act.chatId || ''} onChange={(e) => { const n = [...wtActions]; n[i].chatId = e.target.value; setWtActions(n); }} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Message Template</label>
+                            <Input className="h-8 text-xs" placeholder="e.g. GeoMesh Alert: {assetName} attribute {attributeName} = {value}" value={act.messageTemplate || ''} onChange={(e) => { const n = [...wtActions]; n[i].messageTemplate = e.target.value; setWtActions(n); }} />
+                          </div>
                         </div>
                       )}
                     </div>

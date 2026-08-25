@@ -59,6 +59,10 @@ export class RulesEngineService {
 
     for (const rule of activeRules) {
       try {
+        if (rule.ruleType === 'WHEN_THEN' || (!rule.flowGraph && rule.ruleConfig)) {
+          await this.processWhenThenRule(rule, eventType, payload);
+          continue;
+        }
         if (!rule.flowGraph) continue;
         const graph: FlowGraph = JSON.parse(rule.flowGraph);
         if (!graph.nodes || !graph.edges) continue;
@@ -76,9 +80,9 @@ export class RulesEngineService {
           }
           if (eventType === 'TELEMETRY_ALERT') {
             return (
-              nodeType === 'trigger_telemetry' &&
-              node.data.attributeName === payload.attributeName &&
-              (node.data.assetId === 'ANY' || node.data.assetId === payload.assetId)
+              (nodeType === 'trigger_telemetry' || nodeType === 'input_attribute') &&
+              (node.data?.attributeName === 'ANY' || !node.data?.attributeName || node.data?.attributeName === payload.attributeName) &&
+              (node.data?.assetId === 'ANY' || !node.data?.assetId || node.data?.assetId === payload.assetId)
             );
           }
           return false;
@@ -146,10 +150,13 @@ export class RulesEngineService {
         logMessages.push(`[LOGIC] Filter failed: Payload is missing numeric telemetry value.`);
       } else {
         const threshold = Number(thresholdValue);
+        const cond = String(conditionType || '').toUpperCase();
         let conditionMet = false;
-        if (conditionType === 'GT') conditionMet = val > threshold;
-        else if (conditionType === 'LT') conditionMet = val < threshold;
-        else if (conditionType === 'EQ') conditionMet = val === threshold;
+        if (cond === 'GT' || cond === '>') conditionMet = val > threshold;
+        else if (cond === 'LT' || cond === '<') conditionMet = val < threshold;
+        else if (cond === 'EQ' || cond === '=' || cond === '==') conditionMet = val === threshold;
+        else if (cond === 'GTE' || cond === '>=') conditionMet = val >= threshold;
+        else if (cond === 'LTE' || cond === '<=') conditionMet = val <= threshold;
 
         if (conditionMet) {
           logMessages.push(`[LOGIC] Filter passed: ${val} is ${conditionType} than/equal to ${threshold}`);
@@ -354,4 +361,189 @@ export class RulesEngineService {
     const asset = await this.prisma.asset.findUnique({ where: { id: assetId } });
     return asset?.tenantId || '';
   }
+
+  /**
+   * Process a simple When-Then rule configuration.
+   */
+  private async processWhenThenRule(
+    rule: any,
+    eventType: 'GEOFENCE_ENTER' | 'GEOFENCE_EXIT' | 'TELEMETRY_ALERT',
+    payload: any,
+  ) {
+    if (!rule.ruleConfig) return;
+    let config: { conditions?: any[]; actions?: any[] } = {};
+    try {
+      config = JSON.parse(rule.ruleConfig);
+    } catch (e) {
+      return;
+    }
+
+    const conditions = config.conditions || [];
+    const actions = config.actions || [];
+    if (actions.length === 0) return;
+
+    let allConditionsMet = true;
+    const logMessages: string[] = [
+      `[${new Date().toISOString()}] Executing When-Then Rule: "${rule.name}" (${rule.id})`,
+    ];
+
+    for (const cond of conditions) {
+      if (cond.assetId && cond.assetId !== 'ANY' && cond.assetId !== payload.assetId) {
+        allConditionsMet = false;
+        logMessages.push(`[CONDITION] Asset mismatch: expected ${cond.assetId}, got ${payload.assetId}`);
+        break;
+      }
+
+      if (eventType === 'TELEMETRY_ALERT') {
+        if (cond.attribute && cond.attribute !== 'ANY' && cond.attribute !== payload.attributeName) {
+          allConditionsMet = false;
+          logMessages.push(`[CONDITION] Attribute mismatch: expected ${cond.attribute}, got ${payload.attributeName}`);
+          break;
+        }
+
+        const val = payload.value;
+        const thresh = Number(cond.value);
+        if (val === undefined || val === null || isNaN(thresh)) {
+          allConditionsMet = false;
+          logMessages.push(`[CONDITION] Missing or invalid numeric telemetry value.`);
+          break;
+        }
+
+        const operator = String(cond.operator || '>').toUpperCase();
+        let match = false;
+        if (operator === '>' || operator === 'GT') match = val > thresh;
+        else if (operator === '<' || operator === 'LT') match = val < thresh;
+        else if (operator === '=' || operator === '==' || operator === 'EQ') match = val === thresh;
+        else if (operator === '>=' || operator === 'GTE') match = val >= thresh;
+        else if (operator === '<=' || operator === 'LTE') match = val <= thresh;
+
+        if (!match) {
+          allConditionsMet = false;
+          logMessages.push(`[CONDITION] Condition failed: ${val} is not ${operator} ${thresh}`);
+          break;
+        } else {
+          logMessages.push(`[CONDITION] Passed: ${val} ${operator} ${thresh}`);
+        }
+      }
+    }
+
+    if (!allConditionsMet) {
+      return;
+    }
+
+    let status: 'SUCCESS' | 'FAILED' = 'SUCCESS';
+
+    for (const action of actions) {
+      try {
+        const actionType = action.actionType;
+        if (actionType === 'alarm' || actionType === 'notification') {
+          const msg = action.message || `Alert for ${payload.assetName || 'Asset'}: ${payload.attributeName || 'threshold'} = ${payload.value}`;
+          const targetTenantId = payload.tenantId || rule.tenantId || (await this.getTenantFromAsset(payload.assetId));
+          const createdAlert = await this.prisma.alert.create({
+            data: {
+              type: 'alert_alarm',
+              message: this.interpolateTemplate(msg, payload),
+              tenantId: targetTenantId,
+              assetId: payload.assetId,
+            },
+          });
+          this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
+          logMessages.push(`[ACTION] Created Alarm alert.`);
+        } else if (actionType === 'email') {
+          const toEmail = action.toEmail;
+          if (!toEmail) throw new Error('Email action requires recipient (toEmail).');
+
+          const settings = await this.prisma.systemSetting.findMany({
+            where: { key: { in: ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'] } }
+          });
+          const smtpHost = settings.find(s => s.key === 'SMTP_HOST')?.value;
+          const smtpPort = settings.find(s => s.key === 'SMTP_PORT')?.value;
+          const smtpUser = settings.find(s => s.key === 'SMTP_USER')?.value;
+          const smtpPass = settings.find(s => s.key === 'SMTP_PASS')?.value;
+
+          if (!smtpHost || !smtpUser || !smtpPass) {
+            throw new Error('SMTP credentials not configured in System Settings.');
+          }
+
+          const transporter = nodemailer.createTransport({
+            host: smtpHost,
+            port: Number(smtpPort) || 587,
+            secure: Number(smtpPort) === 465,
+            auth: { user: smtpUser, pass: smtpPass },
+          });
+
+          const rawSubject = action.subjectTemplate || 'Alert Notification';
+          const subject = `[GEOMESH ALARM] ${this.interpolateTemplate(rawSubject, payload)}`;
+          const body = this.interpolateTemplate(action.bodyTemplate || 'Asset {assetName} triggered alert: {attributeName} = {value}', payload);
+
+          await transporter.sendMail({
+            from: `"GeoMesh Platform" <${smtpUser}>`,
+            to: toEmail,
+            subject,
+            text: body,
+            html: `<div style="font-family: sans-serif; padding: 20px;"><h3>GeoMesh Alarm</h3><p>${body}</p></div>`,
+          });
+
+          const targetTenantId = payload.tenantId || rule.tenantId;
+          const createdAlert = await this.prisma.alert.create({
+            data: {
+              type: 'email',
+              message: `Email Sent to ${toEmail}: ${subject}`,
+              tenantId: targetTenantId,
+              assetId: payload.assetId,
+            },
+          });
+          this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
+          logMessages.push(`[ACTION] Sent email to ${toEmail}`);
+        } else if (actionType === 'telegram') {
+          const chatId = action.chatId;
+          if (!chatId) throw new Error('Telegram action requires chatId.');
+
+          const botTokenSetting = await this.prisma.systemSetting.findUnique({
+            where: { key: 'TELEGRAM_BOT_TOKEN' }
+          });
+          const botToken = botTokenSetting?.value;
+          if (!botToken) throw new Error('Telegram Bot Token not configured in System Settings.');
+
+          const text = this.interpolateTemplate(action.messageTemplate || 'Alert for {assetName}: {attributeName} = {value}', payload);
+          const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+          });
+          if (!res.ok) {
+            const errBody = await res.json();
+            throw new Error(errBody.description || `Telegram status ${res.status}`);
+          }
+
+          const targetTenantId = payload.tenantId || rule.tenantId;
+          const createdAlert = await this.prisma.alert.create({
+            data: {
+              type: 'telegram',
+              message: `Telegram Sent (${chatId}): ${text.replace(/\*/g, '')}`,
+              tenantId: targetTenantId,
+              assetId: payload.assetId,
+            },
+          });
+          this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
+          logMessages.push(`[ACTION] Sent Telegram message to ${chatId}`);
+        }
+      } catch (actErr: any) {
+        status = 'FAILED';
+        logMessages.push(`[ACTION_ERROR] Action failed: ${actErr.message}`);
+      }
+    }
+
+    const fullLog = logMessages.join('\n');
+    await this.ruleService.createLog(rule.id, status, fullLog);
+    this.websocketGateway.sendToTenant(rule.tenantId, 'systemLog', {
+      level: status === 'SUCCESS' ? 'success' : 'error',
+      source: 'RULES_ENGINE',
+      deviceName: payload.assetName || rule.name,
+      message: status === 'SUCCESS' ? `When-Then rule "${rule.name}" executed` : `When-Then rule "${rule.name}" failed`,
+      data: { ruleId: rule.id, payload, executionLogs: logMessages },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
 }
