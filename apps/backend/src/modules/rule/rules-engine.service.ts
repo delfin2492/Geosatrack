@@ -371,7 +371,7 @@ export class RulesEngineService {
     payload: any,
   ) {
     if (!rule.ruleConfig) return;
-    let config: { conditions?: any[]; actions?: any[] } = {};
+    let config: { conditionLogic?: 'AND' | 'OR'; cooldownMinutes?: number; conditions?: any[]; actions?: any[] } = {};
     try {
       config = JSON.parse(rule.ruleConfig);
     } catch (e) {
@@ -382,50 +382,75 @@ export class RulesEngineService {
     const actions = config.actions || [];
     if (actions.length === 0) return;
 
-    let allConditionsMet = true;
-    const logMessages: string[] = [
-      `[${new Date().toISOString()}] Executing When-Then Rule: "${rule.name}" (${rule.id})`,
-    ];
+    const conditionLogic = config.conditionLogic === 'OR' ? 'OR' : 'AND';
+    const cooldownMinutes = Number(config.cooldownMinutes) || 0;
 
-    for (const cond of conditions) {
-      if (cond.assetId && cond.assetId !== 'ANY' && cond.assetId !== payload.assetId) {
-        allConditionsMet = false;
-        logMessages.push(`[CONDITION] Asset mismatch: expected ${cond.assetId}, got ${payload.assetId}`);
-        break;
-      }
+    // 1. Cooldown Period Check
+    if (cooldownMinutes > 0) {
+      const cutoffTime = new Date(Date.now() - cooldownMinutes * 60 * 1000);
+      const recentSuccessLog = await this.prisma.ruleLog.findFirst({
+        where: {
+          ruleId: rule.id,
+          status: 'SUCCESS',
+          createdAt: { gte: cutoffTime },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
 
-      if (eventType === 'TELEMETRY_ALERT') {
-        if (cond.attribute && cond.attribute !== 'ANY' && cond.attribute !== payload.attributeName) {
-          allConditionsMet = false;
-          logMessages.push(`[CONDITION] Attribute mismatch: expected ${cond.attribute}, got ${payload.attributeName}`);
-          break;
-        }
-
-        const val = payload.value;
-        const thresh = Number(cond.value);
-        if (val === undefined || val === null || isNaN(thresh)) {
-          allConditionsMet = false;
-          logMessages.push(`[CONDITION] Missing or invalid numeric telemetry value.`);
-          break;
-        }
-
-        const operator = String(cond.operator || '>').toUpperCase();
-        let match = false;
-        if (operator === '>' || operator === 'GT') match = val > thresh;
-        else if (operator === '<' || operator === 'LT') match = val < thresh;
-        else if (operator === '=' || operator === '==' || operator === 'EQ') match = val === thresh;
-        else if (operator === '>=' || operator === 'GTE') match = val >= thresh;
-        else if (operator === '<=' || operator === 'LTE') match = val <= thresh;
-
-        if (!match) {
-          allConditionsMet = false;
-          logMessages.push(`[CONDITION] Condition failed: ${val} is not ${operator} ${thresh}`);
-          break;
-        } else {
-          logMessages.push(`[CONDITION] Passed: ${val} ${operator} ${thresh}`);
-        }
+      if (recentSuccessLog) {
+        this.logger.log(`[COOLDOWN] Rule "${rule.name}" (${rule.id}) triggered but suppressed due to active ${cooldownMinutes}m cooldown.`);
+        return;
       }
     }
+
+    const logMessages: string[] = [
+      `[${new Date().toISOString()}] Executing When-Then Rule: "${rule.name}" (${rule.id}) [Logic: ${conditionLogic}]`,
+    ];
+
+    const condResults: boolean[] = [];
+
+    for (const cond of conditions) {
+      let condMatched = true;
+
+      if (cond.assetId && cond.assetId !== 'ANY' && cond.assetId !== payload.assetId) {
+        condMatched = false;
+        logMessages.push(`[CONDITION] Asset mismatch: expected ${cond.assetId}, got ${payload.assetId}`);
+      } else if (eventType === 'TELEMETRY_ALERT') {
+        if (cond.attribute && cond.attribute !== 'ANY' && cond.attribute !== payload.attributeName) {
+          condMatched = false;
+          logMessages.push(`[CONDITION] Attribute mismatch: expected ${cond.attribute}, got ${payload.attributeName}`);
+        } else {
+          const val = payload.value;
+          const thresh = Number(cond.value);
+          if (val === undefined || val === null || isNaN(thresh)) {
+            condMatched = false;
+            logMessages.push(`[CONDITION] Missing or invalid numeric telemetry value.`);
+          } else {
+            const operator = String(cond.operator || '>').toUpperCase();
+            let match = false;
+            if (operator === '>' || operator === 'GT') match = val > thresh;
+            else if (operator === '<' || operator === 'LT') match = val < thresh;
+            else if (operator === '=' || operator === '==' || operator === 'EQ') match = val === thresh;
+            else if (operator === '!=' || operator === 'NEQ') match = val !== thresh;
+            else if (operator === '>=' || operator === 'GTE') match = val >= thresh;
+            else if (operator === '<=' || operator === 'LTE') match = val <= thresh;
+
+            condMatched = match;
+            if (match) {
+              logMessages.push(`[CONDITION] Passed: ${val} ${operator} ${thresh}`);
+            } else {
+              logMessages.push(`[CONDITION] Failed: ${val} is not ${operator} ${thresh}`);
+            }
+          }
+        }
+      }
+
+      condResults.push(condMatched);
+    }
+
+    const allConditionsMet = conditionLogic === 'OR'
+      ? condResults.some(r => r === true)
+      : condResults.every(r => r === true);
 
     if (!allConditionsMet) {
       return;

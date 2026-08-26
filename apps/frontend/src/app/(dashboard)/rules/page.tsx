@@ -234,6 +234,8 @@ export default function RulesPage() {
 
   // When-Then State
   const [wtConditions, setWtConditions] = useState<any[]>([]);
+  const [wtConditionLogic, setWtConditionLogic] = useState<'AND' | 'OR'>('AND');
+  const [wtCooldownMinutes, setWtCooldownMinutes] = useState<number>(0);
   const [wtActions, setWtActions] = useState<any[]>([]);
 
   const [assets, setAssets] = useState<any[]>([]);
@@ -382,6 +384,8 @@ export default function RulesPage() {
     setRuleName('New When-Then Rule');
     setWtConditions([{ id: Date.now().toString(), assetId: '', attribute: '', operator: '>', value: '' }]);
     setWtActions([{ id: (Date.now() + 1).toString(), actionType: 'trigger_asset', assetId: '', attribute: '', command: '' }]);
+    setWtConditionLogic('AND');
+    setWtCooldownMinutes(0);
     setActiveTab('editor_whenthen');
   };
 
@@ -393,6 +397,8 @@ export default function RulesPage() {
         const config = JSON.parse(rule.ruleConfig || '{}');
         setWtConditions(config.conditions || []);
         setWtActions(config.actions || []);
+        setWtConditionLogic(config.conditionLogic === 'OR' ? 'OR' : 'AND');
+        setWtCooldownMinutes(Number(config.cooldownMinutes) || 0);
       } catch (e) {
         setWtConditions([]);
         setWtActions([]);
@@ -422,7 +428,12 @@ export default function RulesPage() {
     const isWhenThen = activeTab === 'editor_whenthen';
     const ruleType = isWhenThen ? 'WHEN_THEN' : 'FLOW';
     const flowGraph = isWhenThen ? null : JSON.stringify({ nodes, edges });
-    const ruleConfig = isWhenThen ? JSON.stringify({ conditions: wtConditions, actions: wtActions }) : null;
+    const ruleConfig = isWhenThen ? JSON.stringify({ 
+      conditionLogic: wtConditionLogic, 
+      cooldownMinutes: wtCooldownMinutes, 
+      conditions: wtConditions, 
+      actions: wtActions 
+    }) : null;
 
     const method = editingRule ? 'PATCH' : 'POST';
     const endpoint = editingRule ? `${getApiUrl()}/rules/${editingRule.id}` : `${getApiUrl()}/rules`;
@@ -655,9 +666,46 @@ export default function RulesPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
             {/* WHEN Panel */}
             <div className="relative">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-6 w-1.5 bg-amber-500 rounded-full"></div>
-                <h3 className="text-lg font-black text-foreground">When...</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-1.5 bg-amber-500 rounded-full"></div>
+                  <h3 className="text-lg font-black text-foreground">When...</h3>
+                </div>
+
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Logic Selector AND / OR */}
+                  <div className="flex items-center gap-1.5 bg-secondary/50 p-1 rounded-lg border border-border">
+                    <span className="text-[10px] font-bold text-muted-foreground px-1">Logic:</span>
+                    <button
+                      type="button"
+                      onClick={() => setWtConditionLogic('AND')}
+                      className={`px-2 py-0.5 text-[11px] font-black rounded transition-all ${wtConditionLogic === 'AND' ? 'bg-amber-500 text-black shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      AND (All)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWtConditionLogic('OR')}
+                      className={`px-2 py-0.5 text-[11px] font-black rounded transition-all ${wtConditionLogic === 'OR' ? 'bg-amber-500 text-black shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      OR (Any)
+                    </button>
+                  </div>
+
+                  {/* Cooldown Duration Input */}
+                  <div className="flex items-center gap-1.5 bg-secondary/50 px-2 py-1 rounded-lg border border-border">
+                    <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">Cooldown:</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="1440"
+                      value={wtCooldownMinutes}
+                      onChange={(e) => setWtCooldownMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="h-6 w-14 text-xs font-bold text-center bg-background border-border p-1"
+                    />
+                    <span className="text-[10px] font-medium text-muted-foreground">m</span>
+                  </div>
+                </div>
               </div>
               <div className="space-y-4">
                 {wtConditions.map((cond, i) => {
@@ -667,7 +715,7 @@ export default function RulesPage() {
 
                   return (
                     <div key={cond.id} className="border-l-2 border-border pl-4 ml-2 relative group">
-                      {i > 0 && <div className="absolute -top-4 left-[-11px] bg-background text-amber-500 border border-border text-[9px] font-black px-1.5 py-0.5 rounded-full z-10">AND</div>}
+                      {i > 0 && <div className="absolute -top-4 left-[-11px] bg-background text-amber-500 border border-border text-[9px] font-black px-1.5 py-0.5 rounded-full z-10">{wtConditionLogic}</div>}
                       <button onClick={() => setWtConditions(c => c.filter(x => x.id !== cond.id))} className="absolute top-0 right-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-4 w-4" /></button>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1 pr-6">
