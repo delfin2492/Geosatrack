@@ -22,6 +22,7 @@ import ReactFlow, {
   addEdge,
   Connection,
   Node,
+  Edge,
   Handle,
   Position,
   NodeChange,
@@ -415,6 +416,71 @@ export default function RulesPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
+  // History Stack for Undo (CTRL + Z)
+  const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([]);
+  // Clipboard for Copy/Paste (CTRL + C / CTRL + V)
+  const [clipboard, setClipboard] = useState<Node[]>([]);
+
+  const pushHistory = useCallback(() => {
+    setHistory((prev) => {
+      const updated = [...prev, { nodes, edges }];
+      if (updated.length > 30) updated.shift();
+      return updated;
+    });
+  }, [nodes, edges]);
+
+  const handleUndo = useCallback(() => {
+    setHistory((prev) => {
+      if (prev.length === 0) return prev;
+      const lastState = prev[prev.length - 1];
+      setNodes(lastState.nodes);
+      setEdges(lastState.edges);
+      return prev.slice(0, prev.length - 1);
+    });
+  }, [setNodes, setEdges]);
+
+  const handleCopy = useCallback(() => {
+    const selectedNodes = nodes.filter(n => n.selected || n.id === selectedNodeId);
+    if (selectedNodes.length > 0) {
+      setClipboard(selectedNodes);
+    }
+  }, [nodes, selectedNodeId]);
+
+  const handlePaste = useCallback(() => {
+    if (clipboard.length === 0) return;
+    pushHistory();
+
+    const newNodes: Node[] = [];
+    const now = Date.now();
+
+    clipboard.forEach((nodeToCopy, index) => {
+      const newId = `node_${now}_${index}`;
+      const newNode: Node = {
+        ...nodeToCopy,
+        id: newId,
+        selected: true,
+        position: {
+          x: nodeToCopy.position.x + 40,
+          y: nodeToCopy.position.y + 40,
+        },
+        data: {
+          ...nodeToCopy.data,
+          label: `${nodeToCopy.data.label || 'Node'} (Copy)`,
+        }
+      };
+      newNodes.push(newNode);
+    });
+
+    setNodes((prev) => [
+      ...prev.map(n => ({ ...n, selected: false })),
+      ...newNodes
+    ]);
+
+    if (newNodes.length === 1) {
+      setSelectedNodeId(newNodes[0].id);
+    }
+  }, [clipboard, setNodes, pushHistory]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (activeTab !== 'editor_flow') return;
@@ -423,25 +489,53 @@ export default function RulesPage() {
         return;
       }
 
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      // CTRL + Z: Undo
+      if (isCtrl && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // CTRL + C: Copy
+      if (isCtrl && (e.key === 'c' || e.key === 'C')) {
+        e.preventDefault();
+        handleCopy();
+        return;
+      }
+
+      // CTRL + V: Paste
+      if (isCtrl && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        handlePaste();
+        return;
+      }
+
+      // Delete / Backspace: Delete selected
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const targetNodeIds = nodes.filter(n => n.selected || n.id === selectedNodeId).map(n => n.id);
-        if (targetNodeIds.length > 0) {
-          setNodes((prev) => prev.filter((n) => !targetNodeIds.includes(n.id)));
-          setEdges((prev) => prev.filter((edge) => !targetNodeIds.includes(edge.source) && !targetNodeIds.includes(edge.target)));
-          setSelectedNodeId(null);
-          setSelectedNode(null);
-        }
         const targetEdgeIds = edges.filter(e => e.selected || e.id === selectedEdgeId).map(e => e.id);
-        if (targetEdgeIds.length > 0) {
-          setEdges((prev) => prev.filter((edge) => !targetEdgeIds.includes(edge.id)));
-          setSelectedEdgeId(null);
+
+        if (targetNodeIds.length > 0 || targetEdgeIds.length > 0) {
+          pushHistory();
+          if (targetNodeIds.length > 0) {
+            setNodes((prev) => prev.filter((n) => !targetNodeIds.includes(n.id)));
+            setEdges((prev) => prev.filter((edge) => !targetNodeIds.includes(edge.source) && !targetNodeIds.includes(edge.target)));
+            setSelectedNodeId(null);
+            setSelectedNode(null);
+          }
+          if (targetEdgeIds.length > 0) {
+            setEdges((prev) => prev.filter((edge) => !targetEdgeIds.includes(edge.id)));
+            setSelectedEdgeId(null);
+          }
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, selectedNodeId, selectedEdgeId, setNodes, setEdges]);
+  }, [activeTab, nodes, edges, selectedNodeId, selectedEdgeId, clipboard, handleUndo, handleCopy, handlePaste, pushHistory, setNodes, setEdges]);
 
   // When-Then State
   const [wtGroups, setWtGroups] = useState<any[]>([]);
@@ -1572,7 +1666,9 @@ export default function RulesPage() {
               selectionOnDrag={true}
               selectionMode={SelectionMode.Partial}
               panOnDrag={[1, 2]}
-              panOnScroll={true}
+              zoomOnScroll={true}
+              zoomOnPinch={true}
+              panOnScroll={false}
               deleteKeyCode={['Delete', 'Backspace']}
               onInit={setReactFlowInstance}
               onDrop={onDrop}
