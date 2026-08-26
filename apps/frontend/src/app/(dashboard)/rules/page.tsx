@@ -729,15 +729,35 @@ export default function RulesPage() {
 
             {wtActiveMode === 'SPECIFIC_PERIOD' && (
               <div className="space-y-3 pt-2 border-t border-border/60">
-                <div className="flex items-center justify-between bg-secondary/30 px-3 py-1.5 rounded-lg border border-border/50">
-                  <span className="text-[11px] font-bold text-foreground">Sepanjang Hari (All Days)</span>
+                <div
+                  onClick={() => {
+                    const newAllDays = !wtSpecificAllDays;
+                    setWtSpecificAllDays(newAllDays);
+                    if (newAllDays) {
+                      if (wtSpecificStartDate && wtSpecificStartDate.includes('T')) {
+                        setWtSpecificStartDate(wtSpecificStartDate.split('T')[0]);
+                      }
+                      if (wtSpecificEndDate && wtSpecificEndDate.includes('T')) {
+                        setWtSpecificEndDate(wtSpecificEndDate.split('T')[0]);
+                      }
+                    } else {
+                      if (wtSpecificStartDate && !wtSpecificStartDate.includes('T')) {
+                        setWtSpecificStartDate(`${wtSpecificStartDate}T08:00`);
+                      }
+                      if (wtSpecificEndDate && !wtSpecificEndDate.includes('T')) {
+                        setWtSpecificEndDate(`${wtSpecificEndDate}T17:00`);
+                      }
+                    }
+                  }}
+                  className="flex items-center gap-2.5 bg-secondary/30 px-3 py-1.5 rounded-lg border border-border/50 w-fit cursor-pointer hover:bg-secondary/50 transition-colors"
+                >
                   <button
                     type="button"
-                    onClick={() => setWtSpecificAllDays(!wtSpecificAllDays)}
                     className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${wtSpecificAllDays ? 'bg-amber-500' : 'bg-secondary'}`}
                   >
                     <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out ${wtSpecificAllDays ? 'translate-x-4' : 'translate-x-0'}`} />
                   </button>
+                  <span className="text-[11px] font-bold text-foreground select-none">Sepanjang Hari (All Days)</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
