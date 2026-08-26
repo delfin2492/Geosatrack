@@ -90,7 +90,10 @@ const CustomNode = ({ data }: any) => {
   // 2. ATTRIBUTE VALUE NODE (Matching Gambar 2 Layout)
   if (data.type === 'input_attribute' || data.type === 'trigger_telemetry') {
     const assetName = data.assetName || (data.assetId === 'ANY' ? 'Any Asset' : 'Select Asset');
-    const attrName = data.attributeName || 'Select Attribute';
+    const rawAttrName = data.attributeName || 'Select Attribute';
+    const attrName = (data.operator && data.operator !== 'ANY' && data.thresholdValue !== undefined)
+      ? `${rawAttrName} ${data.operator} ${data.thresholdValue}`
+      : rawAttrName;
     
     let AssetIcon = Zap;
     const nameLower = assetName.toLowerCase();
@@ -1443,7 +1446,7 @@ export default function RulesPage() {
           {/* NODE CONFIG POPUP MODAL */}
           {selectedNode && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-              <Card className="w-full max-w-sm border-border shadow-2xl rounded-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+              <Card className="w-full max-w-md border-border shadow-2xl rounded-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
                 <CardHeader className="py-3 px-4 border-b border-border flex flex-row items-center justify-between sticky top-0 bg-card z-10 rounded-t-2xl">
                   <CardTitle className="text-sm font-bold text-foreground">Node Config</CardTitle>
                   <div className="flex items-center gap-1">
@@ -1535,6 +1538,71 @@ export default function RulesPage() {
                             placeholder="Select Attribute..."
                           />
                         )}
+                      </div>
+
+                      {/* OPTIONAL CONDITION OPERATOR & THRESHOLD */}
+                      <div className="pt-2 border-t border-border/50 space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground font-semibold">Condition Operator (Optional)</label>
+                          <SearchableSelect
+                            options={[
+                              { label: "Any Value (Pass-through)", value: "ANY" },
+                              { label: "Greater than (>)", value: ">" },
+                              { label: "Less than (<)", value: "<" },
+                              { label: "Equal to (==)", value: "==" },
+                              { label: "Not equal to (!=)", value: "!=" },
+                              { label: "Greater than or Equal (>=)", value: ">=" },
+                              { label: "Less than or Equal (<=)", value: "<=" }
+                            ]}
+                            value={selectedNode.data.operator || 'ANY'}
+                            onChange={(val) => updateNodeData(selectedNode.id, 'operator', val)}
+                            placeholder="Select Operator..."
+                          />
+                        </div>
+
+                        {selectedNode.data.operator && selectedNode.data.operator !== 'ANY' && (
+                          <div className="space-y-1">
+                            <label className="text-muted-foreground font-semibold">Threshold Value</label>
+                            <Input
+                              type="number"
+                              value={selectedNode.data.thresholdValue ?? ''}
+                              onChange={(e) => updateNodeData(selectedNode.id, 'thresholdValue', e.target.value)}
+                              className="h-8 rounded-lg text-xs"
+                              placeholder="e.g. 30"
+                            />
+                          </div>
+                        )}
+
+                        {/* DURATION FILTER TOGGLE */}
+                        <div className="pt-1 border-t border-border/40 mt-1">
+                          <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={selectedNode.data.enableDuration ?? (Number(selectedNode.data.durationMinutes) > 0)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                updateNodeData(selectedNode.id, 'enableDuration', checked);
+                                if (!checked) {
+                                  updateNodeData(selectedNode.id, 'durationMinutes', 0);
+                                }
+                              }}
+                              className="rounded border-gray-300 text-amber-500 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer"
+                            />
+                            <span>Set Duration Filter (min)</span>
+                          </label>
+                          {(selectedNode.data.enableDuration ?? (Number(selectedNode.data.durationMinutes) > 0)) && (
+                            <div className="mt-1.5">
+                              <Input
+                                type="number"
+                                min="0"
+                                className="h-8 text-xs bg-background"
+                                placeholder="Duration in minutes (e.g. 5)..."
+                                value={selectedNode.data.durationMinutes || ''}
+                                onChange={(e) => updateNodeData(selectedNode.id, 'durationMinutes', Math.max(0, parseInt(e.target.value) || 0))}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
