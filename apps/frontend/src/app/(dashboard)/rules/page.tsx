@@ -220,8 +220,31 @@ const getAssetIcon = (type: string) => {
   return Box;
 };
 
+const getAttributeUnit = (attrName: string, customUnit?: string) => {
+  if (customUnit) return customUnit;
+  const nameLower = (attrName || '').toLowerCase();
+  
+  if (nameLower === 'temperature' || nameLower.includes('temp')) return '°C';
+  if (nameLower === 'humidity' || nameLower.includes('humid')) return '%';
+  if (nameLower === 'voltage' || nameLower.includes('volt')) return 'V';
+  if (nameLower === 'current' || nameLower.includes('amp')) return 'A';
+  if (nameLower.includes('power') || nameLower === 'watt') return 'W';
+  if (nameLower.includes('brightness')) return '%';
+  if (nameLower.includes('battery') || nameLower === 'batt') return '%';
+  if (nameLower.includes('rssi')) return 'dBm';
+  if (nameLower.includes('accel') || nameLower.includes('acceleration')) return 'm/s²';
+  if (nameLower === 'pitch' || nameLower === 'roll' || nameLower === 'yaw') return '°';
+  if (nameLower.includes('speed') || nameLower.includes('velocity')) return 'km/h';
+  if (nameLower.includes('pressure')) return 'hPa';
+  if (nameLower.includes('distance')) return 'm';
+  if (nameLower.includes('lux') || nameLower.includes('luminance')) return 'lx';
+  if (nameLower.includes('co2')) return 'ppm';
+  
+  return '';
+};
+
 const getAssetAttributes = (asset: any) => {
-  let attrs = [{ name: 'status', type: 'string' }]; // 'status' is a native Prisma field
+  let attrs: { name: string; type: string; unit?: string }[] = [{ name: 'status', type: 'string' }]; // 'status' is a native Prisma field
 
   if (asset && asset.description) {
     try {
@@ -348,11 +371,17 @@ export default function RulesPage() {
   const [pickerSelectedAttribute, setPickerSelectedAttribute] = useState<string>('');
   const [assetSearchFilter, setAssetSearchFilter] = useState<string>('');
 
+  const [initialAssetId, setInitialAssetId] = useState<string>('');
+  const [initialAttribute, setInitialAttribute] = useState<string>('');
+
   const handleOpenAttributePicker = (nodeId: string, nodeData: any) => {
     setAttrPickerNode({ id: nodeId, data: nodeData });
-    const initialAssetId = nodeData.assetId && nodeData.assetId !== 'ANY' ? nodeData.assetId : (assets[0]?.id || '');
-    setPickerSelectedAssetId(initialAssetId);
-    setPickerSelectedAttribute(nodeData.attributeName || '');
+    const initAssetId = nodeData.assetId && nodeData.assetId !== 'ANY' ? nodeData.assetId : (assets[0]?.id || '');
+    const initAttr = nodeData.attributeName || '';
+    setPickerSelectedAssetId(initAssetId);
+    setPickerSelectedAttribute(initAttr);
+    setInitialAssetId(initAssetId);
+    setInitialAttribute(initAttr);
   };
   const [activeTab, setActiveTab] = useState<'list' | 'editor_flow' | 'editor_whenthen'>('list');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -1708,10 +1737,10 @@ export default function RulesPage() {
         onCancel={() => setAlertModal(null)}
       />
 
-      {/* SELECT ATTRIBUTES MODAL (MATCHING IMAGE 3 EXACTLY) */}
+      {/* SELECT ATTRIBUTES MODAL (MATCHING IMAGE WITH TREE HIERARCHY, UNITS & CHANGE CHECK) */}
       {attrPickerNode && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setAttrPickerNode(null)}>
-          <div className="w-full max-w-2xl bg-card border border-border shadow-2xl rounded-lg overflow-hidden flex flex-col h-[520px] animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-2xl bg-card border border-border shadow-2xl rounded-lg overflow-hidden flex flex-col h-[530px] animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             
             {/* HEADER */}
             <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
@@ -1724,7 +1753,7 @@ export default function RulesPage() {
             {/* TWO COLUMN CONTENT */}
             <div className="flex-1 flex overflow-hidden">
               
-              {/* LEFT COLUMN: ASSETS SELECTION */}
+              {/* LEFT COLUMN: ASSETS HIERARCHICAL TREE SELECTION */}
               <div className="w-5/12 border-r border-border bg-secondary/10 flex flex-col">
                 {/* Yellow Amber Header */}
                 <div className="bg-amber-500 text-white px-3.5 py-2.5 flex items-center justify-between font-bold text-xs shadow-sm">
@@ -1749,38 +1778,71 @@ export default function RulesPage() {
                   </div>
                 </div>
 
-                {/* Asset List */}
+                {/* Asset Hierarchical Tree List */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-1 text-xs">
-                  {assets
-                    .filter(a => a.name.toLowerCase().includes(assetSearchFilter.toLowerCase()))
-                    .map(a => {
-                      const isSelected = pickerSelectedAssetId === a.id;
-                      const IconComp = getAssetIcon(a.type);
+                  {(() => {
+                    const assetMap = new Map();
+                    assets.forEach(a => assetMap.set(a.id, { ...a, children: [] }));
+                    
+                    const roots: any[] = [];
+                    assets.forEach(a => {
+                      const item = assetMap.get(a.id);
+                      if (a.parentId && assetMap.has(a.parentId)) {
+                        assetMap.get(a.parentId).children.push(item);
+                      } else {
+                        roots.push(item);
+                      }
+                    });
+
+                    const flattened: { asset: any; depth: number; hasChildren: boolean }[] = [];
+                    const traverse = (list: any[], depth: number) => {
+                      list.forEach(node => {
+                        const matches = !assetSearchFilter || node.name.toLowerCase().includes(assetSearchFilter.toLowerCase()) || node.children.some((c: any) => c.name.toLowerCase().includes(assetSearchFilter.toLowerCase()));
+                        if (matches) {
+                          flattened.push({ asset: node, depth, hasChildren: node.children.length > 0 });
+                          traverse(node.children, depth + 1);
+                        }
+                      });
+                    };
+                    traverse(roots, 0);
+
+                    return flattened.map(({ asset, depth, hasChildren }) => {
+                      const isSelected = pickerSelectedAssetId === asset.id;
+                      const IconComp = getAssetIcon(asset.type);
+                      const indentPadding = Math.min(depth * 14 + 10, 48);
+
                       return (
                         <div
-                          key={a.id}
+                          key={asset.id}
+                          style={{ paddingLeft: `${indentPadding}px` }}
                           onClick={() => {
-                            setPickerSelectedAssetId(a.id);
-                            const attrs = getAssetAttributes(a);
+                            setPickerSelectedAssetId(asset.id);
+                            const attrs = getAssetAttributes(asset);
                             if (!attrs.find(x => x.name === pickerSelectedAttribute)) {
                               setPickerSelectedAttribute(attrs[0]?.name || '');
                             }
                           }}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer transition-all border-l-4 ${
+                          className={`flex items-center gap-2 pr-3 py-2 rounded-md cursor-pointer transition-all border-l-4 ${
                             isSelected
                               ? 'bg-secondary border-amber-500 font-bold text-foreground shadow-sm'
                               : 'border-transparent hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
                           }`}
                         >
-                          <IconComp className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-500' : 'text-muted-foreground'}`} />
-                          <span className="truncate">{a.name}</span>
+                          {hasChildren ? (
+                            <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+                          ) : depth > 0 ? (
+                            <span className="text-muted-foreground/60 text-[10px] shrink-0">└</span>
+                          ) : null}
+                          <IconComp className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : 'text-muted-foreground'}`} />
+                          <span className="truncate">{asset.name}</span>
                         </div>
                       );
-                    })}
+                    });
+                  })()}
                 </div>
               </div>
 
-              {/* RIGHT COLUMN: ATTRIBUTES LIST */}
+              {/* RIGHT COLUMN: ATTRIBUTES LIST WITH UNITS */}
               <div className="w-7/12 bg-card flex flex-col">
                 {/* Header Bar */}
                 <div className="bg-secondary/35 px-4 py-2.5 border-b border-border font-bold text-xs text-muted-foreground">
@@ -1791,18 +1853,32 @@ export default function RulesPage() {
                 <div className="flex-1 overflow-y-auto p-3 space-y-1 text-xs">
                   {(() => {
                     const selectedAsset = assets.find(a => a.id === pickerSelectedAssetId);
-                    let attributes = getAssetAttributes(selectedAsset);
+                    let attributes: { name: string; type: string; unit?: string }[] = getAssetAttributes(selectedAsset);
                     
                     // Standard telemetry attributes list matching user image
-                    const standardAttrs = ['Brightness', 'Colour RGB', 'Current (A)', 'OFF/ON', 'Power (W)', 'Voltage (V)'];
+                    const standardAttrs = [
+                      { name: 'temperature', unit: '°C' },
+                      { name: 'humidity', unit: '%' },
+                      { name: 'voltage', unit: 'V' },
+                      { name: 'accel_x', unit: 'm/s²' },
+                      { name: 'accel_y', unit: 'm/s²' },
+                      { name: 'accel_z', unit: 'm/s²' },
+                      { name: 'pitch', unit: '°' },
+                      { name: 'roll', unit: '°' },
+                      { name: 'yaw', unit: '°' }
+                    ];
+
                     standardAttrs.forEach(sa => {
-                      if (!attributes.find(a => a.name.toLowerCase() === sa.toLowerCase())) {
-                        attributes.push({ name: sa, type: 'string' });
+                      if (!attributes.find(a => a.name.toLowerCase() === sa.name.toLowerCase())) {
+                        attributes.push({ name: sa.name, type: 'number', unit: sa.unit });
                       }
                     });
 
                     return attributes.map(attr => {
                       const isSelected = pickerSelectedAttribute === attr.name;
+                      const unit = getAttributeUnit(attr.name, attr.unit);
+                      const labelWithUnit = unit ? `${attr.name} (${unit})` : attr.name;
+
                       return (
                         <div
                           key={attr.name}
@@ -1813,7 +1889,7 @@ export default function RulesPage() {
                               : 'hover:bg-secondary/60 text-foreground'
                           }`}
                         >
-                          <span>{attr.name}</span>
+                          <span>{labelWithUnit}</span>
                           {isSelected && <span className="text-amber-500 text-xs font-bold">✓</span>}
                         </div>
                       );
@@ -1824,7 +1900,7 @@ export default function RulesPage() {
 
             </div>
 
-            {/* FOOTER */}
+            {/* FOOTER WITH DISABLED UNCHANGED LOGIC */}
             <div className="px-5 py-3 border-t border-border bg-card flex items-center justify-end gap-5">
               <button
                 type="button"
@@ -1835,7 +1911,11 @@ export default function RulesPage() {
               </button>
               <button
                 type="button"
-                disabled={!pickerSelectedAssetId || !pickerSelectedAttribute}
+                disabled={
+                  !pickerSelectedAssetId ||
+                  !pickerSelectedAttribute ||
+                  (pickerSelectedAssetId === initialAssetId && pickerSelectedAttribute === initialAttribute)
+                }
                 onClick={() => {
                   if (!attrPickerNode) return;
                   const asset = assets.find(a => a.id === pickerSelectedAssetId);
