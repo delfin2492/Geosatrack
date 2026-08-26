@@ -506,11 +506,22 @@ export class RulesEngineService {
           if (!botToken) throw new Error('Telegram Bot Token not configured in System Settings.');
 
           const text = this.interpolateTemplate(action.messageTemplate || 'Alert for {assetName}: {attributeName} = {value}', payload);
-          const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          let res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
           });
+          if (!res.ok) {
+            const errBody = await res.json();
+            if (errBody.description && errBody.description.includes('parse entities')) {
+              // Retry without parse_mode if Markdown formatting is invalid
+              res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text }),
+              });
+            }
+          }
           if (!res.ok) {
             const errBody = await res.json();
             throw new Error(errBody.description || `Telegram status ${res.status}`);
