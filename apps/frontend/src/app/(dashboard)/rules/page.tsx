@@ -89,7 +89,9 @@ const CustomNode = ({ data, id }: any) => {
 
   // 2. ATTRIBUTE VALUE NODE (Interactive Button UI matching Select Attributes image)
   if (data.type === 'input_attribute' || data.type === 'trigger_telemetry') {
-    const assetName = data.assetName || (data.assetId && data.assetId !== 'ANY' ? data.assetId : 'Select Asset');
+    const assetObj = (data.assets || []).find((a: any) => a.id === data.assetId);
+    const rawAssetName = data.assetName || assetObj?.name || (data.assetId === 'ANY' ? 'Any Asset' : '');
+    const assetName = rawAssetName || (data.assetId ? 'Selected Asset' : 'Select Asset');
     const attrName = data.attributeName || 'Select Attribute';
     
     let AssetIcon = Zap;
@@ -100,11 +102,11 @@ const CustomNode = ({ data, id }: any) => {
     else if (nameLower.includes('building') || nameLower.includes('gedung')) AssetIcon = Building;
 
     return (
-      <div className="min-w-[190px] bg-card border border-border shadow-xl rounded-lg overflow-hidden relative">
-        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none">
+      <div className="min-w-[190px] bg-card border border-border shadow-xl rounded-lg relative">
+        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
           Attribute value
         </div>
-        <div className="p-2.5 bg-secondary/10 flex items-center gap-2">
+        <div className="p-2.5 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
           {/* INTERACTIVE CLICKABLE ASSET SELECTOR BUTTON */}
           <button
             type="button"
@@ -130,7 +132,7 @@ const CustomNode = ({ data, id }: any) => {
           type="source"
           position={Position.Right}
           id="output"
-          style={{ right: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+          style={{ right: '-6px', top: '65%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
         />
       </div>
     );
@@ -139,11 +141,11 @@ const CustomNode = ({ data, id }: any) => {
   // 3. GEOFENCE NODE
   if (data.type === 'trigger_geofence') {
     return (
-      <div className="min-w-[180px] bg-card border border-border shadow-xl rounded-lg overflow-hidden relative">
-        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide">
+      <div className="min-w-[180px] bg-card border border-border shadow-xl rounded-lg relative">
+        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide rounded-t-[7px]">
           Geofence Event
         </div>
-        <div className="p-2.5 bg-secondary/20 flex items-center gap-2">
+        <div className="p-2.5 bg-secondary/20 flex items-center gap-2 rounded-b-[7px]">
           <MapIcon className="w-4 h-4 text-blue-400" />
           <span className="text-xs font-bold text-foreground">{data.label}</span>
         </div>
@@ -151,7 +153,7 @@ const CustomNode = ({ data, id }: any) => {
           type="source"
           position={Position.Right}
           id="output"
-          style={{ right: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+          style={{ right: '-6px', top: '65%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
         />
       </div>
     );
@@ -164,11 +166,11 @@ const CustomNode = ({ data, id }: any) => {
   if (data.type === 'action_attribute') ActionIcon = Download;
 
   return (
-    <div className="min-w-[180px] bg-card border border-purple-500/50 shadow-xl rounded-lg overflow-hidden relative">
-      <div className="bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide">
+    <div className="min-w-[180px] bg-card border border-purple-500/50 shadow-xl rounded-lg relative">
+      <div className="bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide rounded-t-[7px]">
         Action Output
       </div>
-      <div className="p-2.5 bg-secondary/20 flex items-center gap-2">
+      <div className="p-2.5 bg-secondary/20 flex items-center gap-2 rounded-b-[7px]">
         <ActionIcon className="w-4 h-4 text-purple-400" />
         <span className="text-xs font-bold text-foreground">{data.label}</span>
       </div>
@@ -176,7 +178,7 @@ const CustomNode = ({ data, id }: any) => {
         type="target"
         position={Position.Left}
         id="input_a"
-        style={{ left: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+        style={{ left: '-6px', top: '65%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
       />
     </div>
   );
@@ -1448,6 +1450,7 @@ export default function RulesPage() {
                 ...n,
                 data: {
                   ...n.data,
+                  assets,
                   onOpenPicker: (id: string, data: any) => handleOpenAttributePicker(id, data)
                 }
               }))}
