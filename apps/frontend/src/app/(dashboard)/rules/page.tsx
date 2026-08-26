@@ -9,7 +9,7 @@ import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import {
   ShieldAlert, Plus, Trash2, Save, X, ToggleLeft, ToggleRight,
-  Settings, ClipboardList, ChevronDown, Search, Copy,
+  Settings, ClipboardList, ChevronDown, ChevronRight, Search, Copy,
   Building, Map as MapIcon, Monitor, DoorClosed, Car, Battery, Zap, Plug, Box, Activity,
   Download, Filter, Calculator, BellRing, Mail, Send, Clock, Lightbulb, SlidersHorizontal
 } from 'lucide-react';
@@ -373,6 +373,15 @@ export default function RulesPage() {
 
   const [initialAssetId, setInitialAssetId] = useState<string>('');
   const [initialAttribute, setInitialAttribute] = useState<string>('');
+  const [collapsedAssetIds, setCollapsedAssetIds] = useState<Record<string, boolean>>({});
+
+  const toggleExpandAsset = (assetId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedAssetIds((prev) => ({
+      ...prev,
+      [assetId]: !prev[assetId]
+    }));
+  };
 
   const handleOpenAttributePicker = (nodeId: string, nodeData: any) => {
     setAttrPickerNode({ id: nodeId, data: nodeData });
@@ -1794,19 +1803,22 @@ export default function RulesPage() {
                       }
                     });
 
-                    const flattened: { asset: any; depth: number; hasChildren: boolean }[] = [];
+                    const flattened: { asset: any; depth: number; hasChildren: boolean; isCollapsed: boolean }[] = [];
                     const traverse = (list: any[], depth: number) => {
                       list.forEach(node => {
-                        const matches = !assetSearchFilter || node.name.toLowerCase().includes(assetSearchFilter.toLowerCase()) || node.children.some((c: any) => c.name.toLowerCase().includes(assetSearchFilter.toLowerCase()));
+                        const isCollapsed = !!collapsedAssetIds[node.id];
+                        const matches = !assetSearchFilter || node.name.toLowerCase().includes(assetSearchFilter.toLowerCase()) || (node.children && node.children.some((c: any) => c.name.toLowerCase().includes(assetSearchFilter.toLowerCase())));
                         if (matches) {
-                          flattened.push({ asset: node, depth, hasChildren: node.children.length > 0 });
-                          traverse(node.children, depth + 1);
+                          flattened.push({ asset: node, depth, hasChildren: node.children.length > 0, isCollapsed });
+                          if (!isCollapsed || assetSearchFilter) {
+                            traverse(node.children, depth + 1);
+                          }
                         }
                       });
                     };
                     traverse(roots, 0);
 
-                    return flattened.map(({ asset, depth, hasChildren }) => {
+                    return flattened.map(({ asset, depth, hasChildren, isCollapsed }) => {
                       const isSelected = pickerSelectedAssetId === asset.id;
                       const IconComp = getAssetIcon(asset.type);
                       const indentPadding = Math.min(depth * 14 + 10, 48);
@@ -1822,19 +1834,34 @@ export default function RulesPage() {
                               setPickerSelectedAttribute(attrs[0]?.name || '');
                             }
                           }}
-                          className={`flex items-center gap-2 pr-3 py-2 rounded-md cursor-pointer transition-all border-l-4 ${
+                          className={`flex items-center gap-1.5 pr-2.5 py-1.5 rounded-md cursor-pointer transition-all border-l-4 ${
                             isSelected
                               ? 'bg-secondary border-amber-500 font-bold text-foreground shadow-sm'
                               : 'border-transparent hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
                           }`}
                         >
                           {hasChildren ? (
-                            <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+                            <button
+                              type="button"
+                              onClick={(e) => toggleExpandAsset(asset.id, e)}
+                              className="p-0.5 hover:bg-secondary/80 rounded text-muted-foreground hover:text-foreground shrink-0 transition-transform"
+                              title={isCollapsed ? "Expand" : "Collapse"}
+                            >
+                              {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
                           ) : depth > 0 ? (
                             <span className="text-muted-foreground/60 text-[10px] shrink-0">└</span>
                           ) : null}
                           <IconComp className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : 'text-muted-foreground'}`} />
-                          <span className="truncate">{asset.name}</span>
+                          <span className="truncate text-xs flex-1">{asset.name}</span>
+                          {hasChildren && (
+                            <span
+                              onClick={(e) => toggleExpandAsset(asset.id, e)}
+                              className="font-mono text-[9px] px-1.5 py-0.5 rounded-full bg-secondary/60 text-muted-foreground hover:bg-secondary cursor-pointer ml-auto"
+                            >
+                              {asset.children.length}
+                            </span>
+                          )}
                         </div>
                       );
                     });

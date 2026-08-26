@@ -12,6 +12,8 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveCo
 
 import {
   Folder,
+  ChevronRight,
+  ChevronDown,
   MapPin,
   Boxes,
   FileText,
@@ -377,6 +379,15 @@ export default function AssetsPage() {
 
   // Search/Filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const [collapsedAssetIds, setCollapsedAssetIds] = useState<Record<string, boolean>>({});
+
+  const toggleExpandAsset = (assetId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedAssetIds((prev) => ({
+      ...prev,
+      [assetId]: !prev[assetId]
+    }));
+  };
 
   // Mode states: 'view' | 'edit'
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -1062,31 +1073,52 @@ export default function AssetsPage() {
   const currentFieldsConfig = agentConnectionFieldsLookup[addModalSelectedType] || [];
   const currentEditFieldsConfig = agentConnectionFieldsLookup[type] || [];
 
-  // Recursive render function for the tree
+  // Recursive render function for the tree with expand/collapse
   const renderAssetNode = (node: TreeAsset, level = 0) => {
     const isSelected = selectedAssetId === node.id;
     const hasChildren = node.children && node.children.length > 0;
+    const isCollapsed = !!collapsedAssetIds[node.id];
     const TypeIcon = getTypeIcon(node.type);
 
     return (
       <div key={node.id} className="space-y-1">
         <div
           onClick={() => handleSelectAsset(node)}
-          style={{ paddingLeft: `${level * 14 + 10}px` }}
-          className={`flex items-center gap-2 py-1.5 pr-2.5 rounded cursor-pointer transition-all border ${isSelected
+          style={{ paddingLeft: `${level * 14 + 8}px` }}
+          className={`flex items-center gap-1.5 py-1.5 pr-2.5 rounded cursor-pointer transition-all border ${isSelected
             ? 'bg-primary/10 border-primary/20 text-primary font-bold shadow-sm'
             : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
             }`}
         >
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={(e) => toggleExpandAsset(node.id, e)}
+              className="p-0.5 hover:bg-secondary/80 rounded text-muted-foreground hover:text-foreground shrink-0 transition-transform"
+              title={isCollapsed ? "Expand" : "Collapse"}
+            >
+              {isCollapsed ? (
+                <ChevronRight className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+          ) : (
+            <span className="w-3.5 h-3.5 shrink-0" />
+          )}
           <TypeIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
-          <span className="truncate">{node.name}</span>
+          <span className="truncate text-xs flex-1">{node.name}</span>
           {hasChildren && (
-            <Badge variant="secondary" className="font-mono text-[9px] ml-auto px-1 py-0">
+            <Badge
+              variant="secondary"
+              onClick={(e) => toggleExpandAsset(node.id, e)}
+              className="font-mono text-[9px] px-1.5 py-0.5 rounded-full cursor-pointer hover:bg-secondary/80 bg-secondary/60 text-muted-foreground ml-auto"
+            >
               {node.children.length}
             </Badge>
           )}
         </div>
-        {hasChildren && (
+        {hasChildren && !isCollapsed && (
           <div className="space-y-1">
             {node.children.map((child) => renderAssetNode(child, level + 1))}
           </div>
