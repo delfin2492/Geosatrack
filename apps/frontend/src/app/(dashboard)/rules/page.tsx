@@ -678,10 +678,10 @@ export default function RulesPage() {
           <Card className="border-border shadow-md rounded-2xl flex flex-col min-h-[400px]">
             <CardHeader className="py-3.5 border-b border-border flex flex-row items-center justify-between">
               <CardTitle className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <ClipboardList className="h-4 w-4 text-sky-400" /> Audit Logs {selectedLogRule ? `· ${selectedLogRule.name}` : ''}
+                <ClipboardList className="h-4 w-4 text-sky-400" /> Audit Logs {selectedLogRule ? ` - ${selectedLogRule.name}` : ''}
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-4 space-y-3">
+            <CardContent className="p-4 space-y-3 max-h-[480px] overflow-y-auto pr-2">
               {!selectedLogRule ? <div className="text-center text-xs text-muted-foreground italic py-8">Select a rule to view logs.</div>
                 : loadingLogs ? <div className="text-center py-8 text-xs">Loading...</div>
                   : logs.length === 0 ? <div className="text-center text-xs text-muted-foreground italic py-8">No logs yet.</div>
