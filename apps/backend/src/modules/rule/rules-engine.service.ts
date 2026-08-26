@@ -336,28 +336,35 @@ export class RulesEngineService {
       } catch (err: any) {
         logMessages.push(`[ACTION_ERROR] Failed to set attribute value: ${err.message}`);
       }
-    } else if (nodeType === 'action_alarm') {
-      try {
-        const message =
-          currentNode.data.messageTemplate ||
-          `Critical alert: Asset ${payload.assetName || 'Device'} ${payload.geofenceName ? `triggered ${payload.geofenceName}` : (payload.attributeName || 'threshold triggered')}`;
-        
-        const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
-        const createdAlert = await this.prisma.alert.create({
-          data: {
-            type: payload.geofenceId ? 'alert_alarm' : 'alert_alarm',
-            message: this.interpolateTemplate(message, payload),
-            tenantId: targetTenantId,
-            assetId: payload.assetId,
-          },
-        });
-        
-        // Broadcast the alert via WebSockets to notify frontend dashboard in real-time!
-        this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
-        logMessages.push(`[ACTION] Successfully created and broadcasted system alarm alert.`);
-      } catch (err: any) {
-        logMessages.push(`[ACTION_ERROR] Failed to create alarm alert: ${err.message}`);
-        throw err;
+    } else if (nodeType === 'action_notification' || nodeType === 'action_alarm') {
+      const channel = currentNode.data?.channel || (nodeType === 'action_email' ? 'EMAIL' : nodeType === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
+      if (channel === 'EMAIL') {
+        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_email' } }, graph, payload, logMessages);
+      } else if (channel === 'TELEGRAM') {
+        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_telegram' } }, graph, payload, logMessages);
+      } else {
+        try {
+          const message =
+            currentNode.data.messageTemplate ||
+            `Critical alert: Asset ${payload.assetName || 'Device'} ${payload.geofenceName ? `triggered ${payload.geofenceName}` : (payload.attributeName || 'threshold triggered')}`;
+          
+          const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
+          const createdAlert = await this.prisma.alert.create({
+            data: {
+              type: payload.geofenceId ? 'alert_alarm' : 'alert_alarm',
+              message: this.interpolateTemplate(message, payload),
+              tenantId: targetTenantId,
+              assetId: payload.assetId,
+            },
+          });
+          
+          // Broadcast the alert via WebSockets to notify frontend dashboard in real-time!
+          this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
+          logMessages.push(`[ACTION] Successfully created and broadcasted system alarm alert.`);
+        } catch (err: any) {
+          logMessages.push(`[ACTION_ERROR] Failed to create alarm alert: ${err.message}`);
+          throw err;
+        }
       }
     } else if (nodeType === 'action_email') {
       try {
