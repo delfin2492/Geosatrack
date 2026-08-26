@@ -11,7 +11,7 @@ import {
   ShieldAlert, Plus, Trash2, Save, X, ToggleLeft, ToggleRight,
   Settings, ClipboardList, ChevronDown, Search, Copy,
   Building, Map as MapIcon, Monitor, DoorClosed, Car, Battery, Zap, Plug, Box, Activity,
-  Download, Filter, Calculator, BellRing, Mail, Send
+  Download, Filter, Calculator, BellRing, Mail, Send, Clock
 } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 import ReactFlow, {
@@ -236,7 +236,11 @@ export default function RulesPage() {
   const [wtGroups, setWtGroups] = useState<any[]>([]);
   const [wtActions, setWtActions] = useState<any[]>([]);
   const [wtThenFrequency, setWtThenFrequency] = useState<string>('ALWAYS');
-  const [wtGlobalCooldown, setWtGlobalCooldown] = useState<number>(0);
+  const [wtActiveMode, setWtActiveMode] = useState<'ALWAYS' | 'SPECIFIC_PERIOD' | 'DAILY_PERIOD'>('ALWAYS');
+  const [wtSpecificStartDate, setWtSpecificStartDate] = useState<string>('');
+  const [wtSpecificEndDate, setWtSpecificEndDate] = useState<string>('');
+  const [wtDailyStartTime, setWtDailyStartTime] = useState<string>('08:00');
+  const [wtDailyEndTime, setWtDailyEndTime] = useState<string>('17:00');
 
   const [assets, setAssets] = useState<any[]>([]);
   const [geofences, setGeofences] = useState<any[]>([]);
@@ -390,7 +394,11 @@ export default function RulesPage() {
     ]);
     setWtActions([{ id: (Date.now() + 2).toString(), actionType: 'trigger_asset', assetId: '', attribute: '', command: '' }]);
     setWtThenFrequency('ALWAYS');
-    setWtGlobalCooldown(0);
+    setWtActiveMode('ALWAYS');
+    setWtSpecificStartDate('');
+    setWtSpecificEndDate('');
+    setWtDailyStartTime('08:00');
+    setWtDailyEndTime('17:00');
     setActiveTab('editor_whenthen');
   };
 
@@ -409,7 +417,11 @@ export default function RulesPage() {
         }
         setWtActions(config.actions || []);
         setWtThenFrequency(config.thenFrequency || 'ALWAYS');
-        setWtGlobalCooldown(Number(config.cooldownMinutes) || 0);
+        setWtActiveMode(config.activeMode || 'ALWAYS');
+        setWtSpecificStartDate(config.specificPeriod?.startDate || '');
+        setWtSpecificEndDate(config.specificPeriod?.endDate || '');
+        setWtDailyStartTime(config.dailyPeriod?.startTime || '08:00');
+        setWtDailyEndTime(config.dailyPeriod?.endTime || '17:00');
       } catch (e) {
         setWtGroups([]);
         setWtActions([]);
@@ -441,7 +453,9 @@ export default function RulesPage() {
     const flowGraph = isWhenThen ? null : JSON.stringify({ nodes, edges });
     const ruleConfig = isWhenThen ? JSON.stringify({ 
       thenFrequency: wtThenFrequency,
-      cooldownMinutes: wtGlobalCooldown,
+      activeMode: wtActiveMode,
+      specificPeriod: { startDate: wtSpecificStartDate, endDate: wtSpecificEndDate },
+      dailyPeriod: { startTime: wtDailyStartTime, endTime: wtDailyEndTime },
       groups: wtGroups, 
       actions: wtActions 
     }) : null;
@@ -674,6 +688,74 @@ export default function RulesPage() {
             <Input value={ruleName} onChange={(e) => setRuleName(e.target.value)} className="h-10 rounded-lg font-bold text-sm bg-background border-border w-full" placeholder="Enter rule name..." />
           </div>
 
+          {/* Top Bar: Rule Active Schedule */}
+          <div className="bg-card border border-border p-4 rounded-2xl shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-500" />
+                <span className="text-xs font-bold text-foreground uppercase tracking-wider">Jadwal Aktif Rule (Active Schedule)</span>
+              </div>
+              <div className="w-64">
+                <SearchableSelect
+                  options={[
+                    { label: "Always Active (24/7)", value: "ALWAYS" },
+                    { label: "Periode Waktu Tertentu", value: "SPECIFIC_PERIOD" },
+                    { label: "Periode Waktu Harian", value: "DAILY_PERIOD" }
+                  ]}
+                  value={wtActiveMode}
+                  onChange={(val) => setWtActiveMode(val as any)}
+                  placeholder="Select Active Schedule..."
+                />
+              </div>
+            </div>
+
+            {wtActiveMode === 'SPECIFIC_PERIOD' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border/60">
+                <div>
+                  <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Waktu Mulai (Start Date & Time)</label>
+                  <Input
+                    type="datetime-local"
+                    className="h-8 text-xs bg-background"
+                    value={wtSpecificStartDate}
+                    onChange={(e) => setWtSpecificStartDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Waktu Selesai (End Date & Time)</label>
+                  <Input
+                    type="datetime-local"
+                    className="h-8 text-xs bg-background"
+                    value={wtSpecificEndDate}
+                    onChange={(e) => setWtSpecificEndDate(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            {wtActiveMode === 'DAILY_PERIOD' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border/60">
+                <div>
+                  <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Jam Mulai Harian (Daily Start Time)</label>
+                  <Input
+                    type="time"
+                    className="h-8 text-xs bg-background"
+                    value={wtDailyStartTime}
+                    onChange={(e) => setWtDailyStartTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Jam Selesai Harian (Daily End Time)</label>
+                  <Input
+                    type="time"
+                    className="h-8 text-xs bg-background"
+                    value={wtDailyEndTime}
+                    onChange={(e) => setWtDailyEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
             {/* WHEN Panel */}
             <div className="relative space-y-6">
@@ -838,18 +920,7 @@ export default function RulesPage() {
                 </Button>
               </div>
 
-              <div className="flex items-center gap-2 bg-secondary/40 p-3 rounded-xl border border-border/80">
-                <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">Global Rule Cooldown:</span>
-                <Input
-                  type="number"
-                  min="0"
-                  max="1440"
-                  value={wtGlobalCooldown}
-                  onChange={(e) => setWtGlobalCooldown(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="h-7 w-16 text-xs font-bold text-center bg-background border-border"
-                />
-                <span className="text-[10px] font-medium text-muted-foreground">minutes</span>
-              </div>
+
             </div>
 
             {/* THEN Panel */}

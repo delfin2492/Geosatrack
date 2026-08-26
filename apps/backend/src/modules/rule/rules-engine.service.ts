@@ -372,6 +372,9 @@ export class RulesEngineService {
   ) {
     if (!rule.ruleConfig) return;
     let config: {
+      activeMode?: 'ALWAYS' | 'SPECIFIC_PERIOD' | 'DAILY_PERIOD';
+      specificPeriod?: { startDate?: string; endDate?: string };
+      dailyPeriod?: { startTime?: string; endTime?: string };
       thenFrequency?: string;
       cooldownMinutes?: number;
       groups?: any[];
@@ -395,10 +398,54 @@ export class RulesEngineService {
 
     if (groups.length === 0) return;
 
+    const activeMode = config.activeMode || 'ALWAYS';
     const thenFrequency = config.thenFrequency || 'ALWAYS';
     const cooldownMinutes = Number(config.cooldownMinutes) || 0;
 
-    // 1. Throttle / Frequency & Cooldown Check
+    // 1. Active Schedule / Period Validation
+    const now = new Date();
+
+    if (activeMode === 'SPECIFIC_PERIOD') {
+      const startDate = config.specificPeriod?.startDate ? new Date(config.specificPeriod.startDate) : null;
+      const endDate = config.specificPeriod?.endDate ? new Date(config.specificPeriod.endDate) : null;
+
+      if (startDate && !isNaN(startDate.getTime()) && now < startDate) {
+        this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: start date not reached.`);
+        return;
+      }
+      if (endDate && !isNaN(endDate.getTime()) && now > endDate) {
+        this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: end date passed.`);
+        return;
+      }
+    } else if (activeMode === 'DAILY_PERIOD') {
+      const startTimeStr = config.dailyPeriod?.startTime;
+      const endTimeStr = config.dailyPeriod?.endTime;
+
+      if (startTimeStr && endTimeStr) {
+        const currentHours = now.getHours();
+        const currentMins = now.getMinutes();
+        const currentTotalMins = currentHours * 60 + currentMins;
+
+        const [sH, sM] = startTimeStr.split(':').map(Number);
+        const [eH, eM] = endTimeStr.split(':').map(Number);
+        const startTotalMins = (sH || 0) * 60 + (sM || 0);
+        const endTotalMins = (eH || 0) * 60 + (eM || 0);
+
+        let isWithinDailyPeriod = false;
+        if (startTotalMins <= endTotalMins) {
+          isWithinDailyPeriod = currentTotalMins >= startTotalMins && currentTotalMins <= endTotalMins;
+        } else {
+          isWithinDailyPeriod = currentTotalMins >= startTotalMins || currentTotalMins <= endTotalMins;
+        }
+
+        if (!isWithinDailyPeriod) {
+          this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: outside daily active window (${startTimeStr}-${endTimeStr}).`);
+          return;
+        }
+      }
+    }
+
+    // 2. Throttle / Frequency & Cooldown Check
     let freqWindowMinutes = 0;
     if (thenFrequency === 'ONCE_PER_MINUTE') freqWindowMinutes = 1;
     else if (thenFrequency === 'ONCE_PER_HOUR') freqWindowMinutes = 60;
