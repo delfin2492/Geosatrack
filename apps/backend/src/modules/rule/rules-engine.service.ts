@@ -14,6 +14,8 @@ interface FlowEdge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
 }
 
 interface FlowGraph {
@@ -152,10 +154,21 @@ export class RulesEngineService {
       nodeType === 'math_pct' ||
       nodeType === 'process_math'
     ) {
-      const valA = Number(payload.value || 0);
-      const valB = Number(currentNode.data?.valueB || 0);
-      let res = valA;
+      const inboundEdges = graph.edges.filter(e => e.target === currentNode.id);
+      let valA = Number(payload.value || 0);
+      let valB = Number(currentNode.data?.valueB || 0);
 
+      const edgeA = inboundEdges.find(e => e.targetHandle === 'input_a');
+      const edgeB = inboundEdges.find(e => e.targetHandle === 'input_b');
+
+      if (edgeA && payload.nodeOutputs?.[edgeA.source] !== undefined) {
+        valA = Number(payload.nodeOutputs[edgeA.source]);
+      }
+      if (edgeB && payload.nodeOutputs?.[edgeB.source] !== undefined) {
+        valB = Number(payload.nodeOutputs[edgeB.source]);
+      }
+
+      let res = valA;
       let op = currentNode.data?.operation;
       if (nodeType === 'math_add') op = 'ADD';
       else if (nodeType === 'math_sub') op = 'SUB';
@@ -172,6 +185,9 @@ export class RulesEngineService {
       else if (op === 'PCT') res = (valA * valB) / 100;
 
       payload.value = res;
+      if (!payload.nodeOutputs) payload.nodeOutputs = {};
+      payload.nodeOutputs[currentNode.id] = res;
+
       logMessages.push(`[MATH ${op}] Calculation: ${valA} ${op} ${valB} = ${res}`);
     }
 

@@ -32,59 +32,135 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 const CustomNode = ({ data }: any) => {
-  const isInput = data.type.startsWith('trigger_') || data.type.startsWith('input_');
-  const isOutput = data.type.startsWith('action_');
+  const isProcessor = data.type.startsWith('math_') || data.type.startsWith('logic_') || data.type === 'process_math' || data.type === 'logic_filter';
+  const isInput = data.type.startsWith('trigger_') || data.type === 'input_attribute';
 
-  let Icon = Box;
   let symbolBadge = '';
-
   switch (data.type) {
-    case 'trigger_geofence': Icon = MapIcon; break;
-    case 'trigger_telemetry': Icon = Activity; break;
-    case 'input_attribute': Icon = Download; break;
-    // Math Processors
-    case 'math_add': Icon = Calculator; symbolBadge = '+'; break;
-    case 'math_sub': Icon = Calculator; symbolBadge = '-'; break;
-    case 'math_mul': Icon = Calculator; symbolBadge = '×'; break;
-    case 'math_div': Icon = Calculator; symbolBadge = '÷'; break;
-    case 'math_avg': Icon = Calculator; symbolBadge = 'AVG'; break;
-    case 'math_pct': Icon = Calculator; symbolBadge = '%'; break;
-    case 'process_math': Icon = Calculator; symbolBadge = 'MATH'; break;
-    // Logic Processors
-    case 'logic_gt': Icon = Filter; symbolBadge = '>'; break;
-    case 'logic_lt': Icon = Filter; symbolBadge = '<'; break;
-    case 'logic_eq': Icon = Filter; symbolBadge = '='; break;
-    case 'logic_neq': Icon = Filter; symbolBadge = '!='; break;
-    case 'logic_gte': Icon = Filter; symbolBadge = '>='; break;
-    case 'logic_lte': Icon = Filter; symbolBadge = '<='; break;
-    case 'logic_and': Icon = Filter; symbolBadge = 'AND'; break;
-    case 'logic_or': Icon = Filter; symbolBadge = 'OR'; break;
-    case 'logic_filter': Icon = Filter; symbolBadge = 'LOGIC'; break;
-    // Actions
-    case 'action_attribute': Icon = Download; symbolBadge = 'SET'; break;
-    case 'action_alarm': Icon = BellRing; break;
-    case 'action_email': Icon = Mail; break;
-    case 'action_telegram': Icon = Send; break;
+    case 'math_add': symbolBadge = '+'; break;
+    case 'math_sub': symbolBadge = '-'; break;
+    case 'math_mul': symbolBadge = '×'; break;
+    case 'math_div': symbolBadge = '÷'; break;
+    case 'math_avg': symbolBadge = 'Avg'; break;
+    case 'math_pct': symbolBadge = '%'; break;
+    case 'process_math': symbolBadge = '+'; break;
+    case 'logic_gt': symbolBadge = '>'; break;
+    case 'logic_lt': symbolBadge = '<'; break;
+    case 'logic_eq': symbolBadge = '='; break;
+    case 'logic_neq': symbolBadge = '!='; break;
+    case 'logic_gte': symbolBadge = '>='; break;
+    case 'logic_lte': symbolBadge = '<='; break;
+    case 'logic_and': symbolBadge = 'AND'; break;
+    case 'logic_or': symbolBadge = 'OR'; break;
+    case 'logic_filter': symbolBadge = '>'; break;
   }
 
-  return (
-    <div className={`px-4 py-3 shadow-md rounded-xl bg-card border-2 ${isInput ? 'border-blue-500/50' : isOutput ? 'border-purple-500/50' : 'border-green-500/50'} flex flex-col items-center justify-center min-w-[150px] relative`}>
-      {!isInput && (
-        <Handle type="target" position={Position.Top} className="w-3 h-3 bg-muted-foreground border-2 border-background" />
-      )}
-      <div className="flex items-center gap-2">
-        {symbolBadge ? (
-          <span className={`px-1.5 py-0.5 text-[11px] font-black rounded ${isOutput ? 'bg-purple-500 text-white' : 'bg-green-500 text-black'}`}>
-            {symbolBadge}
-          </span>
-        ) : (
-          <Icon className={`w-4 h-4 ${isInput ? 'text-blue-500' : isOutput ? 'text-purple-500' : 'text-green-500'}`} />
-        )}
-        <span className="font-bold text-xs text-foreground">{data.label}</span>
+  // 1. PROCESSOR NODE (Compact Green Square with Symbol & Dual Left Handles + Right Output Handle)
+  if (isProcessor) {
+    return (
+      <div className="w-12 h-12 rounded-xl bg-emerald-600 border-2 border-emerald-500 shadow-xl flex items-center justify-center relative text-white font-black text-base select-none">
+        {/* Left Target Handle 1 (Input A) */}
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="input_a"
+          style={{ top: '30%', left: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+        />
+        {/* Left Target Handle 2 (Input B) */}
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="input_b"
+          style={{ top: '70%', left: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+        />
+
+        <span>{symbolBadge}</span>
+
+        {/* Right Source Handle (Output) */}
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="output"
+          style={{ right: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+        />
       </div>
-      {!isOutput && (
-        <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-muted-foreground border-2 border-background" />
-      )}
+    );
+  }
+
+  // 2. ATTRIBUTE VALUE NODE (Matching Gambar 2 Layout)
+  if (data.type === 'input_attribute' || data.type === 'trigger_telemetry') {
+    const assetName = data.assetName || (data.assetId === 'ANY' ? 'Any Asset' : 'Selected Asset');
+    const attrName = data.attributeName || 'Value';
+
+    return (
+      <div className="min-w-[190px] bg-card border border-border shadow-xl rounded-lg overflow-hidden relative">
+        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide">
+          Attribute value
+        </div>
+        <div className="p-2.5 bg-secondary/20 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-rose-500/20 text-rose-500 flex items-center justify-center shrink-0">
+              <Zap className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-foreground leading-none">{assetName}</span>
+              <span className="text-[10px] font-semibold text-muted-foreground mt-0.5">{attrName}</span>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold text-muted-foreground">Value</span>
+        </div>
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="output"
+          style={{ right: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+        />
+      </div>
+    );
+  }
+
+  // 3. GEOFENCE NODE
+  if (data.type === 'trigger_geofence') {
+    return (
+      <div className="min-w-[180px] bg-card border border-border shadow-xl rounded-lg overflow-hidden relative">
+        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide">
+          Geofence Event
+        </div>
+        <div className="p-2.5 bg-secondary/20 flex items-center gap-2">
+          <MapIcon className="w-4 h-4 text-blue-400" />
+          <span className="text-xs font-bold text-foreground">{data.label}</span>
+        </div>
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="output"
+          style={{ right: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+        />
+      </div>
+    );
+  }
+
+  // 4. ACTION / OUTPUT NODES
+  let ActionIcon = BellRing;
+  if (data.type === 'action_email') ActionIcon = Mail;
+  if (data.type === 'action_telegram') ActionIcon = Send;
+  if (data.type === 'action_attribute') ActionIcon = Download;
+
+  return (
+    <div className="min-w-[180px] bg-card border border-purple-500/50 shadow-xl rounded-lg overflow-hidden relative">
+      <div className="bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide">
+        Action Output
+      </div>
+      <div className="p-2.5 bg-secondary/20 flex items-center gap-2">
+        <ActionIcon className="w-4 h-4 text-purple-400" />
+        <span className="text-xs font-bold text-foreground">{data.label}</span>
+      </div>
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="input_a"
+        style={{ left: '-6px', width: '10px', height: '10px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px' }}
+      />
     </div>
   );
 };
