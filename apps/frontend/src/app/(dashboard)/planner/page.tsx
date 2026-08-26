@@ -835,10 +835,10 @@ export default function PlannerPage() {
   // ─── Delete Zone ──────────────────────────────────────────────────
   const handleDeleteZone = (zoneId: string, zoneName: string) => {
     setPlannerConfirm({
-      title: 'Hapus Denah',
+      title: 'Delete Floor Plan',
       message: `Apakah Anda yakin ingin menghapus denah "${zoneName}"? Semua data anchor dan geofence pada denah ini akan dihapus.`,
       variant: 'danger',
-      confirmText: 'Hapus Denah',
+      confirmText: 'Delete Floor Plan',
       onConfirm: async () => {
         try {
           const res = await fetch(`${getApiUrl()}/zones/${zoneId}`, {
@@ -953,10 +953,10 @@ export default function PlannerPage() {
   // ─── Delete Anchor Permanently from Database ──────────────────────
   const handleDeleteAnchor = (anchorId: string) => {
     setPlannerConfirm({
-      title: 'Hapus Anchor Permanen',
+      title: 'Delete Anchor Permanently',
       message: 'Apakah Anda yakin ingin menghapus Anchor ini secara permanen dari database?',
       variant: 'danger',
-      confirmText: 'Hapus Permanen',
+      confirmText: 'Delete Permanently',
       onConfirm: async () => {
         try {
           // Since anchors are registered as assets (type: ANCHOR)
@@ -1362,10 +1362,10 @@ export default function PlannerPage() {
                 </div>
                 <div className="flex gap-2 pt-1">
                   <Button size="sm" className="flex-1 h-6 text-[10px] cursor-pointer" onClick={handleCreateZone}>
-                    Simpan Zone
+                    Save Zone
                   </Button>
                   <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setShowNewZoneForm(false)}>
-                    Batal
+                    Cancel
                   </Button>
                 </div>
               </div>
@@ -1451,7 +1451,7 @@ export default function PlannerPage() {
                         Update Zone
                       </Button>
                       <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setEditingZoneId(null)}>
-                        Batal
+                        Cancel
                       </Button>
                     </div>
                   </div>
@@ -1492,7 +1492,7 @@ export default function PlannerPage() {
                             e.stopPropagation();
                             handleDeleteZone(z.id, z.name);
                           }}
-                          title="Hapus Denah ini"
+                          title="Delete Floor Plan"
                         >
                           <Trash2 className="h-3 w-3 text-destructive" />
                         </Button>
@@ -2306,7 +2306,7 @@ export default function PlannerPage() {
         title={plannerConfirm?.title || 'Konfirmasi'}
         message={plannerConfirm?.message || ''}
         confirmText={plannerConfirm?.confirmText || 'OK'}
-        cancelText="Batal"
+        cancelText="Cancel"
         variant={plannerConfirm?.variant || 'danger'}
         onConfirm={() => plannerConfirm?.onConfirm()}
         onCancel={() => setPlannerConfirm(null)}

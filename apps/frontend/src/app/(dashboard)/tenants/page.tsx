@@ -201,7 +201,7 @@ export default function TenantsPage() {
 
   const handleDeleteTenant = (id: string, name: string) => {
     setTenantConfirm({
-      title: 'Hapus Tenant',
+      title: 'Delete Tenant',
       message: `Are you sure you want to delete tenant "${name}"? All associated assets and users will be permanently deleted.`,
       variant: 'danger',
       confirmText: 'Delete Tenant',

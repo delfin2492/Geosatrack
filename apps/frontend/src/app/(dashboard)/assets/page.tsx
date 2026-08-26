@@ -2443,7 +2443,7 @@ export default function AssetsPage() {
                 onClick={() => setMapPickerOpen(false)}
                 className="h-8.5 text-xs font-bold"
               >
-                Batal
+                Cancel
               </Button>
               <Button
                 type="button"

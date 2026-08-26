@@ -646,7 +646,7 @@ export default function RulesPage() {
                             <button
                               onClick={(e) => { e.stopPropagation(); handleToggleActive(rule); }}
                               className={`w-9 h-4.5 rounded-full relative transition-colors duration-300 ease-in-out cursor-pointer inline-block align-middle ${rule.isActive ? 'bg-green-500' : 'bg-secondary border border-border'}`}
-                              title={rule.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                              title={rule.isActive ? 'Deactivate' : 'Activate'}
                             >
                               <div className={`w-3.5 h-3.5 rounded-full bg-white absolute top-[1px] transition-transform duration-300 ease-in-out shadow-sm ${rule.isActive ? 'translate-x-5' : 'translate-x-[1px]'}`} />
                             </button>
@@ -711,14 +711,14 @@ export default function RulesPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-amber-500" />
-                <span className="text-xs font-bold text-foreground uppercase tracking-wider">Jadwal Aktif Rule (Active Schedule)</span>
+                <span className="text-xs font-bold text-foreground uppercase tracking-wider">Active Rule Schedule</span>
               </div>
               <div className="w-64">
                 <SearchableSelect
                   options={[
                     { label: "Always Active (24/7)", value: "ALWAYS" },
-                    { label: "Periode Waktu Tertentu", value: "SPECIFIC_PERIOD" },
-                    { label: "Periode Waktu Harian", value: "DAILY_PERIOD" }
+                    { label: "Specific Time Period", value: "SPECIFIC_PERIOD" },
+                    { label: "Daily Time Period", value: "DAILY_PERIOD" }
                   ]}
                   value={wtActiveMode}
                   onChange={(val) => setWtActiveMode(val as any)}
@@ -757,13 +757,13 @@ export default function RulesPage() {
                   >
                     <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out ${wtSpecificAllDays ? 'translate-x-4' : 'translate-x-0'}`} />
                   </button>
-                  <span className="text-[11px] font-bold text-foreground select-none">Sepanjang Hari (All Days)</span>
+                  <span className="text-[11px] font-bold text-foreground select-none">All Days</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-bold text-muted-foreground mb-1 block">
-                      {wtSpecificAllDays ? "Tanggal Mulai (Start Date)" : "Waktu Mulai (Start Date & Time)"}
+                      {wtSpecificAllDays ? "Start Date" : "Start Date & Time"}
                     </label>
                     <Input
                       type={wtSpecificAllDays ? "date" : "datetime-local"}
@@ -774,7 +774,7 @@ export default function RulesPage() {
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-muted-foreground mb-1 block">
-                      {wtSpecificAllDays ? "Tanggal Selesai (End Date)" : "Waktu Selesai (End Date & Time)"}
+                      {wtSpecificAllDays ? "End Date" : "End Date & Time"}
                     </label>
                     <Input
                       type={wtSpecificAllDays ? "date" : "datetime-local"}
@@ -791,7 +791,7 @@ export default function RulesPage() {
               <div className="space-y-4 pt-2 border-t border-border/60">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Jam Mulai Harian (Daily Start Time)</label>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Daily Start Time</label>
                     <Input
                       type="time"
                       className="h-8 text-xs bg-background"
@@ -800,7 +800,7 @@ export default function RulesPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Jam Selesai Harian (Daily End Time)</label>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Daily End Time</label>
                     <Input
                       type="time"
                       className="h-8 text-xs bg-background"
@@ -811,16 +811,16 @@ export default function RulesPage() {
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Hari Aktif (Active Days)</label>
+                  <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Active Days</label>
                   <div className="flex flex-wrap gap-1.5">
                     {[
-                      { code: 'mon', label: 'Sen' },
-                      { code: 'tue', label: 'Sel' },
-                      { code: 'wed', label: 'Rab' },
-                      { code: 'thu', label: 'Kam' },
-                      { code: 'fri', label: 'Jum' },
-                      { code: 'sat', label: 'Sab' },
-                      { code: 'sun', label: 'Min' }
+                      { code: 'mon', label: 'Mon' },
+                      { code: 'tue', label: 'Tue' },
+                      { code: 'wed', label: 'Wed' },
+                      { code: 'thu', label: 'Thu' },
+                      { code: 'fri', label: 'Fri' },
+                      { code: 'sat', label: 'Sat' },
+                      { code: 'sun', label: 'Sun' }
                     ].map((d) => {
                       const isActive = wtDailyActiveDays.includes(d.code);
                       return (
@@ -847,11 +847,11 @@ export default function RulesPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end pt-1">
                   <div>
-                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Akhir Pengulangan Harian (Repetition Ends)</label>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Repetition Ends</label>
                     <SearchableSelect
                       options={[
-                        { label: "Never (Selamanya)", value: "NEVER" },
-                        { label: "On Date (Pada Tanggal...)", value: "ON_DATE" }
+                        { label: "Never", value: "NEVER" },
+                        { label: "On Date", value: "ON_DATE" }
                       ]}
                       value={wtDailyRepetitionEnds}
                       onChange={(val) => setWtDailyRepetitionEnds(val as any)}
@@ -860,7 +860,7 @@ export default function RulesPage() {
                   </div>
                   {wtDailyRepetitionEnds === 'ON_DATE' && (
                     <div>
-                      <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Tanggal Berakhir (End Date)</label>
+                      <label className="text-[10px] font-bold text-muted-foreground mb-1 block">End Date</label>
                       <Input
                         type="date"
                         className="h-8 text-xs bg-background"
@@ -1245,7 +1245,7 @@ export default function RulesPage() {
               <CardHeader className="py-3 border-b border-border flex flex-row items-center justify-between">
                 <CardTitle className="text-xs font-bold text-foreground">Node Config</CardTitle>
                 <Button size="sm" variant="ghost" className="h-6 text-red-500 hover:text-red-600 font-bold p-1" onClick={deleteSelectedNode}>
-                  Hapus Node
+                  Delete Node
                 </Button>
               </CardHeader>
               <CardContent className="p-4 space-y-4 overflow-y-auto flex-1 text-xs bg-card">

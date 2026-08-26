@@ -618,10 +618,10 @@ export default function InsightsPage() {
 
     setConfirmModal({
       isOpen: true,
-      title: 'Hapus Section',
+      title: 'Delete Section',
       message: 'Apakah Anda yakin ingin menghapus Section ini secara permanen? Semua widget di dalamnya akan ikut terhapus.',
-      confirmText: 'Hapus Permanen',
-      cancelText: 'Batal',
+      confirmText: 'Delete Permanently',
+      cancelText: 'Cancel',
       variant: 'danger',
       onConfirm: async () => {
         try {
@@ -1410,8 +1410,8 @@ export default function InsightsPage() {
                               isOpen: true,
                               title: 'Delete Widget',
                               message: 'Apakah Anda yakin ingin menghapus widget ini dari kanvas?',
-                              confirmText: 'Hapus',
-                              cancelText: 'Batal',
+                              confirmText: 'Delete',
+                              cancelText: 'Cancel',
                               variant: 'danger',
                               onConfirm: () => {
                                 removeWidget(selectedWidget.id);
@@ -1438,7 +1438,7 @@ export default function InsightsPage() {
         title={confirmModal?.title || 'Konfirmasi'}
         message={confirmModal?.message || ''}
         confirmText={confirmModal?.confirmText || 'OK'}
-        cancelText={confirmModal?.cancelText || 'Batal'}
+        cancelText={confirmModal?.cancelText || 'Cancel'}
         variant={confirmModal?.variant || 'danger'}
         onConfirm={() => confirmModal?.onConfirm()}
         onCancel={() => setConfirmModal(null)}
