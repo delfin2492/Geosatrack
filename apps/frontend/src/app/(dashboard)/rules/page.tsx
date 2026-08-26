@@ -957,7 +957,37 @@ export default function RulesPage() {
       try {
         const graph = JSON.parse(rule.flowGraph || '{}');
         const loadedNodes = graph.nodes || [];
-        setNodes(loadedNodes.map((n: any) => ({ ...n, type: 'customNode' })));
+        setNodes(loadedNodes.map((n: any) => {
+          let nodeType = n.data?.type || n.type;
+          let channel = n.data?.channel;
+
+          if (nodeType === 'action_alarm') {
+            nodeType = 'action_notification';
+            channel = 'SYSTEM';
+          } else if (nodeType === 'action_email') {
+            nodeType = 'action_notification';
+            channel = 'EMAIL';
+          } else if (nodeType === 'action_telegram') {
+            nodeType = 'action_notification';
+            channel = 'TELEGRAM';
+          }
+
+          let label = n.data?.label || 'Alarm Notification';
+          if (channel === 'SYSTEM') label = 'System Alarm';
+          if (channel === 'EMAIL') label = 'SMTP Email';
+          if (channel === 'TELEGRAM') label = 'Telegram Bot';
+
+          return {
+            ...n,
+            type: 'customNode',
+            data: {
+              ...n.data,
+              type: nodeType,
+              channel,
+              label,
+            }
+          };
+        }));
         setEdges(graph.edges || []);
       } catch (e) {
         setNodes([]);
