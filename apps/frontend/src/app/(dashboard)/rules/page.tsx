@@ -244,7 +244,7 @@ const getAttributeUnit = (attrName: string, customUnit?: string) => {
 };
 
 const getAssetAttributes = (asset: any) => {
-  let attrs: { name: string; type: string; unit?: string }[] = [{ name: 'status', type: 'string' }]; // 'status' is a native Prisma field
+  let attrs: { name: string; type: string; unit?: string }[] = []; // 'status' is a native Prisma field
 
   if (asset && asset.description) {
     try {
@@ -1849,9 +1849,9 @@ export default function RulesPage() {
                             >
                               {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                             </button>
-                          ) : depth > 0 ? (
-                            <span className="text-muted-foreground/60 text-[10px] shrink-0">└</span>
-                          ) : null}
+                          ) : (
+                            <span className="w-3.5 h-3.5 shrink-0" />
+                          )}
                           <IconComp className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : 'text-muted-foreground'}`} />
                           <span className="truncate text-xs flex-1">{asset.name}</span>
                           {hasChildren && (
@@ -1882,24 +1882,23 @@ export default function RulesPage() {
                     const selectedAsset = assets.find(a => a.id === pickerSelectedAssetId);
                     let attributes: { name: string; type: string; unit?: string }[] = getAssetAttributes(selectedAsset);
                     
-                    // Standard telemetry attributes list matching user image
-                    const standardAttrs = [
-                      { name: 'temperature', unit: '°C' },
-                      { name: 'humidity', unit: '%' },
-                      { name: 'voltage', unit: 'V' },
-                      { name: 'accel_x', unit: 'm/s²' },
-                      { name: 'accel_y', unit: 'm/s²' },
-                      { name: 'accel_z', unit: 'm/s²' },
-                      { name: 'pitch', unit: '°' },
-                      { name: 'roll', unit: '°' },
-                      { name: 'yaw', unit: '°' }
-                    ];
-
-                    standardAttrs.forEach(sa => {
-                      if (!attributes.find(a => a.name.toLowerCase() === sa.name.toLowerCase())) {
+                    // If asset has no specific attributes defined, provide standard telemetry fallback
+                    if (attributes.length === 0) {
+                      const standardAttrs = [
+                        { name: 'temperature', unit: '°C' },
+                        { name: 'humidity', unit: '%' },
+                        { name: 'voltage', unit: 'V' },
+                        { name: 'accel_x', unit: 'm/s²' },
+                        { name: 'accel_y', unit: 'm/s²' },
+                        { name: 'accel_z', unit: 'm/s²' },
+                        { name: 'pitch', unit: '°' },
+                        { name: 'roll', unit: '°' },
+                        { name: 'yaw', unit: '°' }
+                      ];
+                      standardAttrs.forEach(sa => {
                         attributes.push({ name: sa.name, type: 'number', unit: sa.unit });
-                      }
-                    });
+                      });
+                    }
 
                     return attributes.map(attr => {
                       const isSelected = pickerSelectedAttribute === attr.name;
