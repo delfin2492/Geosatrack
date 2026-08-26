@@ -90,10 +90,7 @@ const CustomNode = ({ data }: any) => {
   // 2. ATTRIBUTE VALUE NODE (Matching Gambar 2 Layout)
   if (data.type === 'input_attribute' || data.type === 'trigger_telemetry') {
     const assetName = data.assetName || (data.assetId === 'ANY' ? 'Any Asset' : 'Select Asset');
-    const rawAttrName = data.attributeName || 'Select Attribute';
-    const attrName = (data.operator && data.operator !== 'ANY' && data.thresholdValue !== undefined)
-      ? `${rawAttrName} ${data.operator} ${data.thresholdValue}`
-      : rawAttrName;
+    const attrName = data.attributeName || 'Select Attribute';
     
     let AssetIcon = Zap;
     const nameLower = assetName.toLowerCase();
@@ -1445,20 +1442,21 @@ export default function RulesPage() {
 
           {/* NODE CONFIG POPUP MODAL */}
           {selectedNode && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-              <Card className="w-full max-w-md border-border shadow-2xl rounded-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
-                <CardHeader className="py-3 px-4 border-b border-border flex flex-row items-center justify-between sticky top-0 bg-card z-10 rounded-t-2xl">
-                  <CardTitle className="text-sm font-bold text-foreground">Node Config</CardTitle>
-                  <div className="flex items-center gap-1">
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10 font-bold" onClick={deleteSelectedNode}>
-                      Delete
-                    </Button>
-                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/80" onClick={() => setSelectedNode(null)}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4 space-y-4 overflow-y-auto flex-1 text-xs bg-card">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedNode(null)}>
+              <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                <Card className="w-full border border-border shadow-2xl rounded-2xl flex flex-col bg-card overflow-hidden animate-in zoom-in-95 duration-200">
+                  <CardHeader className="py-3.5 px-5 border-b border-border flex flex-row items-center justify-between bg-card z-10">
+                    <CardTitle className="text-sm font-bold text-foreground">Node Configuration</CardTitle>
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" variant="ghost" className="h-7 px-2.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 font-bold rounded-lg transition-colors" onClick={deleteSelectedNode}>
+                        Delete
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/80" onClick={() => setSelectedNode(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 pb-7 space-y-4 text-xs bg-card max-h-[80vh] overflow-y-auto">
                 <div className="space-y-3">
                   <div className="p-2.5 rounded-xl bg-secondary/35 border border-border font-bold text-[10px] uppercase text-center text-foreground">
                     {selectedNode.data.label || selectedNode.id}
@@ -1509,9 +1507,9 @@ export default function RulesPage() {
 
                   {/* TELEMETRY / INPUT CONFIGURATION */}
                   {(selectedNode.data.type === 'trigger_telemetry' || selectedNode.data.type === 'input_attribute') && (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Select Asset</label>
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-muted-foreground font-semibold text-xs">Select Asset</label>
                         <SearchableSelect
                           options={[{ label: "Any Assets", value: "ANY" }, ...assetOptions]}
                           value={selectedNode.data.assetId}
@@ -1523,10 +1521,10 @@ export default function RulesPage() {
                           alwaysSearchable={true}
                         />
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Attribute Name</label>
+                      <div className="space-y-1.5">
+                        <label className="text-muted-foreground font-semibold text-xs">Attribute Name</label>
                         {selectedNode.data.assetId === 'ANY' ? (
-                          <Input value={selectedNode.data.attributeName} onChange={(e) => updateNodeData(selectedNode.id, 'attributeName', e.target.value)} className="h-8 rounded-lg text-xs" placeholder="Type attribute manually..." />
+                          <Input value={selectedNode.data.attributeName} onChange={(e) => updateNodeData(selectedNode.id, 'attributeName', e.target.value)} className="h-9 rounded-lg text-xs bg-background" placeholder="Type attribute manually..." />
                         ) : (
                           <SearchableSelect
                             options={(() => {
@@ -1538,71 +1536,6 @@ export default function RulesPage() {
                             placeholder="Select Attribute..."
                           />
                         )}
-                      </div>
-
-                      {/* OPTIONAL CONDITION OPERATOR & THRESHOLD */}
-                      <div className="pt-2 border-t border-border/50 space-y-3">
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Condition Operator (Optional)</label>
-                          <SearchableSelect
-                            options={[
-                              { label: "Any Value (Pass-through)", value: "ANY" },
-                              { label: "Greater than (>)", value: ">" },
-                              { label: "Less than (<)", value: "<" },
-                              { label: "Equal to (==)", value: "==" },
-                              { label: "Not equal to (!=)", value: "!=" },
-                              { label: "Greater than or Equal (>=)", value: ">=" },
-                              { label: "Less than or Equal (<=)", value: "<=" }
-                            ]}
-                            value={selectedNode.data.operator || 'ANY'}
-                            onChange={(val) => updateNodeData(selectedNode.id, 'operator', val)}
-                            placeholder="Select Operator..."
-                          />
-                        </div>
-
-                        {selectedNode.data.operator && selectedNode.data.operator !== 'ANY' && (
-                          <div className="space-y-1">
-                            <label className="text-muted-foreground font-semibold">Threshold Value</label>
-                            <Input
-                              type="number"
-                              value={selectedNode.data.thresholdValue ?? ''}
-                              onChange={(e) => updateNodeData(selectedNode.id, 'thresholdValue', e.target.value)}
-                              className="h-8 rounded-lg text-xs"
-                              placeholder="e.g. 30"
-                            />
-                          </div>
-                        )}
-
-                        {/* DURATION FILTER TOGGLE */}
-                        <div className="pt-1 border-t border-border/40 mt-1">
-                          <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1.5 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={selectedNode.data.enableDuration ?? (Number(selectedNode.data.durationMinutes) > 0)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                updateNodeData(selectedNode.id, 'enableDuration', checked);
-                                if (!checked) {
-                                  updateNodeData(selectedNode.id, 'durationMinutes', 0);
-                                }
-                              }}
-                              className="rounded border-gray-300 text-amber-500 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer"
-                            />
-                            <span>Set Duration Filter (min)</span>
-                          </label>
-                          {(selectedNode.data.enableDuration ?? (Number(selectedNode.data.durationMinutes) > 0)) && (
-                            <div className="mt-1.5">
-                              <Input
-                                type="number"
-                                min="0"
-                                className="h-8 text-xs bg-background"
-                                placeholder="Duration in minutes (e.g. 5)..."
-                                value={selectedNode.data.durationMinutes || ''}
-                                onChange={(e) => updateNodeData(selectedNode.id, 'durationMinutes', Math.max(0, parseInt(e.target.value) || 0))}
-                              />
-                            </div>
-                          )}
-                        </div>
                       </div>
                     </div>
                   )}
@@ -1746,7 +1679,8 @@ export default function RulesPage() {
                   )}
                 </div>
               </CardContent>
-              </Card>
+                </Card>
+              </div>
             </div>
           )}
         </div>
