@@ -273,6 +273,59 @@ const CustomNode = ({ data, id, selected }: any) => {
     );
   }
 
+    // 3.5 UNIFIED ALARM NOTIFICATION NODE
+  if (data.type === 'action_notification') {
+    const channel = data.channel || 'SYSTEM';
+    let ActionIcon = BellRing;
+    let label = data.label || 'System Alarm';
+    let detailText = 'Dashboard Bell';
+    
+    if (channel === 'EMAIL') {
+      ActionIcon = Mail;
+      label = data.label || 'SMTP Email';
+      detailText = data.toEmail ? `to: ${data.toEmail}` : 'Select Email';
+    } else if (channel === 'TELEGRAM') {
+      ActionIcon = Send;
+      label = data.label || 'Telegram Bot';
+      detailText = data.chatId ? `Chat ID: ${data.chatId}` : 'Select Chat ID';
+    }
+
+    return (
+      <div className={`min-w-[190px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
+        <div className="bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
+          Action Output
+        </div>
+        <div className="p-2.5 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
+          {/* INTERACTIVE CLICKABLE NOTIFICATION SELECTOR BUTTON */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (data.onOpenNotificationPicker) {
+                data.onOpenNotificationPicker(id, data);
+              }
+            }}
+            className="flex-1 bg-white dark:bg-zinc-800 hover:bg-amber-50/70 dark:hover:bg-amber-950/40 border border-gray-300 dark:border-zinc-700 hover:border-amber-500 rounded-md p-1.5 flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all active:scale-[0.98] text-left group/btn"
+          >
+            <div className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform">
+              <ActionIcon className="w-3 h-3" />
+            </div>
+            <div className="flex flex-col leading-tight overflow-hidden">
+              <span className="text-[10px] font-bold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">{label}</span>
+              <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[100px]">{detailText}</span>
+            </div>
+          </button>
+        </div>
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="input_a"
+          style={{ left: '-6px', top: '65%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
+        />
+      </div>
+    );
+  }
+
   // 4. ACTION / OUTPUT NODES
   let ActionIcon = BellRing;
   if (data.type === 'action_email') ActionIcon = Mail;
