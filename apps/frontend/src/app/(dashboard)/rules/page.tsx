@@ -27,7 +27,8 @@ import ReactFlow, {
   NodeChange,
   EdgeChange,
   applyNodeChanges,
-  applyEdgeChanges
+  applyEdgeChanges,
+  SelectionMode
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -423,14 +424,16 @@ export default function RulesPage() {
       }
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedNodeId) {
-          setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
-          setEdges((prev) => prev.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId));
+        const targetNodeIds = nodes.filter(n => n.selected || n.id === selectedNodeId).map(n => n.id);
+        if (targetNodeIds.length > 0) {
+          setNodes((prev) => prev.filter((n) => !targetNodeIds.includes(n.id)));
+          setEdges((prev) => prev.filter((edge) => !targetNodeIds.includes(edge.source) && !targetNodeIds.includes(edge.target)));
           setSelectedNodeId(null);
           setSelectedNode(null);
         }
-        if (selectedEdgeId) {
-          setEdges((prev) => prev.filter((edge) => edge.id !== selectedEdgeId));
+        const targetEdgeIds = edges.filter(e => e.selected || e.id === selectedEdgeId).map(e => e.id);
+        if (targetEdgeIds.length > 0) {
+          setEdges((prev) => prev.filter((edge) => !targetEdgeIds.includes(edge.id)));
           setSelectedEdgeId(null);
         }
       }
@@ -1521,10 +1524,9 @@ export default function RulesPage() {
           <div className="flex-1 border border-border rounded-2xl overflow-hidden shadow-2xl relative bg-background">
             <ReactFlow
               nodes={nodes.map(n => {
-                const isSelected = n.id === selectedNodeId || n.selected;
+                const isSelected = n.id === selectedNodeId;
                 return {
                   ...n,
-                  selected: isSelected,
                   data: {
                     ...n.data,
                     assets,
@@ -1538,7 +1540,7 @@ export default function RulesPage() {
                 return {
                   ...e,
                   selected: isSelected,
-                  animated: true,
+                  animated: false,
                   style: {
                     strokeWidth: isSelected ? 4 : 2.5,
                     stroke: isSelected ? '#f59e0b' : '#3b82f6',
@@ -1567,6 +1569,10 @@ export default function RulesPage() {
                 setSelectedEdgeId(null);
                 setSelectedNode(null);
               }}
+              selectionOnDrag={true}
+              selectionMode={SelectionMode.Partial}
+              panOnDrag={[1, 2]}
+              panOnScroll={true}
               deleteKeyCode={['Delete', 'Backspace']}
               onInit={setReactFlowInstance}
               onDrop={onDrop}
