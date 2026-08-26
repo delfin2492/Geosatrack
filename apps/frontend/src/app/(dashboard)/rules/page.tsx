@@ -1734,28 +1734,28 @@ export default function RulesPage() {
             </div>
 
             <div className="shrink-0 min-w-[140px]">
-              <div className="text-[10px] font-bold text-green-500 uppercase tracking-wider mb-1.5">Math Processors</div>
+              <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Math Processors</div>
               <div className="grid grid-cols-2 gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_add')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">+ Add</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_sub')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">- Sub</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_mul')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">× Mul</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_div')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">÷ Div</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_avg')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">AVG</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_pct')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">% Pct</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_add')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">+</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_sub')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">-</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_mul')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">×</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_div')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">÷</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_avg')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">Avg</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_pct')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">%</div>
               </div>
             </div>
 
             <div className="shrink-0 min-w-[140px]">
-              <div className="text-[10px] font-bold text-green-500 uppercase tracking-wider mb-1.5">Logic Processors</div>
+              <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Logic Processors</div>
               <div className="grid grid-cols-2 gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_gt')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">&gt; GT</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_lt')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">&lt; LT</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_eq')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">= EQ</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_neq')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">!= NEQ</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_gte')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">&gt;= GTE</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_lte')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">&lt;= LTE</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_and')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">AND</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_or')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">OR</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_gt')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&gt;</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_lt')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&lt;</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_eq')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">=</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_neq')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">!=</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_gte')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&gt;=</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_lte')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&lt;=</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_and')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">AND</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_or')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">OR</div>
               </div>
             </div>
 
