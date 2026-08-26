@@ -31,7 +31,11 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-const CustomNode = ({ data, id }: any) => {
+const CustomNode = ({ data, id, selected }: any) => {
+  const isNodeSelected = selected || data.isSelected;
+  const selectionRingClass = isNodeSelected
+    ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background border-amber-500 shadow-2xl shadow-amber-500/30 scale-[1.03] z-50'
+    : 'border-border';
   const isProcessor = data.type.startsWith('math_') || data.type.startsWith('logic_') || data.type === 'process_math' || data.type === 'logic_filter';
   const isInput = data.type.startsWith('trigger_') || data.type === 'input_attribute';
 
@@ -58,7 +62,9 @@ const CustomNode = ({ data, id }: any) => {
   // 1. PROCESSOR NODE (Compact Green Square with Symbol & Dual Left Handles + Right Output Handle)
   if (isProcessor) {
     return (
-      <div className="w-12 h-12 rounded-xl bg-emerald-600 border-2 border-emerald-500 shadow-xl flex items-center justify-center relative text-white font-black text-base select-none">
+      <div className={`w-12 h-12 rounded-xl bg-emerald-600 border-2 shadow-xl flex items-center justify-center relative text-white font-black text-base select-none transition-all ${
+        isNodeSelected ? 'ring-2 ring-amber-500 ring-offset-2 border-amber-400 scale-[1.1] z-50 shadow-2xl shadow-amber-500/30' : 'border-emerald-500'
+      }`}>
         {/* Left Target Handle 1 (Input A) */}
         <Handle
           type="target"
@@ -102,7 +108,7 @@ const CustomNode = ({ data, id }: any) => {
     else if (nameLower.includes('building') || nameLower.includes('gedung')) AssetIcon = Building;
 
     return (
-      <div className="min-w-[190px] bg-card border border-border shadow-xl rounded-lg relative">
+      <div className={`min-w-[190px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
         <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
           Attribute value
         </div>
@@ -141,7 +147,7 @@ const CustomNode = ({ data, id }: any) => {
   // 3. GEOFENCE NODE
   if (data.type === 'trigger_geofence') {
     return (
-      <div className="min-w-[180px] bg-card border border-border shadow-xl rounded-lg relative">
+      <div className={`min-w-[180px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
         <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide rounded-t-[7px]">
           Geofence Event
         </div>
@@ -166,7 +172,9 @@ const CustomNode = ({ data, id }: any) => {
   if (data.type === 'action_attribute') ActionIcon = Download;
 
   return (
-    <div className="min-w-[180px] bg-card border border-purple-500/50 shadow-xl rounded-lg relative">
+    <div className={`min-w-[180px] bg-card border shadow-xl rounded-lg relative transition-all ${
+    isNodeSelected ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background border-amber-500 shadow-2xl shadow-amber-500/30 scale-[1.03] z-50' : 'border-purple-500/50'
+  }`}>
       <div className="bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide rounded-t-[7px]">
         Action Output
       </div>
@@ -403,6 +411,34 @@ export default function RulesPage() {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (activeTab !== 'editor_flow') return;
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (targetTag === 'input' || targetTag === 'textarea' || (e.target as HTMLElement)?.isContentEditable) {
+        return;
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedNodeId) {
+          setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
+          setEdges((prev) => prev.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId));
+          setSelectedNodeId(null);
+          setSelectedNode(null);
+        }
+        if (selectedEdgeId) {
+          setEdges((prev) => prev.filter((edge) => edge.id !== selectedEdgeId));
+          setSelectedEdgeId(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, selectedNodeId, selectedEdgeId, setNodes, setEdges]);
 
   // When-Then State
   const [wtGroups, setWtGroups] = useState<any[]>([]);
@@ -1484,20 +1520,54 @@ export default function RulesPage() {
 
           <div className="flex-1 border border-border rounded-2xl overflow-hidden shadow-2xl relative bg-background">
             <ReactFlow
-              nodes={nodes.map(n => ({
-                ...n,
-                data: {
-                  ...n.data,
-                  assets,
-                  onOpenPicker: (id: string, data: any) => handleOpenAttributePicker(id, data)
-                }
-              }))}
-              edges={edges}
+              nodes={nodes.map(n => {
+                const isSelected = n.id === selectedNodeId || n.selected;
+                return {
+                  ...n,
+                  selected: isSelected,
+                  data: {
+                    ...n.data,
+                    assets,
+                    isSelected,
+                    onOpenPicker: (id: string, data: any) => handleOpenAttributePicker(id, data)
+                  }
+                };
+              })}
+              edges={edges.map(e => {
+                const isSelected = e.id === selectedEdgeId || e.selected;
+                return {
+                  ...e,
+                  selected: isSelected,
+                  animated: true,
+                  style: {
+                    strokeWidth: isSelected ? 4 : 2.5,
+                    stroke: isSelected ? '#f59e0b' : '#3b82f6',
+                    filter: isSelected ? 'drop-shadow(0 0 6px rgba(245, 158, 11, 0.7))' : 'none'
+                  }
+                };
+              })}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
-              onNodeClick={(_, node) => { if (node.data?.type !== 'input_attribute' && node.data?.type !== 'trigger_telemetry') setSelectedNode(node); }}
+              onNodeClick={(_, node) => {
+                setSelectedNodeId(node.id);
+                setSelectedEdgeId(null);
+                if (node.data?.type !== 'input_attribute' && node.data?.type !== 'trigger_telemetry') {
+                  setSelectedNode(node);
+                }
+              }}
+              onEdgeClick={(_, edge) => {
+                setSelectedEdgeId(edge.id);
+                setSelectedNodeId(null);
+                setSelectedNode(null);
+              }}
+              onPaneClick={() => {
+                setSelectedNodeId(null);
+                setSelectedEdgeId(null);
+                setSelectedNode(null);
+              }}
+              deleteKeyCode={['Delete', 'Backspace']}
               onInit={setReactFlowInstance}
               onDrop={onDrop}
               onDragOver={onDragOver}
