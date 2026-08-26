@@ -142,28 +142,117 @@ export class RulesEngineService {
     // 1. Execute logic of current node
     let proceed = true;
 
-    if (nodeType === 'logic_filter') {
-      const { conditionType, thresholdValue } = currentNode.data;
-      const val = payload.value;
-      if (val === undefined) {
-        proceed = false;
-        logMessages.push(`[LOGIC] Filter failed: Payload is missing numeric telemetry value.`);
-      } else {
-        const threshold = Number(thresholdValue);
-        const cond = String(conditionType || '').toUpperCase();
-        let conditionMet = false;
-        if (cond === 'GT' || cond === '>') conditionMet = val > threshold;
-        else if (cond === 'LT' || cond === '<') conditionMet = val < threshold;
-        else if (cond === 'EQ' || cond === '=' || cond === '==') conditionMet = val === threshold;
-        else if (cond === 'GTE' || cond === '>=') conditionMet = val >= threshold;
-        else if (cond === 'LTE' || cond === '<=') conditionMet = val <= threshold;
+    // Processors: Math
+    if (
+      nodeType === 'math_add' ||
+      nodeType === 'math_sub' ||
+      nodeType === 'math_mul' ||
+      nodeType === 'math_div' ||
+      nodeType === 'math_avg' ||
+      nodeType === 'math_pct' ||
+      nodeType === 'process_math'
+    ) {
+      const valA = Number(payload.value || 0);
+      const valB = Number(currentNode.data?.valueB || 0);
+      let res = valA;
 
-        if (conditionMet) {
-          logMessages.push(`[LOGIC] Filter passed: ${val} is ${conditionType} than/equal to ${threshold}`);
-        } else {
-          proceed = false;
-          logMessages.push(`[LOGIC] Filter stopped path: ${val} is not ${conditionType} than/equal to ${threshold}`);
+      let op = currentNode.data?.operation;
+      if (nodeType === 'math_add') op = 'ADD';
+      else if (nodeType === 'math_sub') op = 'SUB';
+      else if (nodeType === 'math_mul') op = 'MUL';
+      else if (nodeType === 'math_div') op = 'DIV';
+      else if (nodeType === 'math_avg') op = 'AVG';
+      else if (nodeType === 'math_pct') op = 'PCT';
+
+      if (op === 'ADD') res = valA + valB;
+      else if (op === 'SUB') res = valA - valB;
+      else if (op === 'MUL') res = valA * valB;
+      else if (op === 'DIV') res = valB !== 0 ? valA / valB : valA;
+      else if (op === 'AVG') res = (valA + valB) / 2;
+      else if (op === 'PCT') res = (valA * valB) / 100;
+
+      payload.value = res;
+      logMessages.push(`[MATH ${op}] Calculation: ${valA} ${op} ${valB} = ${res}`);
+    }
+
+    // Processors: Logic
+    else if (
+      nodeType === 'logic_gt' ||
+      nodeType === 'logic_lt' ||
+      nodeType === 'logic_eq' ||
+      nodeType === 'logic_neq' ||
+      nodeType === 'logic_gte' ||
+      nodeType === 'logic_lte' ||
+      nodeType === 'logic_and' ||
+      nodeType === 'logic_or' ||
+      nodeType === 'logic_filter'
+    ) {
+      const val = Number(payload.value);
+      const thresh = Number(currentNode.data?.thresholdValue || 0);
+
+      let condType = currentNode.data?.conditionType;
+      if (nodeType === 'logic_gt') condType = 'GT';
+      else if (nodeType === 'logic_lt') condType = 'LT';
+      else if (nodeType === 'logic_eq') condType = 'EQ';
+      else if (nodeType === 'logic_neq') condType = 'NEQ';
+      else if (nodeType === 'logic_gte') condType = 'GTE';
+      else if (nodeType === 'logic_lte') condType = 'LTE';
+      else if (nodeType === 'logic_and') condType = 'AND';
+      else if (nodeType === 'logic_or') condType = 'OR';
+
+      let conditionMet = false;
+      if (condType === 'GT' || condType === '>') conditionMet = val > thresh;
+      else if (condType === 'LT' || condType === '<') conditionMet = val < thresh;
+      else if (condType === 'EQ' || condType === '=' || condType === '==') conditionMet = val === thresh;
+      else if (condType === 'NEQ' || condType === '!=') conditionMet = val !== thresh;
+      else if (condType === 'GTE' || condType === '>=') conditionMet = val >= thresh;
+      else if (condType === 'LTE' || condType === '<=') conditionMet = val <= thresh;
+      else if (condType === 'AND' || condType === 'OR') conditionMet = true;
+
+      if (!conditionMet) {
+        proceed = false;
+        logMessages.push(`[LOGIC ${condType}] Condition failed: ${val} is not ${condType} ${thresh}. Stopping flow path.`);
+      } else {
+        logMessages.push(`[LOGIC ${condType}] Condition passed: ${val} ${condType} ${thresh}`);
+      }
+    }
+
+    // Actions: Set Attribute Value
+    else if (nodeType === 'action_attribute') {
+      try {
+        const targetAssetId = currentNode.data?.targetAssetId;
+        const targetAttribute = currentNode.data?.targetAttribute;
+        const commandValue = currentNode.data?.commandValue || String(payload.value);
+
+        if (targetAssetId && targetAttribute) {
+          const targetAsset = await this.prisma.asset.findUnique({ where: { id: targetAssetId } });
+          if (targetAsset) {
+            let descObj: any = {};
+            try {
+              descObj = JSON.parse(targetAsset.description || '{}');
+            } catch (e) {}
+
+            if (!descObj.attributes || !Array.isArray(descObj.attributes)) {
+              descObj.attributes = [];
+            }
+
+            const existingAttr = descObj.attributes.find((a: any) => a.name === targetAttribute);
+            if (existingAttr) {
+              existingAttr.value = commandValue;
+            } else {
+              descObj.attributes.push({ name: targetAttribute, value: commandValue, dataType: 'string' });
+            }
+
+            await this.prisma.asset.update({
+              where: { id: targetAssetId },
+              data: { description: JSON.stringify(descObj) },
+            });
+
+            logMessages.push(`[ACTION] Updated target asset "${targetAsset.name}" attribute "${targetAttribute}" to "${commandValue}".`);
+          }
         }
+      } catch (err: any) {
+        logMessages.push(`[ACTION_ERROR] Failed to set attribute value: ${err.message}`);
       }
     } else if (nodeType === 'action_alarm') {
       try {

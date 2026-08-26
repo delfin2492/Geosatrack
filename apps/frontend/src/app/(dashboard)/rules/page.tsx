@@ -36,12 +36,32 @@ const CustomNode = ({ data }: any) => {
   const isOutput = data.type.startsWith('action_');
 
   let Icon = Box;
+  let symbolBadge = '';
+
   switch (data.type) {
     case 'trigger_geofence': Icon = MapIcon; break;
     case 'trigger_telemetry': Icon = Activity; break;
     case 'input_attribute': Icon = Download; break;
-    case 'logic_filter': Icon = Filter; break;
-    case 'process_math': Icon = Calculator; break;
+    // Math Processors
+    case 'math_add': Icon = Calculator; symbolBadge = '+'; break;
+    case 'math_sub': Icon = Calculator; symbolBadge = '-'; break;
+    case 'math_mul': Icon = Calculator; symbolBadge = '×'; break;
+    case 'math_div': Icon = Calculator; symbolBadge = '÷'; break;
+    case 'math_avg': Icon = Calculator; symbolBadge = 'AVG'; break;
+    case 'math_pct': Icon = Calculator; symbolBadge = '%'; break;
+    case 'process_math': Icon = Calculator; symbolBadge = 'MATH'; break;
+    // Logic Processors
+    case 'logic_gt': Icon = Filter; symbolBadge = '>'; break;
+    case 'logic_lt': Icon = Filter; symbolBadge = '<'; break;
+    case 'logic_eq': Icon = Filter; symbolBadge = '='; break;
+    case 'logic_neq': Icon = Filter; symbolBadge = '!='; break;
+    case 'logic_gte': Icon = Filter; symbolBadge = '>='; break;
+    case 'logic_lte': Icon = Filter; symbolBadge = '<='; break;
+    case 'logic_and': Icon = Filter; symbolBadge = 'AND'; break;
+    case 'logic_or': Icon = Filter; symbolBadge = 'OR'; break;
+    case 'logic_filter': Icon = Filter; symbolBadge = 'LOGIC'; break;
+    // Actions
+    case 'action_attribute': Icon = Download; symbolBadge = 'SET'; break;
     case 'action_alarm': Icon = BellRing; break;
     case 'action_email': Icon = Mail; break;
     case 'action_telegram': Icon = Send; break;
@@ -53,7 +73,13 @@ const CustomNode = ({ data }: any) => {
         <Handle type="target" position={Position.Top} className="w-3 h-3 bg-muted-foreground border-2 border-background" />
       )}
       <div className="flex items-center gap-2">
-        <Icon className={`w-4 h-4 ${isInput ? 'text-blue-500' : isOutput ? 'text-purple-500' : 'text-green-500'}`} />
+        {symbolBadge ? (
+          <span className={`px-1.5 py-0.5 text-[11px] font-black rounded ${isOutput ? 'bg-purple-500 text-white' : 'bg-green-500 text-black'}`}>
+            {symbolBadge}
+          </span>
+        ) : (
+          <Icon className={`w-4 h-4 ${isInput ? 'text-blue-500' : isOutput ? 'text-purple-500' : 'text-green-500'}`} />
+        )}
         <span className="font-bold text-xs text-foreground">{data.label}</span>
       </div>
       {!isOutput && (
@@ -66,7 +92,7 @@ const CustomNode = ({ data }: any) => {
 const nodeTypes = { customNode: CustomNode };
 
 // Node Types
-type NodeType = 'trigger_geofence' | 'trigger_telemetry' | 'logic_filter' | 'action_alarm' | 'action_email' | 'action_telegram' | 'input_attribute' | 'process_math';
+type NodeType = 'trigger_geofence' | 'trigger_telemetry' | 'input_attribute' | 'math_add' | 'math_sub' | 'math_mul' | 'math_div' | 'math_avg' | 'math_pct' | 'logic_gt' | 'logic_lt' | 'logic_eq' | 'logic_neq' | 'logic_gte' | 'logic_lte' | 'logic_and' | 'logic_or' | 'logic_filter' | 'process_math' | 'action_attribute' | 'action_alarm' | 'action_email' | 'action_telegram';
 
 interface Rule {
   id: string;
@@ -515,15 +541,36 @@ export default function RulesPage() {
     let label = '';
     let initialData: Record<string, any> = {};
 
-    switch (type) {
+        switch (type) {
       case 'trigger_geofence': label = 'Geofence Event'; initialData = { eventType: 'ANY', geofenceId: 'ANY', assetId: 'ANY' }; break;
-      case 'trigger_telemetry': label = 'Telemetry Event'; initialData = { attributeName: '', assetId: 'ANY' }; break;
       case 'input_attribute': label = 'Attribute Value'; initialData = { assetId: 'ANY', attributeName: '' }; break;
-      case 'logic_filter': label = 'Filter Logic'; initialData = { conditionType: 'GT', thresholdValue: '40' }; break;
-      case 'process_math': label = 'Math Operation'; initialData = { operation: 'ADD' }; break;
+      case 'trigger_telemetry': label = 'Attribute Value'; initialData = { assetId: 'ANY', attributeName: '' }; break;
+
+      // Math Processors
+      case 'math_add': label = 'Math (+)'; initialData = { operation: 'ADD', valueB: '0' }; break;
+      case 'math_sub': label = 'Math (-)'; initialData = { operation: 'SUB', valueB: '0' }; break;
+      case 'math_mul': label = 'Math (×)'; initialData = { operation: 'MUL', valueB: '1' }; break;
+      case 'math_div': label = 'Math (÷)'; initialData = { operation: 'DIV', valueB: '1' }; break;
+      case 'math_avg': label = 'Math (AVG)'; initialData = { operation: 'AVG' }; break;
+      case 'math_pct': label = 'Math (%)'; initialData = { operation: 'PCT' }; break;
+      case 'process_math': label = 'Math Operation'; initialData = { operation: 'ADD', valueB: '0' }; break;
+
+      // Logic Processors
+      case 'logic_gt': label = 'Greater Than (>)'; initialData = { conditionType: 'GT', thresholdValue: '0' }; break;
+      case 'logic_lt': label = 'Less Than (<)'; initialData = { conditionType: 'LT', thresholdValue: '0' }; break;
+      case 'logic_eq': label = 'Equal To (=)'; initialData = { conditionType: 'EQ', thresholdValue: '0' }; break;
+      case 'logic_neq': label = 'Not Equal (!=)'; initialData = { conditionType: 'NEQ', thresholdValue: '0' }; break;
+      case 'logic_gte': label = 'Greater/Equal (>=)'; initialData = { conditionType: 'GTE', thresholdValue: '0' }; break;
+      case 'logic_lte': label = 'Less/Equal (<=)'; initialData = { conditionType: 'LTE', thresholdValue: '0' }; break;
+      case 'logic_and': label = 'Logic AND'; initialData = { conditionType: 'AND' }; break;
+      case 'logic_or': label = 'Logic OR'; initialData = { conditionType: 'OR' }; break;
+      case 'logic_filter': label = 'Filter Logic'; initialData = { conditionType: 'GT', thresholdValue: '0' }; break;
+
+      // Actions / Outputs
+      case 'action_attribute': label = 'Set Attribute Value'; initialData = { targetAssetId: '', targetAttribute: '', commandValue: '' }; break;
       case 'action_alarm': label = 'Create Alarm'; initialData = { messageTemplate: 'Critical alert: Asset {assetName}' }; break;
       case 'action_email': label = 'SMTP Email'; initialData = { toEmail: '', subjectTemplate: 'Alert Notification', bodyTemplate: 'Asset {assetName} triggered an alert.' }; break;
-      case 'action_telegram': label = 'Telegram Bot'; initialData = { chatId: '', messageTemplate: '⚠️ *GeoMesh Alert*\\nAsset: *{assetName}*\\nEvent: *{attributeName}* triggered with value {value}.' }; break;
+      case 'action_telegram': label = 'Telegram Bot'; initialData = { chatId: '', messageTemplate: 'Alert triggered for {assetName}' }; break;
     }
 
     const nodePosition = position || { x: 100 + Math.random() * 150, y: 150 + Math.random() * 150 };
@@ -1191,27 +1238,45 @@ export default function RulesPage() {
           </div>
 
           {/* SIDEBAR NODE PALETTE */}
-          <div className="w-full lg:w-52 border border-border shadow-md rounded-2xl flex lg:flex-col lg:shrink-0 bg-card overflow-x-auto lg:overflow-y-auto p-3 gap-4 lg:gap-0 lg:space-y-4">
+          <div className="w-full lg:w-56 border border-border shadow-md rounded-2xl flex lg:flex-col lg:shrink-0 bg-card overflow-x-auto lg:overflow-y-auto p-3 gap-4 lg:gap-0 lg:space-y-4">
             <div className="shrink-0 min-w-[120px]">
-              <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-2">Input</div>
+              <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-2">Triggers / Inputs</div>
               <div className="flex lg:flex-col gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Attribute value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'trigger_telemetry')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Telemetry Event</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Attribute Value</div>
                 <div draggable onDragStart={(e) => onDragStart(e, 'trigger_geofence')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Geofence Event</div>
               </div>
             </div>
 
-            <div className="shrink-0 min-w-[100px]">
-              <div className="text-[10px] font-bold text-green-500 uppercase tracking-wider mb-2">Processors</div>
-              <div className="flex lg:grid lg:grid-cols-2 gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'process_math')} className="flex items-center justify-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-green-500/10 text-green-500 hover:bg-green-500/20">Math</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_filter')} className="flex items-center justify-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-green-500/10 text-green-500 hover:bg-green-500/20">Logic</div>
+            <div className="shrink-0 min-w-[140px]">
+              <div className="text-[10px] font-bold text-green-500 uppercase tracking-wider mb-1.5">Math Processors</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_add')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">+ Add</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_sub')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">- Sub</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_mul')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">× Mul</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_div')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">÷ Div</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_avg')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">AVG</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'math_pct')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">% Pct</div>
               </div>
             </div>
 
-            <div className="shrink-0 min-w-[120px]">
-              <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-2">Output / Actions</div>
+            <div className="shrink-0 min-w-[140px]">
+              <div className="text-[10px] font-bold text-green-500 uppercase tracking-wider mb-1.5">Logic Processors</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_gt')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">&gt; GT</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_lt')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">&lt; LT</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_eq')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">= EQ</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_neq')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">!= NEQ</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_gte')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">&gt;= GTE</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_lte')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">&lt;= LTE</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_and')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">AND</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'logic_or')} className="flex items-center justify-center text-[10px] h-6 px-1 border border-border cursor-pointer rounded font-bold bg-green-500/10 text-green-500 hover:bg-green-500/20">OR</div>
+              </div>
+            </div>
+
+            <div className="shrink-0 min-w-[140px]">
+              <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-2">Outputs / Actions</div>
               <div className="flex lg:flex-col gap-1.5">
+                <div draggable onDragStart={(e) => onDragStart(e, 'action_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">Set Attribute Value</div>
                 <div draggable onDragStart={(e) => onDragStart(e, 'action_alarm')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">System Alarm</div>
                 <div draggable onDragStart={(e) => onDragStart(e, 'action_email')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">Send Email</div>
                 <div draggable onDragStart={(e) => onDragStart(e, 'action_telegram')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">Telegram Bot</div>
@@ -1337,46 +1402,68 @@ export default function RulesPage() {
                     </div>
                   )}
 
-                  {/* FILTER LOGIC CONFIGURATION */}
-                  {selectedNode.data.type === 'logic_filter' && (
+                  {/* SET ATTRIBUTE ACTION CONFIGURATION */}
+                  {selectedNode.data.type === 'action_attribute' && (
                     <div className="space-y-3">
                       <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Condition Type</label>
+                        <label className="text-muted-foreground font-semibold">Target Asset</label>
                         <SearchableSelect
-                          options={[
-                            { label: "Greater Than (>)", value: "GT" },
-                            { label: "Less Than (<)", value: "LT" },
-                            { label: "Equal To (==)", value: "EQ" }
-                          ]}
-                          value={selectedNode.data.conditionType}
-                          onChange={(val) => updateNodeData(selectedNode.id, 'conditionType', val)}
-                          placeholder="Condition..."
+                          options={assetOptions}
+                          value={selectedNode.data.targetAssetId}
+                          onChange={(val) => {
+                            updateNodeData(selectedNode.id, 'targetAssetId', val);
+                            updateNodeData(selectedNode.id, 'targetAttribute', '');
+                          }}
+                          placeholder="Select Target Asset..."
+                          alwaysSearchable={true}
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Threshold Value</label>
-                        <Input type="number" value={selectedNode.data.thresholdValue} onChange={(e) => updateNodeData(selectedNode.id, 'thresholdValue', e.target.value)} className="h-8 rounded-lg text-xs" />
+                        <label className="text-muted-foreground font-semibold">Target Attribute</label>
+                        <SearchableSelect
+                          options={(() => {
+                            const targetAsset = assets.find(a => a.id === selectedNode.data.targetAssetId);
+                            return getAssetAttributes(targetAsset).map(a => ({ label: a.name, value: a.name }));
+                          })()}
+                          value={selectedNode.data.targetAttribute}
+                          onChange={(val) => updateNodeData(selectedNode.id, 'targetAttribute', val)}
+                          placeholder="Select Target Attribute..."
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground font-semibold">Command / Set Value</label>
+                        <Input
+                          type="text"
+                          value={selectedNode.data.commandValue}
+                          onChange={(e) => updateNodeData(selectedNode.id, 'commandValue', e.target.value)}
+                          className="h-8 rounded-lg text-xs"
+                          placeholder="e.g. ON, 100, true"
+                        />
                       </div>
                     </div>
                   )}
 
-                  {/* PROCESS MATH CONFIGURATION */}
-                  {selectedNode.data.type === 'process_math' && (
+                  {/* LOGIC PROCESSORS CONFIGURATION */}
+                  {(selectedNode.data.type.startsWith('logic_')) && (
                     <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Operation</label>
-                        <SearchableSelect
-                          options={[
-                            { label: "Add (+)", value: "ADD" },
-                            { label: "Subtract (-)", value: "SUB" },
-                            { label: "Multiply (*)", value: "MUL" },
-                            { label: "Divide (/)", value: "DIV" }
-                          ]}
-                          value={selectedNode.data.operation}
-                          onChange={(val) => updateNodeData(selectedNode.id, 'operation', val)}
-                          placeholder="Select Operation..."
-                        />
-                      </div>
+                      {!['logic_and', 'logic_or'].includes(selectedNode.data.type) && (
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground font-semibold">Threshold Value</label>
+                          <Input type="number" value={selectedNode.data.thresholdValue || 0} onChange={(e) => updateNodeData(selectedNode.id, 'thresholdValue', e.target.value)} className="h-8 rounded-lg text-xs" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* MATH PROCESSORS CONFIGURATION */}
+                  {(selectedNode.data.type.startsWith('math_') || selectedNode.data.type === 'process_math') && (
+                    <div className="space-y-3">
+                      {['math_add', 'math_sub', 'math_mul', 'math_div'].includes(selectedNode.data.type) && (
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground font-semibold">Value B / Operand</label>
+                          <Input type="number" value={selectedNode.data.valueB || 0} onChange={(e) => updateNodeData(selectedNode.id, 'valueB', e.target.value)} className="h-8 rounded-lg text-xs" />
+                        </div>
+                      )}
                     </div>
                   )}
 
