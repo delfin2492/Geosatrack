@@ -1459,7 +1459,7 @@ export default function RulesPage() {
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
-              onNodeClick={(_, node) => { if (node.type !== 'input_attribute' && node.type !== 'trigger_telemetry') setSelectedNode(node); }}
+              onNodeClick={(_, node) => { if (node.data?.type !== 'input_attribute' && node.data?.type !== 'trigger_telemetry') setSelectedNode(node); }}
               onInit={setReactFlowInstance}
               onDrop={onDrop}
               onDragOver={onDragOver}
@@ -1472,7 +1472,7 @@ export default function RulesPage() {
           </div>
 
           {/* NODE CONFIG POPUP MODAL */}
-          {selectedNode && (
+          {selectedNode && selectedNode.data?.type !== 'input_attribute' && selectedNode.data?.type !== 'trigger_telemetry' && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedNode(null)}>
               <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
                 <Card className="w-full border border-border shadow-2xl rounded-2xl flex flex-col bg-card overflow-hidden animate-in zoom-in-95 duration-200">
