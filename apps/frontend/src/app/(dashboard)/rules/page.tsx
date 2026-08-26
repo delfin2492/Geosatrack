@@ -95,6 +95,112 @@ const CustomNode = ({ data, id, selected }: any) => {
     );
   }
 
+  // 1.1 NUMBER INPUT NODE
+  if (data.type === 'input_number') {
+    return (
+      <div className={`min-w-[150px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
+        <div className="bg-sky-600 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
+          Number
+        </div>
+        <div className="p-2 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
+          <input
+            type="number"
+            value={data.value ?? 0}
+            onChange={(e) => data.onUpdateData && data.onUpdateData(id, 'value', parseFloat(e.target.value) || 0)}
+            className="w-full bg-background border border-border px-2 py-1 rounded text-xs font-mono text-center outline-none focus:border-amber-500 text-foreground"
+          />
+        </div>
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="output"
+          style={{ right: '-6px', top: '50%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
+        />
+      </div>
+    );
+  }
+
+  // 1.2 BOOLEAN INPUT NODE
+  if (data.type === 'input_boolean') {
+    const boolVal = !!data.value;
+    return (
+      <div className={`min-w-[140px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
+        <div className="bg-indigo-600 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
+          Boolean
+        </div>
+        <div className="p-2 bg-secondary/10 flex items-center justify-center rounded-b-[7px]">
+          <button
+            type="button"
+            onClick={() => data.onUpdateData && data.onUpdateData(id, 'value', !boolVal)}
+            className={`w-full py-1 px-3 rounded text-xs font-bold transition-colors cursor-pointer ${
+              boolVal ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-rose-600 text-white hover:bg-rose-700'
+            }`}
+          >
+            {boolVal ? 'TRUE (ON)' : 'FALSE (OFF)'}
+          </button>
+        </div>
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="output"
+          style={{ right: '-6px', top: '50%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
+        />
+      </div>
+    );
+  }
+
+  // 1.3 STRING INPUT NODE
+  if (data.type === 'input_string') {
+    return (
+      <div className={`min-w-[160px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
+        <div className="bg-cyan-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
+          String
+        </div>
+        <div className="p-2 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
+          <input
+            type="text"
+            value={data.value ?? ''}
+            onChange={(e) => data.onUpdateData && data.onUpdateData(id, 'value', e.target.value)}
+            placeholder="Type string..."
+            className="w-full bg-background border border-border px-2 py-1 rounded text-xs outline-none focus:border-amber-500 text-foreground"
+          />
+        </div>
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="output"
+          style={{ right: '-6px', top: '50%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
+        />
+      </div>
+    );
+  }
+
+  // 1.4 TEXT TEMPLATE INPUT NODE
+  if (data.type === 'input_text') {
+    return (
+      <div className={`min-w-[180px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
+        <div className="bg-teal-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
+          Text Template
+        </div>
+        <div className="p-2 bg-secondary/10 rounded-b-[7px]">
+          <textarea
+            value={data.value ?? ''}
+            onChange={(e) => data.onUpdateData && data.onUpdateData(id, 'value', e.target.value)}
+            placeholder="Type text template..."
+            rows={3}
+            className="w-full bg-background border border-border px-2 py-1 rounded text-xs outline-none focus:border-amber-500 text-foreground resize-y"
+          />
+        </div>
+        <Handle
+          type="source"
+          position={Position.Right}
+          id="output"
+          style={{ right: '-6px', top: '50%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
+        />
+      </div>
+    );
+  }
+
   // 2. ATTRIBUTE VALUE NODE (Interactive Button UI matching Select Attributes image)
   if (data.type === 'input_attribute' || data.type === 'trigger_telemetry') {
     const assetObj = (data.assets || []).find((a: any) => a.id === data.assetId);
@@ -197,7 +303,7 @@ const CustomNode = ({ data, id, selected }: any) => {
 const nodeTypes = { customNode: CustomNode };
 
 // Node Types
-type NodeType = 'trigger_geofence' | 'trigger_telemetry' | 'input_attribute' | 'math_add' | 'math_sub' | 'math_mul' | 'math_div' | 'math_avg' | 'math_pct' | 'logic_gt' | 'logic_lt' | 'logic_eq' | 'logic_neq' | 'logic_gte' | 'logic_lte' | 'logic_and' | 'logic_or' | 'logic_filter' | 'process_math' | 'action_attribute' | 'action_alarm' | 'action_email' | 'action_telegram';
+type NodeType = 'trigger_geofence' | 'trigger_telemetry' | 'input_attribute' | 'input_number' | 'input_boolean' | 'input_string' | 'input_text' | 'math_add' | 'math_sub' | 'math_mul' | 'math_div' | 'math_avg' | 'math_pct' | 'logic_gt' | 'logic_lt' | 'logic_eq' | 'logic_neq' | 'logic_gte' | 'logic_lte' | 'logic_and' | 'logic_or' | 'logic_filter' | 'process_math' | 'action_attribute' | 'action_alarm' | 'action_email' | 'action_telegram';
 
 interface Rule {
   id: string;
@@ -860,6 +966,10 @@ export default function RulesPage() {
 
         switch (type) {
       case 'trigger_geofence': label = 'Geofence Event'; initialData = { eventType: 'ANY', geofenceId: 'ANY', assetId: 'ANY' }; break;
+      case 'input_number': label = 'Number Value'; initialData = { value: 0 }; break;
+      case 'input_boolean': label = 'Boolean Value'; initialData = { value: true }; break;
+      case 'input_string': label = 'String Value'; initialData = { value: '' }; break;
+      case 'input_text': label = 'Text Template'; initialData = { value: '' }; break;
       case 'input_attribute': label = 'Attribute Value'; initialData = { assetId: 'ANY', attributeName: '' }; break;
       case 'trigger_telemetry': label = 'Attribute Value'; initialData = { assetId: 'ANY', attributeName: '' }; break;
 
@@ -1616,6 +1726,10 @@ export default function RulesPage() {
               <div className="flex lg:flex-col gap-1.5">
                 <div draggable onDragStart={(e) => onDragStart(e, 'input_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Attribute Value</div>
                 <div draggable onDragStart={(e) => onDragStart(e, 'trigger_geofence')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Geofence Event</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_number')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Number Value</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_boolean')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Boolean Value</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_string')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">String Value</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_text')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Text Template</div>
               </div>
             </div>
 
@@ -1666,7 +1780,8 @@ export default function RulesPage() {
                     ...n.data,
                     assets,
                     isSelected,
-                    onOpenPicker: (id: string, data: any) => handleOpenAttributePicker(id, data)
+                    onOpenPicker: (id: string, data: any) => handleOpenAttributePicker(id, data),
+                    onUpdateData: (id: string, key: string, val: any) => updateNodeData(id, key, val)
                   }
                 };
               })}
@@ -1690,8 +1805,12 @@ export default function RulesPage() {
               onNodeClick={(_, node) => {
                 setSelectedNodeId(node.id);
                 setSelectedEdgeId(null);
-                if (node.data?.type !== 'input_attribute' && node.data?.type !== 'trigger_telemetry') {
+                const type = node.data?.type || node.type;
+                const modalTypes = ['trigger_geofence', 'action_email', 'action_telegram', 'action_alarm', 'action_attribute'];
+                if (modalTypes.includes(type)) {
                   setSelectedNode(node);
+                } else {
+                  setSelectedNode(null);
                 }
               }}
               onEdgeClick={(_, edge) => {
@@ -1723,7 +1842,7 @@ export default function RulesPage() {
           </div>
 
           {/* NODE CONFIG POPUP MODAL */}
-          {selectedNode && selectedNode.data?.type !== 'input_attribute' && selectedNode.data?.type !== 'trigger_telemetry' && (
+          {selectedNode && ['trigger_geofence', 'action_email', 'action_telegram', 'action_alarm', 'action_attribute'].includes(selectedNode.data?.type) && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedNode(null)}>
               <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
                 <Card className="w-full border border-border shadow-2xl rounded-2xl flex flex-col bg-card overflow-hidden animate-in zoom-in-95 duration-200">

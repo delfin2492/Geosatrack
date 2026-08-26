@@ -144,8 +144,26 @@ export class RulesEngineService {
     // 1. Execute logic of current node
     let proceed = true;
 
-    // Processors: Math
+    // Input Value Nodes (Constant Number, Boolean, String, Text)
     if (
+      nodeType === 'input_number' ||
+      nodeType === 'input_boolean' ||
+      nodeType === 'input_string' ||
+      nodeType === 'input_text'
+    ) {
+      let val: any = currentNode.data?.value;
+      if (nodeType === 'input_number') val = Number(val || 0);
+      if (nodeType === 'input_boolean') val = Boolean(val);
+      if (nodeType === 'input_string' || nodeType === 'input_text') val = String(val || '');
+
+      if (!payload.nodeOutputs) payload.nodeOutputs = {};
+      payload.nodeOutputs[currentNode.id] = val;
+      payload.value = val;
+      logMessages.push(`[INPUT VALUE] ${nodeType} (${currentNode.id}) value: ${val}`);
+    }
+
+    // Processors: Math
+    else if (
       nodeType === 'math_add' ||
       nodeType === 'math_sub' ||
       nodeType === 'math_mul' ||
@@ -158,14 +176,31 @@ export class RulesEngineService {
       let valA = Number(payload.value || 0);
       let valB = Number(currentNode.data?.valueB || 0);
 
-      const edgeA = inboundEdges.find(e => e.targetHandle === 'input_a');
-      const edgeB = inboundEdges.find(e => e.targetHandle === 'input_b');
+      const edgeA = inboundEdges.find(e => e.targetHandle === 'input_a' || (!e.targetHandle && e === inboundEdges[0]));
+      const edgeB = inboundEdges.find(e => e.targetHandle === 'input_b' || (!e.targetHandle && e === inboundEdges[1]));
 
-      if (edgeA && payload.nodeOutputs?.[edgeA.source] !== undefined) {
-        valA = Number(payload.nodeOutputs[edgeA.source]);
+      if (edgeA) {
+        let srcVal = payload.nodeOutputs?.[edgeA.source];
+        if (srcVal === undefined) {
+          const srcNode = graph.nodes.find(n => n.id === edgeA.source);
+          if (srcNode) {
+            await this.executeNode(srcNode, graph, payload, logMessages);
+            srcVal = payload.nodeOutputs?.[edgeA.source];
+          }
+        }
+        if (srcVal !== undefined) valA = Number(srcVal);
       }
-      if (edgeB && payload.nodeOutputs?.[edgeB.source] !== undefined) {
-        valB = Number(payload.nodeOutputs[edgeB.source]);
+
+      if (edgeB) {
+        let srcVal = payload.nodeOutputs?.[edgeB.source];
+        if (srcVal === undefined) {
+          const srcNode = graph.nodes.find(n => n.id === edgeB.source);
+          if (srcNode) {
+            await this.executeNode(srcNode, graph, payload, logMessages);
+            srcVal = payload.nodeOutputs?.[edgeB.source];
+          }
+        }
+        if (srcVal !== undefined) valB = Number(srcVal);
       }
 
       let res = valA;
@@ -203,8 +238,39 @@ export class RulesEngineService {
       nodeType === 'logic_or' ||
       nodeType === 'logic_filter'
     ) {
-      const val = Number(payload.value);
-      const thresh = Number(currentNode.data?.thresholdValue || 0);
+      const inboundEdges = graph.edges.filter(e => e.target === currentNode.id);
+      let valA = Number(payload.value || 0);
+      let valB = Number(currentNode.data?.thresholdValue || 0);
+
+      const edgeA = inboundEdges.find(e => e.targetHandle === 'input_a' || (!e.targetHandle && e === inboundEdges[0]));
+      const edgeB = inboundEdges.find(e => e.targetHandle === 'input_b' || (!e.targetHandle && e === inboundEdges[1]));
+
+      if (edgeA) {
+        let srcVal = payload.nodeOutputs?.[edgeA.source];
+        if (srcVal === undefined) {
+          const srcNode = graph.nodes.find(n => n.id === edgeA.source);
+          if (srcNode) {
+            await this.executeNode(srcNode, graph, payload, logMessages);
+            srcVal = payload.nodeOutputs?.[edgeA.source];
+          }
+        }
+        if (srcVal !== undefined) valA = Number(srcVal);
+      }
+
+      if (edgeB) {
+        let srcVal = payload.nodeOutputs?.[edgeB.source];
+        if (srcVal === undefined) {
+          const srcNode = graph.nodes.find(n => n.id === edgeB.source);
+          if (srcNode) {
+            await this.executeNode(srcNode, graph, payload, logMessages);
+            srcVal = payload.nodeOutputs?.[edgeB.source];
+          }
+        }
+        if (srcVal !== undefined) valB = Number(srcVal);
+      }
+
+      const val = valA;
+      const thresh = valB;
 
       let condType = currentNode.data?.conditionType;
       if (nodeType === 'logic_gt') condType = 'GT';
@@ -633,6 +699,11 @@ export class RulesEngineService {
         }
 
         if (eventType === 'TELEMETRY_ALERT') {
+          if (cond.attribute && cond.attribute.startsWith('GEOFENCE_')) {
+            groupMatched = false;
+            logMessages.push(`[GROUP ${gIdx + 1}] Event type mismatch: condition requires geofence but event is TELEMETRY_ALERT`);
+            break;
+          }
           if (cond.attribute && cond.attribute !== 'ANY' && cond.attribute !== payload.attributeName) {
             groupMatched = false;
             logMessages.push(`[GROUP ${gIdx + 1}] Attribute mismatch: expected ${cond.attribute}, got ${payload.attributeName}`);
@@ -703,6 +774,25 @@ export class RulesEngineService {
           }
 
           logMessages.push(`[GROUP ${gIdx + 1}] Condition passed: ${val} ${operator} ${thresh}`);
+        } else if (eventType === 'GEOFENCE_ENTER' || eventType === 'GEOFENCE_EXIT') {
+          if (!cond.attribute || !cond.attribute.startsWith('GEOFENCE_')) {
+            groupMatched = false;
+            logMessages.push(`[GROUP ${gIdx + 1}] Event type mismatch: condition requires telemetry but event is ${eventType}`);
+            break;
+          }
+          
+          if (cond.attribute !== 'GEOFENCE_ANY' && cond.attribute !== eventType) {
+            groupMatched = false;
+            logMessages.push(`[GROUP ${gIdx + 1}] Event type mismatch: expected ${cond.attribute}, got ${eventType}`);
+            break;
+          }
+
+          if (cond.value && cond.value !== 'ANY' && cond.value !== payload.geofenceId) {
+            groupMatched = false;
+            logMessages.push(`[GROUP ${gIdx + 1}] Geofence ID mismatch: expected ${cond.value}, got ${payload.geofenceId}`);
+            break;
+          }
+          logMessages.push(`[GROUP ${gIdx + 1}] Geofence condition passed for ${payload.geofenceId}`);
         }
       }
 
