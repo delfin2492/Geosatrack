@@ -371,23 +371,52 @@ export class RulesEngineService {
     payload: any,
   ) {
     if (!rule.ruleConfig) return;
-    let config: { conditionLogic?: 'AND' | 'OR'; cooldownMinutes?: number; conditions?: any[]; actions?: any[] } = {};
+    let config: {
+      thenFrequency?: string;
+      cooldownMinutes?: number;
+      groups?: any[];
+      conditions?: any[];
+      actions?: any[];
+    } = {};
+
     try {
       config = JSON.parse(rule.ruleConfig);
     } catch (e) {
       return;
     }
 
-    const conditions = config.conditions || [];
     const actions = config.actions || [];
     if (actions.length === 0) return;
 
-    const conditionLogic = config.conditionLogic === 'OR' ? 'OR' : 'AND';
+    // Backward compatibility for flat conditions array vs new groups array
+    const groups: any[] = config.groups && Array.isArray(config.groups)
+      ? config.groups
+      : (config.conditions ? [{ id: 'group-default', conditions: config.conditions }] : []);
+
+    if (groups.length === 0) return;
+
+    const thenFrequency = config.thenFrequency || 'ALWAYS';
     const cooldownMinutes = Number(config.cooldownMinutes) || 0;
 
-    // 1. Cooldown Period Check
-    if (cooldownMinutes > 0) {
-      const cutoffTime = new Date(Date.now() - cooldownMinutes * 60 * 1000);
+    // 1. Throttle / Frequency & Cooldown Check
+    let freqWindowMinutes = 0;
+    if (thenFrequency === 'ONCE_PER_MINUTE') freqWindowMinutes = 1;
+    else if (thenFrequency === 'ONCE_PER_HOUR') freqWindowMinutes = 60;
+    else if (thenFrequency === 'ONCE_PER_DAY') freqWindowMinutes = 1440;
+    else if (thenFrequency === 'ONCE_PER_WEEK') freqWindowMinutes = 10080;
+
+    const effectiveCooldown = Math.max(cooldownMinutes, freqWindowMinutes);
+
+    if (thenFrequency === 'ONCE') {
+      const existingLog = await this.prisma.ruleLog.findFirst({
+        where: { ruleId: rule.id, status: 'SUCCESS' },
+      });
+      if (existingLog) {
+        this.logger.log(`[ONCE_THROTTLE] Rule "${rule.name}" (${rule.id}) already executed once. Skipping.`);
+        return;
+      }
+    } else if (effectiveCooldown > 0) {
+      const cutoffTime = new Date(Date.now() - effectiveCooldown * 60 * 1000);
       const recentSuccessLog = await this.prisma.ruleLog.findFirst({
         where: {
           ruleId: rule.id,
@@ -398,61 +427,114 @@ export class RulesEngineService {
       });
 
       if (recentSuccessLog) {
-        this.logger.log(`[COOLDOWN] Rule "${rule.name}" (${rule.id}) triggered but suppressed due to active ${cooldownMinutes}m cooldown.`);
+        this.logger.log(`[THROTTLE] Rule "${rule.name}" (${rule.id}) skipped due to active cooldown/frequency (${effectiveCooldown}m).`);
         return;
       }
     }
 
+    // 2. Evaluate Groups (OR between groups, AND inside conditions)
     const logMessages: string[] = [
-      `[${new Date().toISOString()}] Executing When-Then Rule: "${rule.name}" (${rule.id}) [Logic: ${conditionLogic}]`,
+      `[${new Date().toISOString()}] Executing When-Then Rule: "${rule.name}" (${rule.id}) [Freq: ${thenFrequency}]`,
     ];
 
-    const condResults: boolean[] = [];
+    let anyGroupMatched = false;
 
-    for (const cond of conditions) {
-      let condMatched = true;
+    for (let gIdx = 0; gIdx < groups.length; gIdx++) {
+      const group = groups[gIdx];
+      const conditions = group.conditions || [];
+      if (conditions.length === 0) continue;
 
-      if (cond.assetId && cond.assetId !== 'ANY' && cond.assetId !== payload.assetId) {
-        condMatched = false;
-        logMessages.push(`[CONDITION] Asset mismatch: expected ${cond.assetId}, got ${payload.assetId}`);
-      } else if (eventType === 'TELEMETRY_ALERT') {
-        if (cond.attribute && cond.attribute !== 'ANY' && cond.attribute !== payload.attributeName) {
-          condMatched = false;
-          logMessages.push(`[CONDITION] Attribute mismatch: expected ${cond.attribute}, got ${payload.attributeName}`);
-        } else {
+      let groupMatched = true;
+
+      for (const cond of conditions) {
+        if (cond.assetId && cond.assetId !== 'ANY' && cond.assetId !== payload.assetId) {
+          groupMatched = false;
+          logMessages.push(`[GROUP ${gIdx + 1}] Asset mismatch: expected ${cond.assetId}, got ${payload.assetId}`);
+          break;
+        }
+
+        if (eventType === 'TELEMETRY_ALERT') {
+          if (cond.attribute && cond.attribute !== 'ANY' && cond.attribute !== payload.attributeName) {
+            groupMatched = false;
+            logMessages.push(`[GROUP ${gIdx + 1}] Attribute mismatch: expected ${cond.attribute}, got ${payload.attributeName}`);
+            break;
+          }
+
           const val = payload.value;
           const thresh = Number(cond.value);
           if (val === undefined || val === null || isNaN(thresh)) {
-            condMatched = false;
-            logMessages.push(`[CONDITION] Missing or invalid numeric telemetry value.`);
-          } else {
-            const operator = String(cond.operator || '>').toUpperCase();
-            let match = false;
-            if (operator === '>' || operator === 'GT') match = val > thresh;
-            else if (operator === '<' || operator === 'LT') match = val < thresh;
-            else if (operator === '=' || operator === '==' || operator === 'EQ') match = val === thresh;
-            else if (operator === '!=' || operator === 'NEQ') match = val !== thresh;
-            else if (operator === '>=' || operator === 'GTE') match = val >= thresh;
-            else if (operator === '<=' || operator === 'LTE') match = val <= thresh;
+            groupMatched = false;
+            logMessages.push(`[GROUP ${gIdx + 1}] Missing or invalid numeric telemetry value.`);
+            break;
+          }
 
-            condMatched = match;
-            if (match) {
-              logMessages.push(`[CONDITION] Passed: ${val} ${operator} ${thresh}`);
-            } else {
-              logMessages.push(`[CONDITION] Failed: ${val} is not ${operator} ${thresh}`);
+          const operator = String(cond.operator || '>').toUpperCase();
+          let match = false;
+          if (operator === '>' || operator === 'GT') match = val > thresh;
+          else if (operator === '<' || operator === 'LT') match = val < thresh;
+          else if (operator === '=' || operator === '==' || operator === 'EQ') match = val === thresh;
+          else if (operator === '!=' || operator === 'NEQ') match = val !== thresh;
+          else if (operator === '>=' || operator === 'GTE') match = val >= thresh;
+          else if (operator === '<=' || operator === 'LTE') match = val <= thresh;
+
+          if (!match) {
+            groupMatched = false;
+            logMessages.push(`[GROUP ${gIdx + 1}] Condition failed: ${val} is not ${operator} ${thresh}`);
+            break;
+          }
+
+          // Check Duration if specified (> 0)
+          const durationMins = Number(cond.durationMinutes) || 0;
+          if (durationMins > 0 && payload.assetId && payload.attributeName) {
+            const asset = await this.prisma.asset.findUnique({ where: { id: payload.assetId } });
+            const tagId = asset?.tagId;
+            if (tagId) {
+              const historyCutoff = new Date(Date.now() - durationMins * 60 * 1000);
+              const historyRecords = await this.prisma.telemetryLog.findMany({
+                where: {
+                  tagId: tagId,
+                  attrName: payload.attributeName,
+                  timestamp: { gte: historyCutoff },
+                },
+                orderBy: { timestamp: 'asc' },
+              });
+
+              if (historyRecords.length > 0) {
+                const allHistoryMatched = historyRecords.every(rec => {
+                  const recVal = Number(rec.value);
+                  if (isNaN(recVal)) return false;
+                  if (operator === '>' || operator === 'GT') return recVal > thresh;
+                  if (operator === '<' || operator === 'LT') return recVal < thresh;
+                  if (operator === '=' || operator === '==' || operator === 'EQ') return recVal === thresh;
+                  if (operator === '!=' || operator === 'NEQ') return recVal !== thresh;
+                  if (operator === '>=' || operator === 'GTE') return recVal >= thresh;
+                  if (operator === '<=' || operator === 'LTE') return recVal <= thresh;
+                  return false;
+                });
+
+                if (!allHistoryMatched) {
+                  groupMatched = false;
+                  logMessages.push(`[GROUP ${gIdx + 1}] Duration check failed: Condition was not continuously met over last ${durationMins}m.`);
+                  break;
+                } else {
+                  logMessages.push(`[GROUP ${gIdx + 1}] Duration check passed (${durationMins}m window satisfied).`);
+                }
+              }
             }
           }
+
+          logMessages.push(`[GROUP ${gIdx + 1}] Condition passed: ${val} ${operator} ${thresh}`);
         }
       }
 
-      condResults.push(condMatched);
+      if (groupMatched) {
+        anyGroupMatched = true;
+        logMessages.push(`[MATCH] Group ${gIdx + 1} satisfied (OR logic met).`);
+        break; // One matching OR group is sufficient to trigger THEN actions
+      }
     }
 
-    const allConditionsMet = conditionLogic === 'OR'
-      ? condResults.some(r => r === true)
-      : condResults.every(r => r === true);
-
-    if (!allConditionsMet) {
+    if (!anyGroupMatched) {
       return;
     }
 

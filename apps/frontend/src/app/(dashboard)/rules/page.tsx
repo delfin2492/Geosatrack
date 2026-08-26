@@ -233,10 +233,10 @@ export default function RulesPage() {
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
 
   // When-Then State
-  const [wtConditions, setWtConditions] = useState<any[]>([]);
-  const [wtConditionLogic, setWtConditionLogic] = useState<'AND' | 'OR'>('AND');
-  const [wtCooldownMinutes, setWtCooldownMinutes] = useState<number>(0);
+  const [wtGroups, setWtGroups] = useState<any[]>([]);
   const [wtActions, setWtActions] = useState<any[]>([]);
+  const [wtThenFrequency, setWtThenFrequency] = useState<string>('ALWAYS');
+  const [wtGlobalCooldown, setWtGlobalCooldown] = useState<number>(0);
 
   const [assets, setAssets] = useState<any[]>([]);
   const [geofences, setGeofences] = useState<any[]>([]);
@@ -382,10 +382,15 @@ export default function RulesPage() {
   const handleCreateNewWhenThen = () => {
     setEditingRule(null);
     setRuleName('New When-Then Rule');
-    setWtConditions([{ id: Date.now().toString(), assetId: '', attribute: '', operator: '>', value: '' }]);
-    setWtActions([{ id: (Date.now() + 1).toString(), actionType: 'trigger_asset', assetId: '', attribute: '', command: '' }]);
-    setWtConditionLogic('AND');
-    setWtCooldownMinutes(0);
+    setWtGroups([
+      {
+        id: Date.now().toString(),
+        conditions: [{ id: (Date.now() + 1).toString(), assetId: '', attribute: '', operator: '>', value: '', durationMinutes: 0 }]
+      }
+    ]);
+    setWtActions([{ id: (Date.now() + 2).toString(), actionType: 'trigger_asset', assetId: '', attribute: '', command: '' }]);
+    setWtThenFrequency('ALWAYS');
+    setWtGlobalCooldown(0);
     setActiveTab('editor_whenthen');
   };
 
@@ -395,12 +400,18 @@ export default function RulesPage() {
     if (rule.ruleType === 'WHEN_THEN') {
       try {
         const config = JSON.parse(rule.ruleConfig || '{}');
-        setWtConditions(config.conditions || []);
+        if (config.groups && Array.isArray(config.groups)) {
+          setWtGroups(config.groups);
+        } else if (config.conditions && Array.isArray(config.conditions)) {
+          setWtGroups([{ id: 'group-default', conditions: config.conditions }]);
+        } else {
+          setWtGroups([{ id: Date.now().toString(), conditions: [{ id: Date.now().toString(), assetId: '', attribute: '', operator: '>', value: '', durationMinutes: 0 }] }]);
+        }
         setWtActions(config.actions || []);
-        setWtConditionLogic(config.conditionLogic === 'OR' ? 'OR' : 'AND');
-        setWtCooldownMinutes(Number(config.cooldownMinutes) || 0);
+        setWtThenFrequency(config.thenFrequency || 'ALWAYS');
+        setWtGlobalCooldown(Number(config.cooldownMinutes) || 0);
       } catch (e) {
-        setWtConditions([]);
+        setWtGroups([]);
         setWtActions([]);
       }
       setActiveTab('editor_whenthen');
@@ -429,9 +440,9 @@ export default function RulesPage() {
     const ruleType = isWhenThen ? 'WHEN_THEN' : 'FLOW';
     const flowGraph = isWhenThen ? null : JSON.stringify({ nodes, edges });
     const ruleConfig = isWhenThen ? JSON.stringify({ 
-      conditionLogic: wtConditionLogic, 
-      cooldownMinutes: wtCooldownMinutes, 
-      conditions: wtConditions, 
+      thenFrequency: wtThenFrequency,
+      cooldownMinutes: wtGlobalCooldown,
+      groups: wtGroups, 
       actions: wtActions 
     }) : null;
 
@@ -665,122 +676,205 @@ export default function RulesPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
             {/* WHEN Panel */}
-            <div className="relative">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <div className="h-6 w-1.5 bg-amber-500 rounded-full"></div>
-                  <h3 className="text-lg font-black text-foreground">When...</h3>
-                </div>
-
-                <div className="flex items-center gap-3 flex-wrap">
-                  {/* Logic Selector AND / OR */}
-                  <div className="flex items-center gap-1.5 bg-secondary/50 p-1 rounded-lg border border-border">
-                    <span className="text-[10px] font-bold text-muted-foreground px-1">Logic:</span>
-                    <button
-                      type="button"
-                      onClick={() => setWtConditionLogic('AND')}
-                      className={`px-2 py-0.5 text-[11px] font-black rounded transition-all ${wtConditionLogic === 'AND' ? 'bg-amber-500 text-black shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                    >
-                      AND (All)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setWtConditionLogic('OR')}
-                      className={`px-2 py-0.5 text-[11px] font-black rounded transition-all ${wtConditionLogic === 'OR' ? 'bg-amber-500 text-black shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                    >
-                      OR (Any)
-                    </button>
-                  </div>
-
-                  {/* Cooldown Duration Input */}
-                  <div className="flex items-center gap-1.5 bg-secondary/50 px-2 py-1 rounded-lg border border-border">
-                    <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">Cooldown:</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="1440"
-                      value={wtCooldownMinutes}
-                      onChange={(e) => setWtCooldownMinutes(Math.max(0, parseInt(e.target.value) || 0))}
-                      className="h-6 w-14 text-xs font-bold text-center bg-background border-border p-1"
-                    />
-                    <span className="text-[10px] font-medium text-muted-foreground">m</span>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-4">
-                {wtConditions.map((cond, i) => {
-                  const selectedAsset = assets.find(a => a.id === cond.assetId);
-                  const attrOptions = getAssetAttributes(selectedAsset).map(a => ({ label: a.name, value: a.name }));
-                  const selectedAttrInfo = getAssetAttributes(selectedAsset).find(a => a.name === cond.attribute);
-
-                  return (
-                    <div key={cond.id} className="border-l-2 border-border pl-4 ml-2 relative group">
-                      {i > 0 && <div className="absolute -top-4 left-[-11px] bg-background text-amber-500 border border-border text-[9px] font-black px-1.5 py-0.5 rounded-full z-10">{wtConditionLogic}</div>}
-                      <button onClick={() => setWtConditions(c => c.filter(x => x.id !== cond.id))} className="absolute top-0 right-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"><X className="h-4 w-4" /></button>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1 pr-6">
-                        <div>
-                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Asset</label>
-                          <SearchableSelect
-                            options={assetOptions}
-                            value={cond.assetId}
-                            onChange={(val) => { const n = [...wtConditions]; n[i].assetId = val; n[i].attribute = ''; setWtConditions(n); }}
-                            placeholder="Select Asset..."
-                            alwaysSearchable={true}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Attribute</label>
-                          <SearchableSelect
-                            options={attrOptions}
-                            value={cond.attribute}
-                            onChange={(val) => { const n = [...wtConditions]; n[i].attribute = val; setWtConditions(n); }}
-                            placeholder="Select Attribute..."
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Operator</label>
-                          <SearchableSelect
-                            options={[
-                              { label: "Greater than", value: ">" },
-                              { label: "Less than", value: "<" },
-                              { label: "Equal to", value: "==" },
-                              { label: "Not equal to", value: "!=" }
-                            ]}
-                            value={cond.operator}
-                            onChange={(val) => { const n = [...wtConditions]; n[i].operator = val; setWtConditions(n); }}
-                            placeholder="Select Operator..."
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Value</label>
-                          <Input
-                            type={selectedAttrInfo?.type === 'number' ? 'number' : 'text'}
-                            className="h-8 text-xs"
-                            value={cond.value}
-                            onChange={(e) => { const n = [...wtConditions]; n[i].value = e.target.value; setWtConditions(n); }}
-                          />
-                        </div>
-                      </div>
+            <div className="relative space-y-6">
+              {wtGroups.map((group, groupIdx) => (
+                <div key={group.id} className="bg-card border border-border p-5 rounded-2xl shadow-sm space-y-4 relative">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-5 w-1.5 bg-amber-500 rounded-full"></div>
+                      <h3 className="text-base font-black text-foreground">{groupIdx === 0 ? "When..." : "Or when..."}</h3>
                     </div>
-                  );
-                })}
+                    {groupIdx > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setWtGroups(g => g.filter(x => x.id !== group.id))}
+                        className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1 font-semibold"
+                      >
+                        <X className="h-3.5 w-3.5" /> Remove Group
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    {group.conditions.map((cond: any, condIdx: number) => {
+                      const selectedAsset = assets.find(a => a.id === cond.assetId);
+                      const attrOptions = getAssetAttributes(selectedAsset).map(a => ({ label: a.name, value: a.name }));
+                      const selectedAttrInfo = getAssetAttributes(selectedAsset).find(a => a.name === cond.attribute);
+
+                      return (
+                        <div key={cond.id} className="border-l-2 border-border pl-4 ml-1 relative group">
+                          {condIdx > 0 && (
+                            <div className="absolute -top-3.5 left-[-11px] bg-background text-amber-500 border border-border text-[9px] font-black px-1.5 py-0.5 rounded-full z-10">
+                              AND
+                            </div>
+                          )}
+                          {group.conditions.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ng = [...wtGroups];
+                                ng[groupIdx].conditions = ng[groupIdx].conditions.filter((x: any) => x.id !== cond.id);
+                                setWtGroups(ng);
+                              }}
+                              className="absolute top-0 right-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-6">
+                            <div>
+                              <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Asset</label>
+                              <SearchableSelect
+                                options={assetOptions}
+                                value={cond.assetId}
+                                onChange={(val) => {
+                                  const ng = [...wtGroups];
+                                  ng[groupIdx].conditions[condIdx].assetId = val;
+                                  ng[groupIdx].conditions[condIdx].attribute = '';
+                                  setWtGroups(ng);
+                                }}
+                                placeholder="Select Asset..."
+                                alwaysSearchable={true}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Attribute</label>
+                              <SearchableSelect
+                                options={attrOptions}
+                                value={cond.attribute}
+                                onChange={(val) => {
+                                  const ng = [...wtGroups];
+                                  ng[groupIdx].conditions[condIdx].attribute = val;
+                                  setWtGroups(ng);
+                                }}
+                                placeholder="Select Attribute..."
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Operator</label>
+                              <SearchableSelect
+                                options={[
+                                  { label: "Greater than", value: ">" },
+                                  { label: "Less than", value: "<" },
+                                  { label: "Equal to", value: "==" },
+                                  { label: "Not equal to", value: "!=" }
+                                ]}
+                                value={cond.operator}
+                                onChange={(val) => {
+                                  const ng = [...wtGroups];
+                                  ng[groupIdx].conditions[condIdx].operator = val;
+                                  setWtGroups(ng);
+                                }}
+                                placeholder="Select Operator..."
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Value</label>
+                              <Input
+                                type={selectedAttrInfo?.type === 'number' ? 'number' : 'text'}
+                                className="h-8 text-xs"
+                                placeholder="Enter value..."
+                                value={cond.value}
+                                onChange={(e) => {
+                                  const ng = [...wtGroups];
+                                  ng[groupIdx].conditions[condIdx].value = e.target.value;
+                                  setWtGroups(ng);
+                                }}
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Duration (min)</label>
+                              <Input
+                                type="number"
+                                min="0"
+                                className="h-8 text-xs bg-background"
+                                placeholder="Duration (min)..."
+                                value={cond.durationMinutes || ''}
+                                onChange={(e) => {
+                                  const ng = [...wtGroups];
+                                  ng[groupIdx].conditions[condIdx].durationMinutes = Math.max(0, parseInt(e.target.value) || 0);
+                                  setWtGroups(ng);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const ng = [...wtGroups];
+                      ng[groupIdx].conditions.push({ id: Date.now().toString(), assetId: '', attribute: '', operator: '>', value: '', durationMinutes: 0 });
+                      setWtGroups(ng);
+                    }}
+                    variant="ghost"
+                    className="mt-2 text-xs font-bold text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> ADD ATTRIBUTE
+                  </Button>
+                </div>
+              ))}
+
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setWtGroups([
+                      ...wtGroups,
+                      {
+                        id: Date.now().toString(),
+                        conditions: [{ id: Date.now().toString(), assetId: '', attribute: '', operator: '>', value: '', durationMinutes: 0 }]
+                      }
+                    ]);
+                  }}
+                  variant="outline"
+                  className="w-full border-dashed border-border text-xs font-bold text-muted-foreground hover:text-amber-500 hover:border-amber-500/50 py-3"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> ADD CONDITION (OR WHEN)
+                </Button>
               </div>
-              <Button onClick={() => setWtConditions([...wtConditions, { id: Date.now().toString(), assetId: '', attribute: '', operator: '>', value: '' }])} variant="ghost" className="mt-6 text-xs font-bold text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 ml-2">
-                <Plus className="h-3.5 w-3.5 mr-1" /> ADD CONDITION
-              </Button>
+
+              <div className="flex items-center gap-2 bg-secondary/40 p-3 rounded-xl border border-border/80">
+                <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">Global Rule Cooldown:</span>
+                <Input
+                  type="number"
+                  min="0"
+                  max="1440"
+                  value={wtGlobalCooldown}
+                  onChange={(e) => setWtGlobalCooldown(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="h-7 w-16 text-xs font-bold text-center bg-background border-border"
+                />
+                <span className="text-[10px] font-medium text-muted-foreground">minutes</span>
+              </div>
             </div>
 
             {/* THEN Panel */}
             <div className="relative">
-              <div className="flex items-center gap-2 mb-4 justify-between">
+              <div className="flex items-center gap-2 mb-4 justify-between bg-card border border-border p-3 rounded-xl">
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-1.5 bg-blue-500 rounded-full"></div>
                   <h3 className="text-lg font-black text-foreground">Then...</h3>
                 </div>
-                <span className="text-[10px] text-muted-foreground font-bold tracking-wider">ALWAYS</span>
+                <div className="w-44">
+                  <SearchableSelect
+                    options={[
+                      { label: "ALWAYS", value: "ALWAYS" },
+                      { label: "ONCE", value: "ONCE" },
+                      { label: "ONCE PER MINUTE", value: "ONCE_PER_MINUTE" },
+                      { label: "ONCE PER HOUR", value: "ONCE_PER_HOUR" },
+                      { label: "ONCE PER DAY", value: "ONCE_PER_DAY" },
+                      { label: "ONCE PER WEEK", value: "ONCE_PER_WEEK" }
+                    ]}
+                    value={wtThenFrequency}
+                    onChange={(val) => setWtThenFrequency(val)}
+                    placeholder="Frequency..."
+                  />
+                </div>
               </div>
-
               <div className="space-y-4">
                 {wtActions.map((act, i) => {
                   const targetAsset = assets.find(a => a.id === act.assetId);
