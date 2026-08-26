@@ -373,8 +373,8 @@ export class RulesEngineService {
     if (!rule.ruleConfig) return;
     let config: {
       activeMode?: 'ALWAYS' | 'SPECIFIC_PERIOD' | 'DAILY_PERIOD';
-      specificPeriod?: { startDate?: string; endDate?: string };
-      dailyPeriod?: { startTime?: string; endTime?: string };
+      specificPeriod?: { allDays?: boolean; startDate?: string; endDate?: string };
+      dailyPeriod?: { startTime?: string; endTime?: string; activeDays?: string[]; repetitionEnds?: string; repetitionEndDate?: string };
       thenFrequency?: string;
       cooldownMinutes?: number;
       groups?: any[];
@@ -406,18 +406,45 @@ export class RulesEngineService {
     const now = new Date();
 
     if (activeMode === 'SPECIFIC_PERIOD') {
-      const startDate = config.specificPeriod?.startDate ? new Date(config.specificPeriod.startDate) : null;
-      const endDate = config.specificPeriod?.endDate ? new Date(config.specificPeriod.endDate) : null;
+      const allDays = !!config.specificPeriod?.allDays;
+      const rawStart = config.specificPeriod?.startDate;
+      const rawEnd = config.specificPeriod?.endDate;
 
-      if (startDate && !isNaN(startDate.getTime()) && now < startDate) {
-        this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: start date not reached.`);
-        return;
+      if (rawStart) {
+        const startDate = new Date(allDays && !rawStart.includes('T') ? `${rawStart}T00:00:00` : rawStart);
+        if (!isNaN(startDate.getTime()) && now < startDate) {
+          this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: specific start date/time not reached.`);
+          return;
+        }
       }
-      if (endDate && !isNaN(endDate.getTime()) && now > endDate) {
-        this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: end date passed.`);
-        return;
+      if (rawEnd) {
+        const endDate = new Date(allDays && !rawEnd.includes('T') ? `${rawEnd}T23:59:59` : rawEnd);
+        if (!isNaN(endDate.getTime()) && now > endDate) {
+          this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: specific end date/time passed.`);
+          return;
+        }
       }
     } else if (activeMode === 'DAILY_PERIOD') {
+      // 1. Check repetition end date if ON_DATE
+      if (config.dailyPeriod?.repetitionEnds === 'ON_DATE' && config.dailyPeriod?.repetitionEndDate) {
+        const repEnd = new Date(`${config.dailyPeriod.repetitionEndDate}T23:59:59`);
+        if (!isNaN(repEnd.getTime()) && now > repEnd) {
+          this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: daily repetition ended on ${config.dailyPeriod.repetitionEndDate}.`);
+          return;
+        }
+      }
+
+      // 2. Check active days of week
+      const dayCodes = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const todayCode = dayCodes[now.getDay()];
+      const activeDays = config.dailyPeriod?.activeDays || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+      if (!activeDays.includes(todayCode)) {
+        this.logger.log(`[SCHEDULE] Rule "${rule.name}" (${rule.id}) skipped: today (${todayCode}) is not an active day.`);
+        return;
+      }
+
+      // 3. Check daily start/end time
       const startTimeStr = config.dailyPeriod?.startTime;
       const endTimeStr = config.dailyPeriod?.endTime;
 
