@@ -11,7 +11,7 @@ import {
   ShieldAlert, Plus, Trash2, Save, X, ToggleLeft, ToggleRight,
   Settings, ClipboardList, ChevronDown, Search, Copy,
   Building, Map as MapIcon, Monitor, DoorClosed, Car, Battery, Zap, Plug, Box, Activity,
-  Download, Filter, Calculator, BellRing, Mail, Send, Clock
+  Download, Filter, Calculator, BellRing, Mail, Send, Clock, Lightbulb
 } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 import ReactFlow, {
@@ -89,25 +89,33 @@ const CustomNode = ({ data }: any) => {
 
   // 2. ATTRIBUTE VALUE NODE (Matching Gambar 2 Layout)
   if (data.type === 'input_attribute' || data.type === 'trigger_telemetry') {
-    const assetName = data.assetName || (data.assetId === 'ANY' ? 'Any Asset' : 'Selected Asset');
-    const attrName = data.attributeName || 'Value';
+    const assetName = data.assetName || (data.assetId === 'ANY' ? 'Any Asset' : 'Select Asset');
+    const attrName = data.attributeName || 'Select Attribute';
+    
+    let AssetIcon = Zap;
+    const nameLower = assetName.toLowerCase();
+    if (nameLower.includes('lampu') || nameLower.includes('light')) AssetIcon = Lightbulb;
+    else if (nameLower.includes('mobil') || nameLower.includes('car')) AssetIcon = Car;
+    else if (nameLower.includes('door') || nameLower.includes('pintu')) AssetIcon = DoorClosed;
+    else if (nameLower.includes('building') || nameLower.includes('gedung')) AssetIcon = Building;
 
     return (
       <div className="min-w-[190px] bg-card border border-border shadow-xl rounded-lg overflow-hidden relative">
-        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide">
+        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center">
           Attribute value
         </div>
-        <div className="p-2.5 bg-secondary/20 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-rose-500/20 text-rose-500 flex items-center justify-center shrink-0">
-              <Zap className="w-3.5 h-3.5" />
+        <div className="p-2.5 bg-secondary/10 flex items-center gap-2">
+          {/* THE BUTTON */}
+          <div className="flex-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md p-1.5 flex items-center gap-2 cursor-pointer shadow-sm pointer-events-none">
+            <div className="w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-500 flex items-center justify-center shrink-0">
+              <AssetIcon className="w-3 h-3" />
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-foreground leading-none">{assetName}</span>
-              <span className="text-[10px] font-semibold text-muted-foreground mt-0.5">{attrName}</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 truncate max-w-[90px]">{assetName}</span>
+              <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[90px]">{attrName}</span>
             </div>
           </div>
-          <span className="text-[10px] font-bold text-muted-foreground">Value</span>
+          <span className="text-[10px] font-bold text-muted-foreground shrink-0 ml-1">Value</span>
         </div>
         <Handle
           type="source"
@@ -518,10 +526,17 @@ export default function RulesPage() {
     if (rule.ruleType === 'WHEN_THEN') {
       try {
         const config = JSON.parse(rule.ruleConfig || '{}');
+        const normalizeGroups = (groupsList: any[]) => groupsList.map((g: any) => ({
+          ...g,
+          conditions: (g.conditions || []).map((c: any) => ({
+            ...c,
+            enableDuration: c.enableDuration !== undefined ? c.enableDuration : (Number(c.durationMinutes) > 0)
+          }))
+        }));
         if (config.groups && Array.isArray(config.groups)) {
-          setWtGroups(config.groups);
+          setWtGroups(normalizeGroups(config.groups));
         } else if (config.conditions && Array.isArray(config.conditions)) {
-          setWtGroups([{ id: 'group-default', conditions: config.conditions }]);
+          setWtGroups(normalizeGroups([{ id: 'group-default', conditions: config.conditions }]));
         } else {
           setWtGroups([{ id: Date.now().toString(), conditions: [{ id: Date.now().toString(), assetId: '', attribute: '', operator: '>', value: '', durationMinutes: 0 }] }]);
         }
@@ -1021,7 +1036,13 @@ export default function RulesPage() {
                   <div className="space-y-4">
                     {group.conditions.map((cond: any, condIdx: number) => {
                       const selectedAsset = assets.find(a => a.id === cond.assetId);
-                      const attrOptions = getAssetAttributes(selectedAsset).map(a => ({ label: a.name, value: a.name }));
+                      const attrOptions = [
+                              ...getAssetAttributes(selectedAsset).map(a => ({ label: `Telemetry: ${a.name}`, value: a.name })),
+                              { label: 'Geofence Event: Enter', value: 'GEOFENCE_ENTER' },
+                              { label: 'Geofence Event: Exit', value: 'GEOFENCE_EXIT' },
+                              { label: 'Geofence Event: Any', value: 'GEOFENCE_ANY' }
+                            ];
+                            const isGeofence = cond.attribute?.startsWith('GEOFENCE_');
                       const selectedAttrInfo = getAssetAttributes(selectedAsset).find(a => a.name === cond.attribute);
 
                       return (
@@ -1074,52 +1095,91 @@ export default function RulesPage() {
                                 placeholder="Select Attribute..."
                               />
                             </div>
-                            <div>
-                              <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Operator</label>
-                              <SearchableSelect
-                                options={[
-                                  { label: "Greater than", value: ">" },
-                                  { label: "Less than", value: "<" },
-                                  { label: "Equal to", value: "==" },
-                                  { label: "Not equal to", value: "!=" }
-                                ]}
-                                value={cond.operator}
-                                onChange={(val) => {
-                                  const ng = [...wtGroups];
-                                  ng[groupIdx].conditions[condIdx].operator = val;
-                                  setWtGroups(ng);
-                                }}
-                                placeholder="Select Operator..."
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Value</label>
-                              <Input
-                                type={selectedAttrInfo?.type === 'number' ? 'number' : 'text'}
-                                className="h-8 text-xs"
-                                placeholder="Enter value..."
-                                value={cond.value}
-                                onChange={(e) => {
-                                  const ng = [...wtGroups];
-                                  ng[groupIdx].conditions[condIdx].value = e.target.value;
-                                  setWtGroups(ng);
-                                }}
-                              />
-                            </div>
-                            <div className="sm:col-span-2">
-                              <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Duration (min)</label>
-                              <Input
-                                type="number"
-                                min="0"
-                                className="h-8 text-xs bg-background"
-                                placeholder="Duration (min)..."
-                                value={cond.durationMinutes || ''}
-                                onChange={(e) => {
-                                  const ng = [...wtGroups];
-                                  ng[groupIdx].conditions[condIdx].durationMinutes = Math.max(0, parseInt(e.target.value) || 0);
-                                  setWtGroups(ng);
-                                }}
-                              />
+                            {isGeofence ? (
+                              <div className="sm:col-span-2">
+                                <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Select Geofence</label>
+                                <SearchableSelect
+                                  options={[{ label: 'Any Geofence', value: 'ANY' }, ...geofenceOptions]}
+                                  value={cond.value || 'ANY'}
+                                  onChange={(val) => {
+                                    const ng = [...wtGroups];
+                                    ng[groupIdx].conditions[condIdx].value = val;
+                                    ng[groupIdx].conditions[condIdx].operator = '==';
+                                    setWtGroups(ng);
+                                  }}
+                                  placeholder="Select Geofence..."
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <div>
+                                  <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Operator</label>
+                                  <SearchableSelect
+                                    options={[
+                                      { label: "Greater than", value: ">" },
+                                      { label: "Less than", value: "<" },
+                                      { label: "Equal to", value: "==" },
+                                      { label: "Not equal to", value: "!=" }
+                                    ]}
+                                    value={cond.operator}
+                                    onChange={(val) => {
+                                      const ng = [...wtGroups];
+                                      ng[groupIdx].conditions[condIdx].operator = val;
+                                      setWtGroups(ng);
+                                    }}
+                                    placeholder="Select Operator..."
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Value</label>
+                                  <Input
+                                    type={selectedAttrInfo?.type === 'number' ? 'number' : 'text'}
+                                    className="h-8 text-xs bg-background"
+                                    placeholder="Enter value..."
+                                    value={cond.value}
+                                    onChange={(e) => {
+                                      const ng = [...wtGroups];
+                                      ng[groupIdx].conditions[condIdx].value = e.target.value;
+                                      setWtGroups(ng);
+                                    }}
+                                  />
+                                </div>
+                              </>
+                            )}
+                            <div className="sm:col-span-2 pt-1 border-t border-border/40 mt-1">
+                              <label className="text-[10px] font-bold text-muted-foreground flex items-center gap-1.5 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={cond.enableDuration ?? (Number(cond.durationMinutes) > 0)}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    const ng = [...wtGroups];
+                                    ng[groupIdx].conditions[condIdx].enableDuration = checked;
+                                    if (!checked) {
+                                      ng[groupIdx].conditions[condIdx].durationMinutes = 0;
+                                    }
+                                    setWtGroups(ng);
+                                  }}
+                                  className="rounded border-gray-300 text-amber-500 focus:ring-amber-500 h-3.5 w-3.5 cursor-pointer"
+                                />
+                                <span>Set Duration Filter (min)</span>
+                              </label>
+                              {(cond.enableDuration ?? (Number(cond.durationMinutes) > 0)) && (
+                                <div className="mt-1.5">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    className="h-8 text-xs bg-background"
+                                    placeholder="Duration in minutes (e.g. 5)..."
+                                    value={cond.durationMinutes || ''}
+                                    onChange={(e) => {
+                                      const ng = [...wtGroups];
+                                      ng[groupIdx].conditions[condIdx].durationMinutes = Math.max(0, parseInt(e.target.value) || 0);
+                                      setWtGroups(ng);
+                                    }}
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1380,16 +1440,22 @@ export default function RulesPage() {
             </ReactFlow>
           </div>
 
-          {/* FLOW PROPERTIES PANEL */}
+          {/* NODE CONFIG POPUP MODAL */}
           {selectedNode && (
-            <Card className="w-full lg:w-80 border-border shadow-md rounded-2xl flex flex-col lg:shrink-0 absolute lg:relative z-30 bottom-0 lg:bottom-auto max-h-[50%] lg:max-h-full">
-              <CardHeader className="py-3 border-b border-border flex flex-row items-center justify-between">
-                <CardTitle className="text-xs font-bold text-foreground">Node Config</CardTitle>
-                <Button size="sm" variant="ghost" className="h-6 text-red-500 hover:text-red-600 font-bold p-1" onClick={deleteSelectedNode}>
-                  Delete Node
-                </Button>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4 overflow-y-auto flex-1 text-xs bg-card">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <Card className="w-full max-w-sm border-border shadow-2xl rounded-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+                <CardHeader className="py-3 px-4 border-b border-border flex flex-row items-center justify-between sticky top-0 bg-card z-10 rounded-t-2xl">
+                  <CardTitle className="text-sm font-bold text-foreground">Node Config</CardTitle>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10 font-bold" onClick={deleteSelectedNode}>
+                      Delete
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/80" onClick={() => setSelectedNode(null)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4 overflow-y-auto flex-1 text-xs bg-card">
                 <div className="space-y-3">
                   <div className="p-2.5 rounded-xl bg-secondary/35 border border-border font-bold text-[10px] uppercase text-center text-foreground">
                     {selectedNode.data.label || selectedNode.id}
@@ -1403,7 +1469,11 @@ export default function RulesPage() {
                         <SearchableSelect
                           options={[{ label: "Any Assets", value: "ANY" }, ...assetOptions]}
                           value={selectedNode.data.assetId || 'ANY'}
-                          onChange={(val) => updateNodeData(selectedNode.id, 'assetId', val)}
+                          onChange={(val) => {
+                            updateNodeData(selectedNode.id, 'assetId', val);
+                            const asset = assets.find(a => a.id === val);
+                            updateNodeData(selectedNode.id, 'assetName', asset?.name || (val === 'ANY' ? 'Any Asset' : 'Select Asset'));
+                          }}
                           alwaysSearchable={true}
                         />
                       </div>
@@ -1442,7 +1512,11 @@ export default function RulesPage() {
                         <SearchableSelect
                           options={[{ label: "Any Assets", value: "ANY" }, ...assetOptions]}
                           value={selectedNode.data.assetId}
-                          onChange={(val) => updateNodeData(selectedNode.id, 'assetId', val)}
+                          onChange={(val) => {
+                            updateNodeData(selectedNode.id, 'assetId', val);
+                            const asset = assets.find(a => a.id === val);
+                            updateNodeData(selectedNode.id, 'assetName', asset?.name || (val === 'ANY' ? 'Any Asset' : 'Select Asset'));
+                          }}
                           alwaysSearchable={true}
                         />
                       </div>
@@ -1604,7 +1678,8 @@ export default function RulesPage() {
                   )}
                 </div>
               </CardContent>
-            </Card>
+              </Card>
+            </div>
           )}
         </div>
       )}
