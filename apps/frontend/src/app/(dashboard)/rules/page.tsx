@@ -11,7 +11,7 @@ import {
   ShieldAlert, Plus, Trash2, Save, X, ToggleLeft, ToggleRight,
   Settings, ClipboardList, ChevronDown, ChevronRight, Search, Copy,
   Building, Map as MapIcon, Monitor, DoorClosed, Car, Battery, Zap, Plug, Box, Activity,
-  Download, Filter, Calculator, BellRing, Mail, Send, Clock, Lightbulb, SlidersHorizontal
+  Download, Filter, Calculator, BellRing, Mail, Send, Clock, Lightbulb, SlidersHorizontal, Undo2
 } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 import ReactFlow, {
@@ -418,8 +418,8 @@ export default function RulesPage() {
 
   // History Stack for Undo (CTRL + Z)
   const [history, setHistory] = useState<{ nodes: Node[]; edges: Edge[] }[]>([]);
-  // Clipboard for Copy/Paste (CTRL + C / CTRL + V)
-  const [clipboard, setClipboard] = useState<Node[]>([]);
+  // Clipboard for Copy/Paste (CTRL + C / CTRL + V) with connected edges
+  const [clipboard, setClipboard] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
 
   const pushHistory = useCallback(() => {
     setHistory((prev) => {
@@ -442,19 +442,28 @@ export default function RulesPage() {
   const handleCopy = useCallback(() => {
     const selectedNodes = nodes.filter(n => n.selected || n.id === selectedNodeId);
     if (selectedNodes.length > 0) {
-      setClipboard(selectedNodes);
+      const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
+      const connectedEdges = edges.filter(e => selectedNodeIds.has(e.source) && selectedNodeIds.has(e.target));
+      setClipboard({ nodes: selectedNodes, edges: connectedEdges });
     }
-  }, [nodes, selectedNodeId]);
+  }, [nodes, edges, selectedNodeId]);
 
   const handlePaste = useCallback(() => {
-    if (clipboard.length === 0) return;
+    if (!clipboard || clipboard.nodes.length === 0) return;
     pushHistory();
 
     const newNodes: Node[] = [];
+    const newEdges: Edge[] = [];
     const now = Date.now();
+    const idMap = new Map<string, string>();
 
-    clipboard.forEach((nodeToCopy, index) => {
+    clipboard.nodes.forEach((nodeToCopy, index) => {
       const newId = `node_${now}_${index}`;
+      idMap.set(nodeToCopy.id, newId);
+
+      const rawLabel = nodeToCopy.data.label || 'Node';
+      const cleanLabel = rawLabel.replace(/\s*\(Copy\)/g, '');
+
       const newNode: Node = {
         ...nodeToCopy,
         id: newId,
@@ -465,10 +474,27 @@ export default function RulesPage() {
         },
         data: {
           ...nodeToCopy.data,
-          label: `${nodeToCopy.data.label || 'Node'} (Copy)`,
+          label: `${cleanLabel} (Copy)`,
         }
       };
       newNodes.push(newNode);
+    });
+
+    clipboard.edges.forEach((edgeToCopy, index) => {
+      const newSourceId = idMap.get(edgeToCopy.source);
+      const newTargetId = idMap.get(edgeToCopy.target);
+
+      if (newSourceId && newTargetId) {
+        const newEdgeId = `reactflow__edge-${newSourceId}${edgeToCopy.sourceHandle || ''}-${newTargetId}${edgeToCopy.targetHandle || ''}_${now}_${index}`;
+        const newEdge: Edge = {
+          ...edgeToCopy,
+          id: newEdgeId,
+          source: newSourceId,
+          target: newTargetId,
+          selected: false,
+        };
+        newEdges.push(newEdge);
+      }
     });
 
     setNodes((prev) => [
@@ -476,10 +502,15 @@ export default function RulesPage() {
       ...newNodes
     ]);
 
+    setEdges((prev) => [
+      ...prev,
+      ...newEdges
+    ]);
+
     if (newNodes.length === 1) {
       setSelectedNodeId(newNodes[0].id);
     }
-  }, [clipboard, setNodes, pushHistory]);
+  }, [clipboard, setNodes, setEdges, pushHistory]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -934,6 +965,16 @@ export default function RulesPage() {
           <div className="flex gap-2 w-full md:w-auto">
             <Button onClick={() => setActiveTab('list')} variant="outline" className="flex-1 md:flex-none text-xs font-bold cursor-pointer h-8 rounded-xl">
               <X className="h-4 w-4 mr-1" /> Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleUndo}
+              disabled={history.length === 0}
+              variant="outline"
+              className="flex-1 md:flex-none text-xs font-bold cursor-pointer h-8 rounded-xl disabled:opacity-40 transition-colors"
+              title="Undo canvas change (Ctrl + Z)"
+            >
+              <Undo2 className="h-3.5 w-3.5 mr-1" /> Undo
             </Button>
             {isAdmin && (
               <Button onClick={handleSaveRule} className="flex-1 md:flex-none text-xs font-bold cursor-pointer h-8 rounded-xl bg-primary">
