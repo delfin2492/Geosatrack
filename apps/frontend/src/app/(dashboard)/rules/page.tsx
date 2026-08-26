@@ -11,7 +11,7 @@ import {
   ShieldAlert, Plus, Trash2, Save, X, ToggleLeft, ToggleRight,
   Settings, ClipboardList, ChevronDown, Search, Copy,
   Building, Map as MapIcon, Monitor, DoorClosed, Car, Battery, Zap, Plug, Box, Activity,
-  Download, Filter, Calculator, BellRing, Mail, Send, Clock, Lightbulb
+  Download, Filter, Calculator, BellRing, Mail, Send, Clock, Lightbulb, SlidersHorizontal
 } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 import ReactFlow, {
@@ -31,7 +31,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-const CustomNode = ({ data }: any) => {
+const CustomNode = ({ data, id }: any) => {
   const isProcessor = data.type.startsWith('math_') || data.type.startsWith('logic_') || data.type === 'process_math' || data.type === 'logic_filter';
   const isInput = data.type.startsWith('trigger_') || data.type === 'input_attribute';
 
@@ -87,9 +87,9 @@ const CustomNode = ({ data }: any) => {
     );
   }
 
-  // 2. ATTRIBUTE VALUE NODE (Matching Gambar 2 Layout)
+  // 2. ATTRIBUTE VALUE NODE (Interactive Button UI matching Select Attributes image)
   if (data.type === 'input_attribute' || data.type === 'trigger_telemetry') {
-    const assetName = data.assetName || (data.assetId === 'ANY' ? 'Any Asset' : 'Select Asset');
+    const assetName = data.assetName || (data.assetId && data.assetId !== 'ANY' ? data.assetId : 'Select Asset');
     const attrName = data.attributeName || 'Select Attribute';
     
     let AssetIcon = Zap;
@@ -101,20 +101,29 @@ const CustomNode = ({ data }: any) => {
 
     return (
       <div className="min-w-[190px] bg-card border border-border shadow-xl rounded-lg overflow-hidden relative">
-        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center">
+        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none">
           Attribute value
         </div>
         <div className="p-2.5 bg-secondary/10 flex items-center gap-2">
-          {/* THE BUTTON */}
-          <div className="flex-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-md p-1.5 flex items-center gap-2 cursor-pointer shadow-sm pointer-events-none">
-            <div className="w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-500 flex items-center justify-center shrink-0">
+          {/* INTERACTIVE CLICKABLE ASSET SELECTOR BUTTON */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (data.onOpenPicker) {
+                data.onOpenPicker(id, data);
+              }
+            }}
+            className="flex-1 bg-white dark:bg-zinc-800 hover:bg-amber-50/70 dark:hover:bg-amber-950/40 border border-gray-300 dark:border-zinc-700 hover:border-amber-500 rounded-md p-1.5 flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all active:scale-[0.98] text-left group/btn"
+          >
+            <div className="w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-500 flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform">
               <AssetIcon className="w-3 h-3" />
             </div>
-            <div className="flex flex-col leading-tight">
-              <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 truncate max-w-[90px]">{assetName}</span>
-              <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[90px]">{attrName}</span>
+            <div className="flex flex-col leading-tight overflow-hidden">
+              <span className="text-[10px] font-bold text-gray-800 dark:text-gray-200 truncate max-w-[95px]">{assetName}</span>
+              <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[95px]">{attrName}</span>
             </div>
-          </div>
+          </button>
           <span className="text-[10px] font-bold text-muted-foreground shrink-0 ml-1">Value</span>
         </div>
         <Handle
@@ -330,6 +339,19 @@ export default function RulesPage() {
   const [loading, setLoading] = useState(false);
   const [deleteTargetRule, setDeleteTargetRule] = useState<{ id: string; name: string } | null>(null);
   const [alertModal, setAlertModal] = useState<{ title?: string; message: string; variant?: 'danger' | 'warning' | 'info' } | null>(null);
+
+  // State for Image-matching "Select attributes" Modal
+  const [attrPickerNode, setAttrPickerNode] = useState<{ id: string; data: any } | null>(null);
+  const [pickerSelectedAssetId, setPickerSelectedAssetId] = useState<string>('');
+  const [pickerSelectedAttribute, setPickerSelectedAttribute] = useState<string>('');
+  const [assetSearchFilter, setAssetSearchFilter] = useState<string>('');
+
+  const handleOpenAttributePicker = (nodeId: string, nodeData: any) => {
+    setAttrPickerNode({ id: nodeId, data: nodeData });
+    const initialAssetId = nodeData.assetId && nodeData.assetId !== 'ANY' ? nodeData.assetId : (assets[0]?.id || '');
+    setPickerSelectedAssetId(initialAssetId);
+    setPickerSelectedAttribute(nodeData.attributeName || '');
+  };
   const [activeTab, setActiveTab] = useState<'list' | 'editor_flow' | 'editor_whenthen'>('list');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -1422,13 +1444,19 @@ export default function RulesPage() {
 
           <div className="flex-1 border border-border rounded-2xl overflow-hidden shadow-2xl relative bg-background">
             <ReactFlow
-              nodes={nodes}
+              nodes={nodes.map(n => ({
+                ...n,
+                data: {
+                  ...n.data,
+                  onOpenPicker: (id: string, data: any) => handleOpenAttributePicker(id, data)
+                }
+              }))}
               edges={edges}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
-              onNodeClick={(_, node) => setSelectedNode(node)}
+              onNodeClick={(_, node) => { if (node.type !== 'input_attribute' && node.type !== 'trigger_telemetry') setSelectedNode(node); }}
               onInit={setReactFlowInstance}
               onDrop={onDrop}
               onDragOver={onDragOver}
@@ -1709,6 +1737,164 @@ export default function RulesPage() {
         onConfirm={() => setAlertModal(null)}
         onCancel={() => setAlertModal(null)}
       />
+
+      {/* SELECT ATTRIBUTES MODAL (MATCHING IMAGE 3 EXACTLY) */}
+      {attrPickerNode && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setAttrPickerNode(null)}>
+          <div className="w-full max-w-2xl bg-card border border-border shadow-2xl rounded-lg overflow-hidden flex flex-col h-[520px] animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            
+            {/* HEADER */}
+            <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
+              <h3 className="text-base font-semibold text-foreground">Select attributes</h3>
+              <button onClick={() => setAttrPickerNode(null)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* TWO COLUMN CONTENT */}
+            <div className="flex-1 flex overflow-hidden">
+              
+              {/* LEFT COLUMN: ASSETS SELECTION */}
+              <div className="w-5/12 border-r border-border bg-secondary/10 flex flex-col">
+                {/* Yellow Amber Header */}
+                <div className="bg-amber-500 text-white px-3.5 py-2.5 flex items-center justify-between font-bold text-xs shadow-sm">
+                  <span>Assets</span>
+                  <div className="flex items-center gap-2.5">
+                    <X className="w-3.5 h-3.5 cursor-pointer hover:opacity-80" onClick={() => setAssetSearchFilter('')} />
+                    <Filter className="w-3.5 h-3.5 cursor-pointer hover:opacity-80" />
+                  </div>
+                </div>
+
+                {/* Filter Search Input */}
+                <div className="p-2.5 border-b border-border bg-card">
+                  <div className="relative flex items-center">
+                    <Input
+                      type="text"
+                      placeholder="Filter..."
+                      value={assetSearchFilter}
+                      onChange={(e) => setAssetSearchFilter(e.target.value)}
+                      className="h-8 text-xs bg-secondary/35 pr-8 rounded-md border-border"
+                    />
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Asset List */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-1 text-xs">
+                  {assets
+                    .filter(a => a.name.toLowerCase().includes(assetSearchFilter.toLowerCase()))
+                    .map(a => {
+                      const isSelected = pickerSelectedAssetId === a.id;
+                      const IconComp = getAssetIcon(a.type);
+                      return (
+                        <div
+                          key={a.id}
+                          onClick={() => {
+                            setPickerSelectedAssetId(a.id);
+                            const attrs = getAssetAttributes(a);
+                            if (!attrs.find(x => x.name === pickerSelectedAttribute)) {
+                              setPickerSelectedAttribute(attrs[0]?.name || '');
+                            }
+                          }}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-md cursor-pointer transition-all border-l-4 ${
+                            isSelected
+                              ? 'bg-secondary border-amber-500 font-bold text-foreground shadow-sm'
+                              : 'border-transparent hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          <IconComp className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-500' : 'text-muted-foreground'}`} />
+                          <span className="truncate">{a.name}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: ATTRIBUTES LIST */}
+              <div className="w-7/12 bg-card flex flex-col">
+                {/* Header Bar */}
+                <div className="bg-secondary/35 px-4 py-2.5 border-b border-border font-bold text-xs text-muted-foreground">
+                  Attributes
+                </div>
+
+                {/* Attributes List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-1 text-xs">
+                  {(() => {
+                    const selectedAsset = assets.find(a => a.id === pickerSelectedAssetId);
+                    let attributes = getAssetAttributes(selectedAsset);
+                    
+                    // Standard telemetry attributes list matching user image
+                    const standardAttrs = ['Brightness', 'Colour RGB', 'Current (A)', 'OFF/ON', 'Power (W)', 'Voltage (V)'];
+                    standardAttrs.forEach(sa => {
+                      if (!attributes.find(a => a.name.toLowerCase() === sa.toLowerCase())) {
+                        attributes.push({ name: sa, type: 'string' });
+                      }
+                    });
+
+                    return attributes.map(attr => {
+                      const isSelected = pickerSelectedAttribute === attr.name;
+                      return (
+                        <div
+                          key={attr.name}
+                          onClick={() => setPickerSelectedAttribute(attr.name)}
+                          className={`px-3 py-2.5 rounded-md cursor-pointer transition-all flex items-center justify-between ${
+                            isSelected
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30'
+                              : 'hover:bg-secondary/60 text-foreground'
+                          }`}
+                        >
+                          <span>{attr.name}</span>
+                          {isSelected && <span className="text-amber-500 text-xs font-bold">✓</span>}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+            </div>
+
+            {/* FOOTER */}
+            <div className="px-5 py-3 border-t border-border bg-card flex items-center justify-end gap-5">
+              <button
+                type="button"
+                onClick={() => setAttrPickerNode(null)}
+                className="text-xs font-bold text-amber-500 hover:text-amber-600 uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                disabled={!pickerSelectedAssetId || !pickerSelectedAttribute}
+                onClick={() => {
+                  if (!attrPickerNode) return;
+                  const asset = assets.find(a => a.id === pickerSelectedAssetId);
+                  const assetName = asset?.name || 'Selected Asset';
+                  
+                  setNodes((prev) => prev.map((n) => {
+                    if (n.id === attrPickerNode.id) {
+                      const newData = {
+                        ...n.data,
+                        assetId: pickerSelectedAssetId,
+                        assetName: assetName,
+                        attributeName: pickerSelectedAttribute
+                      };
+                      return { ...n, data: newData };
+                    }
+                    return n;
+                  }));
+                  
+                  setAttrPickerNode(null);
+                }}
+                className="text-xs font-bold text-amber-500 hover:text-amber-600 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                ADD
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
