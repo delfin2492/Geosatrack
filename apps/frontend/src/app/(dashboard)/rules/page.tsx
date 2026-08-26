@@ -1536,40 +1536,7 @@ export default function RulesPage() {
                     </div>
                   )}
 
-                  {/* TELEMETRY / INPUT CONFIGURATION */}
-                  {(selectedNode.data.type === 'trigger_telemetry' || selectedNode.data.type === 'input_attribute') && (
-                    <div className="space-y-4">
-                      <div className="space-y-1.5">
-                        <label className="text-muted-foreground font-semibold text-xs">Select Asset</label>
-                        <SearchableSelect
-                          options={[{ label: "Any Assets", value: "ANY" }, ...assetOptions]}
-                          value={selectedNode.data.assetId}
-                          onChange={(val) => {
-                            updateNodeData(selectedNode.id, 'assetId', val);
-                            const asset = assets.find(a => a.id === val);
-                            updateNodeData(selectedNode.id, 'assetName', asset?.name || (val === 'ANY' ? 'Any Asset' : 'Select Asset'));
-                          }}
-                          alwaysSearchable={true}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-muted-foreground font-semibold text-xs">Attribute Name</label>
-                        {selectedNode.data.assetId === 'ANY' ? (
-                          <Input value={selectedNode.data.attributeName} onChange={(e) => updateNodeData(selectedNode.id, 'attributeName', e.target.value)} className="h-9 rounded-lg text-xs bg-background" placeholder="Type attribute manually..." />
-                        ) : (
-                          <SearchableSelect
-                            options={(() => {
-                              const asset = assets.find(a => a.id === selectedNode.data.assetId);
-                              return getAssetAttributes(asset).map(a => ({ label: a.name, value: a.name }));
-                            })()}
-                            value={selectedNode.data.attributeName}
-                            onChange={(val) => updateNodeData(selectedNode.id, 'attributeName', val)}
-                            placeholder="Select Attribute..."
-                          />
-                        )}
-                      </div>
-                    </div>
-                  )}
+
 
                   {/* ACTION ALARM CONFIGURATION */}
                   {selectedNode.data.type === 'action_alarm' && (
