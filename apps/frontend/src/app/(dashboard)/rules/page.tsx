@@ -303,7 +303,7 @@ const CustomNode = ({ data, id, selected }: any) => {
 const nodeTypes = { customNode: CustomNode };
 
 // Node Types
-type NodeType = 'trigger_geofence' | 'trigger_telemetry' | 'input_attribute' | 'input_number' | 'input_boolean' | 'input_string' | 'input_text' | 'math_add' | 'math_sub' | 'math_mul' | 'math_div' | 'math_avg' | 'math_pct' | 'logic_gt' | 'logic_lt' | 'logic_eq' | 'logic_neq' | 'logic_gte' | 'logic_lte' | 'logic_and' | 'logic_or' | 'logic_filter' | 'process_math' | 'action_attribute' | 'action_alarm' | 'action_email' | 'action_telegram';
+type NodeType = 'trigger_geofence' | 'trigger_telemetry' | 'input_attribute' | 'input_number' | 'input_boolean' | 'input_string' | 'input_text' | 'math_add' | 'math_sub' | 'math_mul' | 'math_div' | 'math_avg' | 'math_pct' | 'logic_gt' | 'logic_lt' | 'logic_eq' | 'logic_neq' | 'logic_gte' | 'logic_lte' | 'logic_and' | 'logic_or' | 'logic_filter' | 'process_math' | 'action_attribute' | 'action_alarm' | 'action_email' | 'action_telegram' | 'action_notification';
 
 interface Rule {
   id: string;
@@ -1858,9 +1858,7 @@ export default function RulesPage() {
               <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-2">Outputs / Actions</div>
               <div className="flex lg:flex-col gap-1.5">
                 <div draggable onDragStart={(e) => onDragStart(e, 'action_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">Set Attribute Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'action_alarm')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">System Alarm</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'action_email')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">Send Email</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'action_telegram')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">Telegram Bot</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'action_notification')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-bold bg-purple-600 text-white hover:bg-purple-500 shadow-sm transition-all active:scale-95">Alarm Notification</div>
               </div>
             </div>
           </div>
