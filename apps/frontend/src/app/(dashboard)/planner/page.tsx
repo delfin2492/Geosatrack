@@ -57,6 +57,9 @@ interface AnchorData {
   status: string;
   zoneId?: string | null;
   zone?: { id: string; name: string } | null;
+  updatedAt?: string | null;
+  voltage?: number | null;
+  lastSeen?: string | null;
 }
 
 interface GeofenceData {
@@ -505,8 +508,49 @@ export default function PlannerPage() {
           iconAnchor: [0, 0],
         });
 
+        const anchorStatus = anchor.status || 'offline';
+        const anchorIsOnline = anchorStatus === 'online' || anchorStatus === 'active';
+        const anchorStatusColor = anchorIsOnline ? '#22c55e' : '#64748b';
+        const anchorVoltage = (anchor as any).voltage;
+        const anchorLastSeen = (anchor as any).lastSeen || (anchor as any).updatedAt;
+        const anchorLastUpdate = anchorLastSeen
+          ? (() => {
+              const diff = Date.now() - new Date(anchorLastSeen).getTime();
+              const mins = Math.floor(diff / 60000);
+              const hrs = Math.floor(mins / 60);
+              if (hrs > 0) return hrs + 'h ' + (mins % 60) + 'm ago';
+              if (mins > 0) return mins + 'm ago';
+              return 'Just now';
+            })()
+          : 'N/A';
+
+        const anchorTooltipHtml = [
+          '<div style="font-family:sans-serif;padding:6px 8px;min-width:160px;background:#0f172a;border:1px solid #334155;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.5);">',
+            '<div style="font-weight:bold;color:#38bdf8;font-size:11px;margin-bottom:6px;border-bottom:1px solid #1e293b;padding-bottom:4px;">&#9875; ' + anchor.name + '</div>',
+            '<div style="display:flex;flex-direction:column;gap:3px;">',
+              '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
+                '<span style="color:#94a3b8;">Status</span>',
+                '<span style="color:' + anchorStatusColor + ';font-weight:bold;font-size:10px;">' + (anchorIsOnline ? '&#128994; Online' : '&#9898; ' + anchorStatus.charAt(0).toUpperCase() + anchorStatus.slice(1)) + '</span>',
+              '</div>',
+              '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
+                '<span style="color:#94a3b8;">Voltage</span>',
+                '<span style="color:#fbbf24;font-weight:bold;font-family:monospace;font-size:10px;">' + (anchorVoltage !== null && anchorVoltage !== undefined ? anchorVoltage.toFixed(2) + ' V' : 'N/A') + '</span>',
+              '</div>',
+              '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
+                '<span style="color:#94a3b8;">Last Update</span>',
+                '<span style="color:#94a3b8;font-family:monospace;font-size:9px;">' + anchorLastUpdate + '</span>',
+              '</div>',
+              '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;margin-top:2px;border-top:1px solid #1e293b;padding-top:3px;">',
+                '<span style="color:#475569;font-size:9px;">Position</span>',
+                '<span style="color:#475569;font-family:monospace;font-size:9px;">(' + anchor.x + 'm, ' + anchor.y + 'm)</span>',
+              '</div>',
+            '</div>',
+          '</div>',
+        ].join('');
+
         L.marker([anchor.y, anchor.x], { icon, draggable: true })
           .addTo(markerLayerRef.current)
+          .bindTooltip(anchorTooltipHtml, { sticky: true, className: 'anchor-info-tooltip', opacity: 1 })
           .on('dragend', async function (e: any) {
             const pos = e.target.getLatLng();
             const newX = Number(pos.lng.toFixed(2));
@@ -647,11 +691,34 @@ export default function PlannerPage() {
         iconAnchor: [0, 0],
       });
 
+      const meshBattery = asset.tag?.battery;
+      const meshTemp = asset.tag?.temperature;
+      const meshHumidity = asset.tag?.humidity;
+      const meshLastSeen = asset.tag?.lastSeen;
+      const meshLastUpdate = meshLastSeen
+        ? (() => {
+            const diff = Date.now() - new Date(meshLastSeen).getTime();
+            const mins = Math.floor(diff / 60000);
+            const hrs = Math.floor(mins / 60);
+            if (hrs > 0) return `${hrs}h ${mins % 60}m ago`;
+            if (mins > 0) return `${mins}m ago`;
+            return 'Just now';
+          })()
+        : null;
+
+      const sensorLines = [
+        meshBattery !== null && meshBattery !== undefined ? `&#128267; Battery: <strong>${meshBattery.toFixed(0)}%</strong>` : null,
+        meshTemp !== null && meshTemp !== undefined ? `&#127777; Temp: <strong>${meshTemp.toFixed(1)}&deg;C</strong>` : null,
+        meshHumidity !== null && meshHumidity !== undefined ? `&#128167; Humidity: <strong>${meshHumidity.toFixed(1)}%</strong>` : null,
+      ].filter(Boolean).join('<br/>');
+
       const tooltipHtml = `
-        <div style="font-family:sans-serif;padding:3px;min-width:140px">
+        <div style="font-family:sans-serif;padding:3px;min-width:160px">
           <strong style="color:${dotColor}">${asset.name}</strong><br/>
-          <span style="font-size:10px;color:#64748b">Status: ${isOnline ? '🟢 Online' : '⚫ Offline'}</span><br/>
+          <span style="font-size:10px;color:#64748b">Status: ${isOnline ? '&#128994; Online' : '&#9898; Offline'}</span><br/>
           <span style="font-size:10px;color:#64748b">Position: (${x}m, ${y}m)</span>
+          ${sensorLines ? `<div style="margin-top:4px;border-top:1px solid #334155;padding-top:4px;font-size:9px;color:#94a3b8;">${sensorLines}</div>` : ''}
+          ${meshLastUpdate ? `<div style="font-size:9px;color:#475569;margin-top:2px;">&#128336; ${meshLastUpdate}</div>` : ''}
           ${signalLines ? `<div style="margin-top:4px;border-top:1px solid #334155;padding-top:4px;font-size:9px;color:#94a3b8;"><strong>Anchor RSSI:</strong><br/>${signalLines}</div>` : ''}
         </div>`;
 
@@ -1727,6 +1794,25 @@ export default function PlannerPage() {
                                 ? `Pos: (${ms.planX?.toFixed(1) ?? '?'}m, ${ms.planY?.toFixed(1) ?? '?'}m)`
                                 : ms.type || 'MESH'}
                             </div>
+                            {isPlacedOnCurrent && (ms.tag?.battery !== null && ms.tag?.battery !== undefined || ms.tag?.temperature !== null && ms.tag?.temperature !== undefined || ms.tag?.humidity !== null && ms.tag?.humidity !== undefined) && (
+                              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] bg-slate-900/50 p-1 rounded border border-slate-700/50">
+                                {ms.tag?.battery !== null && ms.tag?.battery !== undefined && (
+                                  <span className="flex items-center gap-0.5 text-yellow-400">
+                                    {'\U0001f50b'} <span className="font-bold">{ms.tag.battery.toFixed(0)}%</span>
+                                  </span>
+                                )}
+                                {ms.tag?.temperature !== null && ms.tag?.temperature !== undefined && (
+                                  <span className="flex items-center gap-0.5 text-orange-400">
+                                    {'\U0001f321\ufe0f'} <span className="font-bold">{ms.tag.temperature.toFixed(1)}°C</span>
+                                  </span>
+                                )}
+                                {ms.tag?.humidity !== null && ms.tag?.humidity !== undefined && (
+                                  <span className="flex items-center gap-0.5 text-sky-400">
+                                    {'\U0001f4a7'} <span className="font-bold">{ms.tag.humidity.toFixed(1)}%</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             {isPlacedOnCurrent && ms.tag?.signals && (() => {
                               try {
                                 const sigs = JSON.parse(ms.tag.signals);

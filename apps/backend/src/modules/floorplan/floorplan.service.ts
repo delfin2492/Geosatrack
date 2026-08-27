@@ -77,7 +77,7 @@ export class FloorplanService {
     // Fetch Asset-type ANCHORs assigned to this zone
     const assetAnchorsInZone = await this.prisma.asset.findMany({
       where: { tenantId, zoneId, type: 'ANCHOR' },
-      include: { zone: { select: { id: true, name: true } } },
+      include: { zone: { select: { id: true, name: true } }, tag: true },
     });
 
     // Map table anchors
@@ -110,6 +110,9 @@ export class FloorplanService {
         zoneId: a.zoneId,
         zone: a.zone,
         isAsset: true,
+        updatedAt: a.updatedAt,
+        voltage: a.tag?.battery ?? null,
+        lastSeen: a.tag?.lastSeen ?? null,
       };
     });
 
@@ -139,7 +142,7 @@ export class FloorplanService {
   async getAllAnchors(tenantId: string) {
     const assetAnchors = await this.prisma.asset.findMany({
       where: { tenantId, type: 'ANCHOR' },
-      include: { zone: { select: { id: true, name: true } } },
+      include: { zone: { select: { id: true, name: true } }, tag: true },
     });
 
     const tableAnchors = await this.prisma.anchor.findMany({
@@ -159,6 +162,9 @@ export class FloorplanService {
       zoneId: a.zoneId,
       zone: a.zone,
       isAsset: true,
+      updatedAt: a.updatedAt,
+      voltage: a.tag?.battery ?? null,
+      lastSeen: a.tag?.lastSeen ?? null,
     }));
 
     const mappedTableAnchors = tableAnchors
@@ -173,6 +179,9 @@ export class FloorplanService {
         zoneId: a.zoneId,
         zone: a.zone,
         isAsset: false,
+        updatedAt: a.updatedAt,
+        voltage: null,
+        lastSeen: null,
       }));
 
     return [...mappedAssetAnchors, ...mappedTableAnchors];
