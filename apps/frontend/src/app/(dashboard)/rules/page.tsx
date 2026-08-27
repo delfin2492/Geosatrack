@@ -293,7 +293,7 @@ const CustomNode = ({ data, id, selected }: any) => {
     return (
       <div className={`min-w-[190px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
         <div className="bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
-          Action Output
+          Alarm Notification
         </div>
         <div className="p-2.5 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
           {/* INTERACTIVE CLICKABLE NOTIFICATION SELECTOR BUTTON */}
@@ -312,7 +312,11 @@ const CustomNode = ({ data, id, selected }: any) => {
             </div>
             <div className="flex flex-col leading-tight overflow-hidden">
               <span className="text-[10px] font-bold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">{label}</span>
-              <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[100px]">{detailText}</span>
+              {data.customName ? (
+                <span className="text-[9px] font-semibold text-purple-600 dark:text-purple-400 truncate max-w-[100px]">{data.customName}</span>
+              ) : (
+                <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[100px]">{detailText}</span>
+              )}
             </div>
           </button>
         </div>
@@ -565,6 +569,7 @@ export default function RulesPage() {
   // State for Image-matching "Select Alarm Notification" Modal
   const [notificationPickerNode, setNotificationPickerNode] = useState<{ id: string; data: any } | null>(null);
   const [pickerChannel, setPickerChannel] = useState<'SYSTEM' | 'EMAIL' | 'TELEGRAM'>('SYSTEM');
+  const [pickerCustomName, setPickerCustomName] = useState<string>('');
   const [pickerMessageTemplate, setPickerMessageTemplate] = useState<string>('');
   const [pickerToEmail, setPickerToEmail] = useState<string>('');
   const [pickerSubjectTemplate, setPickerSubjectTemplate] = useState<string>('');
@@ -572,21 +577,24 @@ export default function RulesPage() {
 
   const [initialNotificationState, setInitialNotificationState] = useState<{
     channel: string;
+    customName: string;
     messageTemplate: string;
     toEmail: string;
     subjectTemplate: string;
     chatId: string;
-  }>({ channel: 'SYSTEM', messageTemplate: '', toEmail: '', subjectTemplate: '', chatId: '' });
+  }>({ channel: 'SYSTEM', customName: '', messageTemplate: '', toEmail: '', subjectTemplate: '', chatId: '' });
 
   const handleOpenNotificationPicker = (nodeId: string, nodeData: any) => {
     setNotificationPickerNode({ id: nodeId, data: nodeData });
     const initChannel: any = nodeData.channel || (nodeData.type === 'action_email' ? 'EMAIL' : nodeData.type === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
+    const initCustomName = nodeData.customName || '';
     const initMsg = nodeData.messageTemplate || nodeData.bodyTemplate || '';
     const initEmail = nodeData.toEmail || '';
     const initSubj = nodeData.subjectTemplate || '';
     const initChat = nodeData.chatId || '';
 
     setPickerChannel(initChannel);
+    setPickerCustomName(initCustomName);
     setPickerMessageTemplate(initMsg);
     setPickerToEmail(initEmail);
     setPickerSubjectTemplate(initSubj);
@@ -594,6 +602,7 @@ export default function RulesPage() {
 
     setInitialNotificationState({
       channel: initChannel,
+      customName: initCustomName,
       messageTemplate: initMsg,
       toEmail: initEmail,
       subjectTemplate: initSubj,
@@ -611,6 +620,7 @@ export default function RulesPage() {
 
     updateNodeData(notificationPickerNode.id, 'channel', pickerChannel);
     updateNodeData(notificationPickerNode.id, 'label', label);
+    updateNodeData(notificationPickerNode.id, 'customName', pickerCustomName);
     updateNodeData(notificationPickerNode.id, 'messageTemplate', pickerMessageTemplate);
     updateNodeData(notificationPickerNode.id, 'bodyTemplate', pickerMessageTemplate);
     updateNodeData(notificationPickerNode.id, 'toEmail', pickerToEmail);
@@ -622,6 +632,7 @@ export default function RulesPage() {
 
   const isNotificationUnchanged =
     pickerChannel === initialNotificationState.channel &&
+    pickerCustomName === initialNotificationState.customName &&
     pickerMessageTemplate === initialNotificationState.messageTemplate &&
     pickerToEmail === initialNotificationState.toEmail &&
     pickerSubjectTemplate === initialNotificationState.subjectTemplate &&
@@ -2309,6 +2320,20 @@ export default function RulesPage() {
               <div className="w-7/12 bg-card flex flex-col overflow-y-auto p-4 space-y-4 text-xs">
                 <div className="bg-secondary/35 px-3 py-2 border border-border rounded-md font-bold text-xs text-muted-foreground flex items-center gap-2">
                   <span>Configuration Details</span>
+                </div>
+
+                {/* ALARM NOTIFICATION NAME INPUT */}
+                <div className="space-y-1 bg-purple-500/5 p-2.5 rounded-lg border border-purple-500/15">
+                  <label className="text-purple-700 dark:text-purple-300 font-bold flex items-center gap-1.5">
+                    <span>Alarm Notification Name</span>
+                    <span className="text-[10px] font-normal text-muted-foreground">(Displayed on Node)</span>
+                  </label>
+                  <Input
+                    value={pickerCustomName}
+                    onChange={(e) => setPickerCustomName(e.target.value)}
+                    placeholder="e.g. Overheat Warning Team A"
+                    className="h-8 rounded-lg text-xs bg-background"
+                  />
                 </div>
 
                 {/* SYSTEM ALARM FORM */}
