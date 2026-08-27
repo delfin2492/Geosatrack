@@ -64,9 +64,8 @@ const CustomNode = ({ data, id, selected }: any) => {
   // 1. PROCESSOR NODE (Compact Green Square with Symbol & Dual Left Handles + Right Output Handle)
   if (isProcessor) {
     return (
-      <div className={`w-12 h-12 rounded-xl bg-emerald-600 border-2 shadow-xl flex items-center justify-center relative text-white font-black text-base select-none transition-all ${
-        isNodeSelected ? 'ring-2 ring-amber-500 ring-offset-2 border-amber-400 scale-[1.1] z-50 shadow-2xl shadow-amber-500/30' : 'border-emerald-500'
-      }`}>
+      <div className={`w-12 h-12 rounded-xl bg-emerald-600 border-2 shadow-xl flex items-center justify-center relative text-white font-black text-base select-none transition-all ${isNodeSelected ? 'ring-2 ring-amber-500 ring-offset-2 border-amber-400 scale-[1.1] z-50 shadow-2xl shadow-amber-500/30' : 'border-emerald-500'
+        }`}>
         {/* Left Target Handle 1 (Input A) */}
         <Handle
           type="target"
@@ -132,9 +131,8 @@ const CustomNode = ({ data, id, selected }: any) => {
           <button
             type="button"
             onClick={() => data.onUpdateData && data.onUpdateData(id, 'value', !boolVal)}
-            className={`w-full py-1 px-3 rounded text-xs font-bold transition-colors cursor-pointer ${
-              boolVal ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-rose-600 text-white hover:bg-rose-700'
-            }`}
+            className={`w-full py-1 px-3 rounded text-xs font-bold transition-colors cursor-pointer ${boolVal ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-rose-600 text-white hover:bg-rose-700'
+              }`}
           >
             {boolVal ? 'TRUE (ON)' : 'FALSE (OFF)'}
           </button>
@@ -207,7 +205,7 @@ const CustomNode = ({ data, id, selected }: any) => {
     const rawAssetName = data.assetName || assetObj?.name || (data.assetId === 'ANY' ? 'Any Asset' : '');
     const assetName = rawAssetName || (data.assetId ? 'Selected Asset' : 'Select Asset');
     const attrName = data.attributeName || 'Select Attribute';
-    
+
     let AssetIcon = Zap;
     const nameLower = assetName.toLowerCase();
     if (nameLower.includes('lampu') || nameLower.includes('light')) AssetIcon = Lightbulb;
@@ -304,13 +302,13 @@ const CustomNode = ({ data, id, selected }: any) => {
     );
   }
 
-    // 3.5 UNIFIED ALARM NOTIFICATION NODE
+  // 3.5 UNIFIED ALARM NOTIFICATION NODE
   if (data.type === 'action_notification') {
     const channel = data.channel || 'SYSTEM';
     let ActionIcon = BellRing;
     let label = data.label || 'System Alarm';
     let detailText = 'Dashboard Bell';
-    
+
     if (channel === 'EMAIL') {
       ActionIcon = Mail;
       label = data.label || 'SMTP Email';
@@ -368,9 +366,8 @@ const CustomNode = ({ data, id, selected }: any) => {
   if (data.type === 'action_attribute') ActionIcon = Download;
 
   return (
-    <div className={`min-w-[180px] bg-card border shadow-xl rounded-lg relative transition-all ${
-    isNodeSelected ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background border-amber-500 shadow-2xl shadow-amber-500/30 scale-[1.03] z-50' : 'border-purple-500/50'
-  }`}>
+    <div className={`min-w-[180px] bg-card border shadow-xl rounded-lg relative transition-all ${isNodeSelected ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background border-amber-500 shadow-2xl shadow-amber-500/30 scale-[1.03] z-50' : 'border-purple-500/50'
+      }`}>
       <div className="bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide rounded-t-[7px]">
         Action Output
       </div>
@@ -427,7 +424,7 @@ const getAssetIcon = (type: string) => {
 const getAttributeUnit = (attrName: string, customUnit?: string) => {
   if (customUnit) return customUnit;
   const nameLower = (attrName || '').toLowerCase();
-  
+
   if (nameLower === 'temperature' || nameLower.includes('temp')) return '°C';
   if (nameLower === 'humidity' || nameLower.includes('humid')) return '%';
   if (nameLower === 'voltage' || nameLower.includes('volt')) return 'V';
@@ -443,7 +440,7 @@ const getAttributeUnit = (attrName: string, customUnit?: string) => {
   if (nameLower.includes('distance')) return 'm';
   if (nameLower.includes('lux') || nameLower.includes('luminance')) return 'lx';
   if (nameLower.includes('co2')) return 'ppm';
-  
+
   return '';
 };
 
@@ -562,7 +559,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
 
 export default function RulesPage() {
   const { tenantId, token, isAdmin } = useAuth();
-  
+
 
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1162,19 +1159,19 @@ export default function RulesPage() {
     const isWhenThen = activeTab === 'editor_whenthen';
     const ruleType = isWhenThen ? 'WHEN_THEN' : 'FLOW';
     const flowGraph = isWhenThen ? null : JSON.stringify({ nodes, edges });
-    const ruleConfig = isWhenThen ? JSON.stringify({ 
+    const ruleConfig = isWhenThen ? JSON.stringify({
       thenFrequency: wtThenFrequency,
       activeMode: wtActiveMode,
       specificPeriod: { allDays: wtSpecificAllDays, startDate: wtSpecificStartDate, endDate: wtSpecificEndDate },
-      dailyPeriod: { 
-        startTime: wtDailyStartTime, 
-        endTime: wtDailyEndTime, 
-        activeDays: wtDailyActiveDays, 
-        repetitionEnds: wtDailyRepetitionEnds, 
-        repetitionEndDate: wtDailyRepetitionEndDate 
+      dailyPeriod: {
+        startTime: wtDailyStartTime,
+        endTime: wtDailyEndTime,
+        activeDays: wtDailyActiveDays,
+        repetitionEnds: wtDailyRepetitionEnds,
+        repetitionEndDate: wtDailyRepetitionEndDate
       },
-      groups: wtGroups, 
-      actions: wtActions 
+      groups: wtGroups,
+      actions: wtActions
     }) : null;
 
     const method = editingRule ? 'PATCH' : 'POST';
@@ -1214,7 +1211,7 @@ export default function RulesPage() {
     let label = '';
     let initialData: Record<string, any> = {};
 
-        switch (type) {
+    switch (type) {
       case 'trigger_geofence': label = 'Geofence Event'; initialData = { eventType: 'ANY', geofenceId: 'ANY', assetId: 'ANY' }; break;
       case 'input_number': label = 'Number Value'; initialData = { value: 0 }; break;
       case 'input_boolean': label = 'Boolean Value'; initialData = { value: true }; break;
@@ -1633,12 +1630,12 @@ export default function RulesPage() {
                     {group.conditions.map((cond: any, condIdx: number) => {
                       const selectedAsset = assets.find(a => a.id === cond.assetId);
                       const attrOptions = [
-                              ...getAssetAttributes(selectedAsset).map(a => ({ label: `Telemetry: ${a.name}`, value: a.name })),
-                              { label: 'Geofence Event: Enter', value: 'GEOFENCE_ENTER' },
-                              { label: 'Geofence Event: Exit', value: 'GEOFENCE_EXIT' },
-                              { label: 'Geofence Event: Any', value: 'GEOFENCE_ANY' }
-                            ];
-                            const isGeofence = cond.attribute?.startsWith('GEOFENCE_');
+                        ...getAssetAttributes(selectedAsset).map(a => ({ label: `Telemetry: ${a.name}`, value: a.name })),
+                        { label: 'Geofence Event: Enter', value: 'GEOFENCE_ENTER' },
+                        { label: 'Geofence Event: Exit', value: 'GEOFENCE_EXIT' },
+                        { label: 'Geofence Event: Any', value: 'GEOFENCE_ANY' }
+                      ];
+                      const isGeofence = cond.attribute?.startsWith('GEOFENCE_');
                       const selectedAttrInfo = getAssetAttributes(selectedAsset).find(a => a.name === cond.attribute);
 
                       return (
@@ -1974,12 +1971,12 @@ export default function RulesPage() {
             <div className="shrink-0 min-w-[120px]">
               <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-2">Triggers / Inputs</div>
               <div className="flex lg:flex-col gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Attribute Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'trigger_geofence')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Geofence Event</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_number')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Number Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_boolean')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Boolean Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_string')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">String Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_text')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-500/10 text-blue-500 hover:bg-blue-500/20">Text Template</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Attribute Value</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'trigger_geofence')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Geofence Event</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_number')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Number Value</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_boolean')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Boolean Value</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_string')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">String Value</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'input_text')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Text Template</div>
               </div>
             </div>
 
@@ -2012,8 +2009,8 @@ export default function RulesPage() {
             <div className="shrink-0 min-w-[140px]">
               <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-2">Outputs / Actions</div>
               <div className="flex lg:flex-col gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'action_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-500/10 text-purple-500 hover:bg-purple-500/20">Set Attribute Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'action_notification')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-bold bg-purple-600 text-white hover:bg-purple-500 shadow-sm transition-all active:scale-95">Alarm Notification</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'action_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-600 text-white hover:bg-purple-500 shadow-sm transition-all active:scale-95">Set Attribute Value</div>
+                <div draggable onDragStart={(e) => onDragStart(e, 'action_notification')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-600 text-white hover:bg-purple-500 shadow-sm transition-all active:scale-95">Alarm Notification</div>
               </div>
             </div>
           </div>
@@ -2056,13 +2053,7 @@ export default function RulesPage() {
               onNodeClick={(_, node) => {
                 setSelectedNodeId(node.id);
                 setSelectedEdgeId(null);
-                const type = node.data?.type || node.type;
-                const modalTypes = ['action_email', 'action_telegram', 'action_alarm', 'action_attribute'];
-                if (modalTypes.includes(type)) {
-                  setSelectedNode(node);
-                } else {
-                  setSelectedNode(null);
-                }
+                setSelectedNode(null);
               }}
               onEdgeClick={(_, edge) => {
                 setSelectedEdgeId(edge.id);
@@ -2091,221 +2082,10 @@ export default function RulesPage() {
               <Controls />
             </ReactFlow>
           </div>
-
-          {/* NODE CONFIG POPUP MODAL */}
-          {selectedNode && ['action_email', 'action_telegram', 'action_alarm', 'action_attribute'].includes(selectedNode.data?.type) && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setSelectedNode(null)}>
-              <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-                <Card className="w-full border border-border shadow-2xl rounded-2xl flex flex-col bg-card overflow-hidden animate-in zoom-in-95 duration-200">
-                  <CardHeader className="py-3.5 px-5 border-b border-border flex flex-row items-center justify-between bg-card z-10">
-                    <CardTitle className="text-sm font-bold text-foreground">Node Configuration</CardTitle>
-                    <div className="flex items-center gap-1.5">
-                      <Button size="sm" variant="ghost" className="h-7 px-2.5 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 font-bold rounded-lg transition-colors" onClick={deleteSelectedNode}>
-                        Delete
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/80" onClick={() => setSelectedNode(null)}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-5 pb-7 space-y-4 text-xs bg-card max-h-[80vh] overflow-y-auto">
-                <div className="space-y-3">
-                  <div className="p-2.5 rounded-xl bg-secondary/35 border border-border font-bold text-[10px] uppercase text-center text-foreground">
-                    {selectedNode.data.label || selectedNode.id}
-                  </div>
-
-                  {/* GEOFENCE TRIGGER CONFIGURATION */}
-                  {selectedNode.data.type === 'trigger_geofence' && (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Select Asset</label>
-                        <SearchableSelect
-                          options={[{ label: "Any Assets", value: "ANY" }, ...assetOptions]}
-                          value={selectedNode.data.assetId || 'ANY'}
-                          onChange={(val) => {
-                            updateNodeData(selectedNode.id, 'assetId', val);
-                            const asset = assets.find(a => a.id === val);
-                            updateNodeData(selectedNode.id, 'assetName', asset?.name || (val === 'ANY' ? 'Any Asset' : 'Select Asset'));
-                          }}
-                          alwaysSearchable={true}
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Event Type</label>
-                        <SearchableSelect
-                          options={[
-                            { label: "Any Event (Enter / Exit)", value: "ANY" },
-                            { label: "Asset Enter Geofence", value: "GEOFENCE_ENTER" },
-                            { label: "Asset Exit Geofence", value: "GEOFENCE_EXIT" }
-                          ]}
-                          value={selectedNode.data.eventType}
-                          onChange={(val) => updateNodeData(selectedNode.id, 'eventType', val)}
-                          placeholder="Select Event Type..."
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Select Geofence Zone</label>
-                        <SearchableSelect
-                          options={[{ label: "Any Geofence", value: "ANY" }, ...geofenceOptions]}
-                          value={selectedNode.data.geofenceId}
-                          onChange={(val) => updateNodeData(selectedNode.id, 'geofenceId', val)}
-                          alwaysSearchable={true}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-
-
-                  {/* ACTION ALARM CONFIGURATION */}
-                  {selectedNode.data.type === 'action_alarm' && (
-                    <div className="space-y-1.5">
-                      <label className="text-muted-foreground font-semibold">Alarm Message</label>
-                      <textarea
-                        value={selectedNode.data.messageTemplate}
-                        onChange={(e) => updateNodeData(selectedNode.id, 'messageTemplate', e.target.value)}
-                        rows={4}
-                        className="w-full bg-secondary/35 border border-border px-2.5 py-1.5 rounded-lg text-foreground text-xs font-semibold"
-                      />
-                    </div>
-                  )}
-
-                  {/* SET ATTRIBUTE ACTION CONFIGURATION */}
-                  {selectedNode.data.type === 'action_attribute' && (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Target Asset</label>
-                        <SearchableSelect
-                          options={assetOptions}
-                          value={selectedNode.data.targetAssetId}
-                          onChange={(val) => {
-                            updateNodeData(selectedNode.id, 'targetAssetId', val);
-                            updateNodeData(selectedNode.id, 'targetAttribute', '');
-                          }}
-                          placeholder="Select Target Asset..."
-                          alwaysSearchable={true}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Target Attribute</label>
-                        <SearchableSelect
-                          options={(() => {
-                            const targetAsset = assets.find(a => a.id === selectedNode.data.targetAssetId);
-                            return getAssetAttributes(targetAsset).map(a => ({ label: a.name, value: a.name }));
-                          })()}
-                          value={selectedNode.data.targetAttribute}
-                          onChange={(val) => updateNodeData(selectedNode.id, 'targetAttribute', val)}
-                          placeholder="Select Target Attribute..."
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Command / Set Value</label>
-                        <Input
-                          type="text"
-                          value={selectedNode.data.commandValue}
-                          onChange={(e) => updateNodeData(selectedNode.id, 'commandValue', e.target.value)}
-                          className="h-8 rounded-lg text-xs"
-                          placeholder="e.g. ON, 100, true"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* LOGIC PROCESSORS CONFIGURATION */}
-                  {(selectedNode.data.type.startsWith('logic_')) && (
-                    <div className="space-y-3">
-                      {!['logic_and', 'logic_or'].includes(selectedNode.data.type) && (
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Threshold Value</label>
-                          <Input type="number" value={selectedNode.data.thresholdValue || 0} onChange={(e) => updateNodeData(selectedNode.id, 'thresholdValue', e.target.value)} className="h-8 rounded-lg text-xs" />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* MATH PROCESSORS CONFIGURATION */}
-                  {(selectedNode.data.type.startsWith('math_') || selectedNode.data.type === 'process_math') && (
-                    <div className="space-y-3">
-                      {['math_add', 'math_sub', 'math_mul', 'math_div'].includes(selectedNode.data.type) && (
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Value B / Operand</label>
-                          <Input type="number" value={selectedNode.data.valueB || 0} onChange={(e) => updateNodeData(selectedNode.id, 'valueB', e.target.value)} className="h-8 rounded-lg text-xs" />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* ACTION EMAIL CONFIGURATION */}
-                  {selectedNode.data.type === 'action_email' && (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Recipient Email (To)</label>
-                        <Input value={selectedNode.data.toEmail || ''} onChange={(e) => updateNodeData(selectedNode.id, 'toEmail', e.target.value)} placeholder="e.g. manager@company.com" className="h-8 rounded-lg text-xs" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Subject Template</label>
-                        <Input value={selectedNode.data.subjectTemplate || ''} onChange={(e) => updateNodeData(selectedNode.id, 'subjectTemplate', e.target.value)} placeholder="e.g. Alert: {assetName}" className="h-8 rounded-lg text-xs" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Message Body</label>
-                        <textarea
-                          value={selectedNode.data.bodyTemplate || ''}
-                          onChange={(e) => updateNodeData(selectedNode.id, 'bodyTemplate', e.target.value)}
-                          rows={6}
-                          className="w-full bg-secondary/35 border border-border px-2.5 py-1.5 rounded-lg text-foreground text-xs font-semibold"
-                          placeholder="e.g. Alert: Asset {assetName} triggered event {attributeName} with value {value} at {time}."
-                        />
-                        <div className="mt-1.5 p-2 bg-blue-500/10 border border-blue-500/20 rounded-md text-[10px] text-blue-500/90 leading-tight space-y-1">
-                          <div><strong className="font-bold">Available variables:</strong> <code>{'{assetName}'}</code>, <code>{'{geofenceName}'}</code>, <code>{'{attributeName}'}</code>, <code>{'{value}'}</code>, <code>{'{time}'}</code></div>
-                          <div className="opacity-90 italic">
-                            <strong>Example:</strong> "Alert: Asset {'{assetName}'} triggered event {'{attributeName}'} with value {'{value}'} at {'{time}'}."
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ACTION TELEGRAM CONFIGURATION */}
-                  {selectedNode.data.type === 'action_telegram' && (
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Chat ID</label>
-                        <Input value={selectedNode.data.chatId || ''} onChange={(e) => updateNodeData(selectedNode.id, 'chatId', e.target.value)} placeholder="e.g. -100123456789" className="h-8 rounded-lg text-xs" />
-                        <div className="mt-1 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-md text-[10px] text-yellow-600 dark:text-yellow-500 leading-tight">
-                          To get Chat ID, send a message to bot <a href="https://t.me/userinfobot?start=start" target="_blank" rel="noopener noreferrer" className="text-yellow-600 font-bold">@userinfobot</a> on Telegram.<br />
-                          Click the following link <a href="https://t.me/GeoMeshBot?start=start" target="_blank" rel="noopener noreferrer" className="text-yellow-600 font-bold">@GeoMeshBot</a> to allow GeoMesh bot to send notifications.
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground font-semibold">Message Template</label>
-                        <textarea
-                          value={selectedNode.data.messageTemplate || ''}
-                          onChange={(e) => updateNodeData(selectedNode.id, 'messageTemplate', e.target.value)}
-                          rows={6}
-                          className="w-full bg-secondary/35 border border-border px-2.5 py-1.5 rounded-lg text-foreground text-xs font-semibold"
-                          placeholder={'e.g. 🚨 *GeoMesh Alert*\\nAsset: *{assetName}*\\nEvent: *{attributeName}* triggered with value {value}.'}
-                        />
-                        <div className="mt-1.5 p-2 bg-blue-500/10 border border-blue-500/20 rounded-md text-[10px] text-blue-500/90 leading-tight space-y-1">
-                          <div><strong className="font-bold">Available variables:</strong> <code>{'{assetName}'}</code>, <code>{'{geofenceName}'}</code>, <code>{'{attributeName}'}</code>, <code>{'{value}'}</code>, <code>{'{time}'}</code></div>
-                          <div className="opacity-90 italic">
-                            <strong>Formatting:</strong> You can use Telegram Markdown formatting, e.g. *bold* or _italic_.
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-                </Card>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Delete Rule Confirm Modal */}
+          {/* Delete Rule Confirm Modal */}
       <ConfirmModal
         isOpen={!!deleteTargetRule}
         title="Delete Rule"
@@ -2333,7 +2113,7 @@ export default function RulesPage() {
       {geofencePickerNode && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setGeofencePickerNode(null)}>
           <div className="w-full max-w-xl bg-card border border-border shadow-2xl rounded-lg overflow-hidden flex flex-col h-[520px] animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            
+
             {/* HEADER */}
             <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
               <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
@@ -2346,7 +2126,7 @@ export default function RulesPage() {
 
             {/* CONTENT */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs bg-card">
-              
+
               {/* 1. GEOFENCE NODE NAME (OPTIONAL) */}
               <div className="space-y-1 bg-blue-500/5 p-3 rounded-lg border border-blue-500/15">
                 <label className="text-blue-700 dark:text-blue-300 font-bold flex items-center gap-1.5">
@@ -2390,11 +2170,10 @@ export default function RulesPage() {
                   {/* ANY EVENT */}
                   <div
                     onClick={() => setPickerEventType('ANY')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col items-center text-center gap-1.5 ${
-                      pickerEventType === 'ANY'
-                        ? 'bg-blue-500/10 border-blue-500 font-bold text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col items-center text-center gap-1.5 ${pickerEventType === 'ANY'
+                      ? 'bg-blue-500/10 border-blue-500 font-bold text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     <RefreshCw className="w-5 h-5" />
                     <span className="text-[11px]">Any Event</span>
@@ -2404,11 +2183,10 @@ export default function RulesPage() {
                   {/* ENTER GEOFENCE */}
                   <div
                     onClick={() => setPickerEventType('GEOFENCE_ENTER')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col items-center text-center gap-1.5 ${
-                      pickerEventType === 'GEOFENCE_ENTER'
-                        ? 'bg-blue-500/10 border-blue-500 font-bold text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col items-center text-center gap-1.5 ${pickerEventType === 'GEOFENCE_ENTER'
+                      ? 'bg-blue-500/10 border-blue-500 font-bold text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     <LogIn className="w-5 h-5 text-emerald-500" />
                     <span className="text-[11px]">Enter Geofence</span>
@@ -2418,11 +2196,10 @@ export default function RulesPage() {
                   {/* EXIT GEOFENCE */}
                   <div
                     onClick={() => setPickerEventType('GEOFENCE_EXIT')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col items-center text-center gap-1.5 ${
-                      pickerEventType === 'GEOFENCE_EXIT'
-                        ? 'bg-blue-500/10 border-blue-500 font-bold text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all flex flex-col items-center text-center gap-1.5 ${pickerEventType === 'GEOFENCE_EXIT'
+                      ? 'bg-blue-500/10 border-blue-500 font-bold text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     <LogOut className="w-5 h-5 text-rose-500" />
                     <span className="text-[11px]">Exit Geofence</span>
@@ -2460,7 +2237,7 @@ export default function RulesPage() {
       {notificationPickerNode && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setNotificationPickerNode(null)}>
           <div className="w-full max-w-2xl bg-card border border-border shadow-2xl rounded-lg overflow-hidden flex flex-col h-[530px] animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            
+
             {/* HEADER */}
             <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
               <h3 className="text-base font-semibold text-foreground">Select Alarm Notification</h3>
@@ -2471,7 +2248,7 @@ export default function RulesPage() {
 
             {/* TWO COLUMN CONTENT */}
             <div className="flex-1 flex overflow-hidden">
-              
+
               {/* LEFT COLUMN: CHANNEL SELECTION */}
               <div className="w-5/12 border-r border-border bg-secondary/10 flex flex-col">
                 <div className="bg-purple-700 text-white px-3.5 py-2.5 flex items-center justify-between font-bold text-xs shadow-sm">
@@ -2483,29 +2260,27 @@ export default function RulesPage() {
                   {/* 1. SYSTEM ALARM */}
                   <div
                     onClick={() => setPickerChannel('SYSTEM')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-3 ${
-                      pickerChannel === 'SYSTEM'
-                        ? 'bg-purple-500/10 border-purple-500 font-bold text-purple-600 dark:text-purple-400 shadow-sm'
-                        : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-3 ${pickerChannel === 'SYSTEM'
+                      ? 'bg-purple-500/10 border-purple-500 font-bold text-purple-600 dark:text-purple-400 shadow-sm'
+                      : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     <div className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
                       <BellRing className="w-4 h-4" />
                     </div>
                     <div className="flex flex-col">
                       <span className="font-bold text-xs">System Alarm</span>
-                      <span className="text-[10px] font-normal text-muted-foreground">Dashboard Bell & Log Alerts</span>
+                      <span className="text-[10px] font-normal text-muted-foreground">Dashboard Alerts</span>
                     </div>
                   </div>
 
                   {/* 2. EMAIL (SMTP) */}
                   <div
                     onClick={() => setPickerChannel('EMAIL')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-3 ${
-                      pickerChannel === 'EMAIL'
-                        ? 'bg-purple-500/10 border-purple-500 font-bold text-purple-600 dark:text-purple-400 shadow-sm'
-                        : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-3 ${pickerChannel === 'EMAIL'
+                      ? 'bg-purple-500/10 border-purple-500 font-bold text-purple-600 dark:text-purple-400 shadow-sm'
+                      : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     <div className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
                       <Mail className="w-4 h-4" />
@@ -2519,11 +2294,10 @@ export default function RulesPage() {
                   {/* 3. TELEGRAM BOT */}
                   <div
                     onClick={() => setPickerChannel('TELEGRAM')}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-3 ${
-                      pickerChannel === 'TELEGRAM'
-                        ? 'bg-purple-500/10 border-purple-500 font-bold text-purple-600 dark:text-purple-400 shadow-sm'
-                        : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-3 ${pickerChannel === 'TELEGRAM'
+                      ? 'bg-purple-500/10 border-purple-500 font-bold text-purple-600 dark:text-purple-400 shadow-sm'
+                      : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     <div className="w-7 h-7 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-600 flex items-center justify-center shrink-0 mt-0.5">
                       <Send className="w-4 h-4" />
@@ -2546,7 +2320,7 @@ export default function RulesPage() {
                 <div className="space-y-1 bg-purple-500/5 p-2.5 rounded-lg border border-purple-500/15">
                   <label className="text-purple-700 dark:text-purple-300 font-bold flex items-center gap-1.5">
                     <span>Alarm Notification Name</span>
-                    <span className="text-[10px] font-normal text-muted-foreground">(Displayed on Node)</span>
+                    <span className="text-[10px] font-normal text-muted-foreground"></span>
                   </label>
                   <Input
                     value={pickerCustomName}
@@ -2681,7 +2455,7 @@ export default function RulesPage() {
       {attrPickerNode && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setAttrPickerNode(null)}>
           <div className="w-full max-w-2xl bg-card border border-border shadow-2xl rounded-lg overflow-hidden flex flex-col h-[530px] animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            
+
             {/* HEADER */}
             <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
               <h3 className="text-base font-semibold text-foreground">Select attributes</h3>
@@ -2692,7 +2466,7 @@ export default function RulesPage() {
 
             {/* TWO COLUMN CONTENT */}
             <div className="flex-1 flex overflow-hidden">
-              
+
               {/* LEFT COLUMN: ASSETS HIERARCHICAL TREE SELECTION */}
               <div className="w-5/12 border-r border-border bg-secondary/10 flex flex-col">
                 {/* Yellow Amber Header */}
@@ -2723,7 +2497,7 @@ export default function RulesPage() {
                   {(() => {
                     const assetMap = new Map();
                     assets.forEach(a => assetMap.set(a.id, { ...a, children: [] }));
-                    
+
                     const roots: any[] = [];
                     assets.forEach(a => {
                       const item = assetMap.get(a.id);
@@ -2765,11 +2539,10 @@ export default function RulesPage() {
                               setPickerSelectedAttribute(attrs[0]?.name || '');
                             }
                           }}
-                          className={`flex items-center gap-1.5 pr-2.5 py-1.5 rounded-md cursor-pointer transition-all border-l-4 ${
-                            isSelected
-                              ? 'bg-secondary border-amber-500 font-bold text-foreground shadow-sm'
-                              : 'border-transparent hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
-                          }`}
+                          className={`flex items-center gap-1.5 pr-2.5 py-1.5 rounded-md cursor-pointer transition-all border-l-4 ${isSelected
+                            ? 'bg-secondary border-amber-500 font-bold text-foreground shadow-sm'
+                            : 'border-transparent hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                            }`}
                         >
                           {hasChildren ? (
                             <button
@@ -2812,7 +2585,7 @@ export default function RulesPage() {
                   {(() => {
                     const selectedAsset = assets.find(a => a.id === pickerSelectedAssetId);
                     let attributes: { name: string; type: string; unit?: string }[] = getAssetAttributes(selectedAsset);
-                    
+
                     // If asset has no specific attributes defined, provide standard telemetry fallback
                     if (attributes.length === 0) {
                       const standardAttrs = [
@@ -2840,11 +2613,10 @@ export default function RulesPage() {
                         <div
                           key={attr.name}
                           onClick={() => setPickerSelectedAttribute(attr.name)}
-                          className={`px-3 py-2.5 rounded-md cursor-pointer transition-all flex items-center justify-between ${
-                            isSelected
-                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30'
-                              : 'hover:bg-secondary/60 text-foreground'
-                          }`}
+                          className={`px-3 py-2.5 rounded-md cursor-pointer transition-all flex items-center justify-between ${isSelected
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30'
+                            : 'hover:bg-secondary/60 text-foreground'
+                            }`}
                         >
                           <span>{labelWithUnit}</span>
                           {isSelected && <span className="text-amber-500 text-xs font-bold">✓</span>}
@@ -2877,7 +2649,7 @@ export default function RulesPage() {
                   if (!attrPickerNode) return;
                   const asset = assets.find(a => a.id === pickerSelectedAssetId);
                   const assetName = asset?.name || 'Selected Asset';
-                  
+
                   setNodes((prev) => prev.map((n) => {
                     if (n.id === attrPickerNode.id) {
                       const newData = {
@@ -2890,7 +2662,7 @@ export default function RulesPage() {
                     }
                     return n;
                   }));
-                  
+
                   setAttrPickerNode(null);
                 }}
                 className="text-xs font-bold text-amber-500 hover:text-amber-600 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider transition-colors cursor-pointer"
