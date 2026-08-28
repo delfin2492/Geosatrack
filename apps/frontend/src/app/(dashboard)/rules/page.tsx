@@ -1043,6 +1043,15 @@ export default function RulesPage() {
     setNodes([]);
     setEdges([]);
     setSelectedNode(null);
+    setWtActiveMode('ALWAYS');
+    setWtSpecificStartDate('');
+    setWtSpecificEndDate('');
+    setWtDailyStartTime('08:00');
+    setWtDailyEndTime('17:00');
+    setWtSpecificAllDays(false);
+    setWtDailyActiveDays(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+    setWtDailyRepetitionEnds('NEVER');
+    setWtDailyRepetitionEndDate('');
     setActiveTab('editor_flow');
   };
 
@@ -1145,6 +1154,18 @@ export default function RulesPage() {
         setNodes([]);
         setEdges([]);
       }
+      try {
+        const config = JSON.parse(rule.ruleConfig || '{}');
+        setWtActiveMode(config.activeMode || 'ALWAYS');
+        setWtSpecificStartDate(config.specificPeriod?.startDate || '');
+        setWtSpecificEndDate(config.specificPeriod?.endDate || '');
+        setWtDailyStartTime(config.dailyPeriod?.startTime || '08:00');
+        setWtDailyEndTime(config.dailyPeriod?.endTime || '17:00');
+        setWtSpecificAllDays(!!config.specificPeriod?.allDays);
+        setWtDailyActiveDays(config.dailyPeriod?.activeDays || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+        setWtDailyRepetitionEnds(config.dailyPeriod?.repetitionEnds || 'NEVER');
+        setWtDailyRepetitionEndDate(config.dailyPeriod?.repetitionEndDate || '');
+      } catch (e) {}
       setSelectedNode(null);
       setActiveTab('editor_flow');
     }
@@ -1159,8 +1180,7 @@ export default function RulesPage() {
     const isWhenThen = activeTab === 'editor_whenthen';
     const ruleType = isWhenThen ? 'WHEN_THEN' : 'FLOW';
     const flowGraph = isWhenThen ? null : JSON.stringify({ nodes, edges });
-    const ruleConfig = isWhenThen ? JSON.stringify({
-      thenFrequency: wtThenFrequency,
+    const ruleConfig = JSON.stringify({
       activeMode: wtActiveMode,
       specificPeriod: { allDays: wtSpecificAllDays, startDate: wtSpecificStartDate, endDate: wtSpecificEndDate },
       dailyPeriod: {
@@ -1170,9 +1190,12 @@ export default function RulesPage() {
         repetitionEnds: wtDailyRepetitionEnds,
         repetitionEndDate: wtDailyRepetitionEndDate
       },
-      groups: wtGroups,
-      actions: wtActions
-    }) : null;
+      ...(isWhenThen ? {
+        thenFrequency: wtThenFrequency,
+        groups: wtGroups,
+        actions: wtActions
+      } : {})
+    });
 
     const method = editingRule ? 'PATCH' : 'POST';
     const endpoint = editingRule ? `${getApiUrl()}/rules/${editingRule.id}` : `${getApiUrl()}/rules`;
@@ -1960,7 +1983,176 @@ export default function RulesPage() {
         </div>
       ) : (
         // FLOW EDITOR
-        <div className="flex flex-col lg:flex-row gap-4 h-[700px] relative">
+        <div className="space-y-4">
+          {/* Top Bar: Rule Active Schedule */}
+          <div className="bg-card border border-border p-4 rounded-2xl shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-500" />
+                <span className="text-xs font-bold text-foreground uppercase tracking-wider">Active Rule Schedule</span>
+              </div>
+              <div className="w-64">
+                <SearchableSelect
+                  options={[
+                    { label: "Always Active (24/7)", value: "ALWAYS" },
+                    { label: "Specific Time Period", value: "SPECIFIC_PERIOD" },
+                    { label: "Daily Time Period", value: "DAILY_PERIOD" }
+                  ]}
+                  value={wtActiveMode}
+                  onChange={(val) => setWtActiveMode(val as any)}
+                  placeholder="Select Active Schedule..."
+                />
+              </div>
+            </div>
+
+            {wtActiveMode === 'SPECIFIC_PERIOD' && (
+              <div className="space-y-3 pt-2 border-t border-border/60">
+                <div
+                  onClick={() => {
+                    const newAllDays = !wtSpecificAllDays;
+                    setWtSpecificAllDays(newAllDays);
+                    if (newAllDays) {
+                      if (wtSpecificStartDate && wtSpecificStartDate.includes('T')) {
+                        setWtSpecificStartDate(wtSpecificStartDate.split('T')[0]);
+                      }
+                      if (wtSpecificEndDate && wtSpecificEndDate.includes('T')) {
+                        setWtSpecificEndDate(wtSpecificEndDate.split('T')[0]);
+                      }
+                    } else {
+                      if (wtSpecificStartDate && !wtSpecificStartDate.includes('T')) {
+                        setWtSpecificStartDate(`${wtSpecificStartDate}T08:00`);
+                      }
+                      if (wtSpecificEndDate && !wtSpecificEndDate.includes('T')) {
+                        setWtSpecificEndDate(`${wtSpecificEndDate}T17:00`);
+                      }
+                    }
+                  }}
+                  className="flex items-center gap-2.5 bg-secondary/30 px-3 py-1.5 rounded-lg border border-border/50 w-fit cursor-pointer hover:bg-secondary/50 transition-colors"
+                >
+                  <button
+                    type="button"
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${wtSpecificAllDays ? 'bg-amber-500' : 'bg-secondary'}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out ${wtSpecificAllDays ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                  <span className="text-[11px] font-bold text-foreground select-none">All Days</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">
+                      {wtSpecificAllDays ? "Start Date" : "Start Date & Time"}
+                    </label>
+                    <Input
+                      type={wtSpecificAllDays ? "date" : "datetime-local"}
+                      className="h-8 text-xs bg-background"
+                      value={wtSpecificStartDate}
+                      onChange={(e) => setWtSpecificStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">
+                      {wtSpecificAllDays ? "End Date" : "End Date & Time"}
+                    </label>
+                    <Input
+                      type={wtSpecificAllDays ? "date" : "datetime-local"}
+                      className="h-8 text-xs bg-background"
+                      value={wtSpecificEndDate}
+                      onChange={(e) => setWtSpecificEndDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {wtActiveMode === 'DAILY_PERIOD' && (
+              <div className="space-y-4 pt-2 border-t border-border/60">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Daily Start Time</label>
+                    <Input
+                      type="time"
+                      className="h-8 text-xs bg-background"
+                      value={wtDailyStartTime}
+                      onChange={(e) => setWtDailyStartTime(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Daily End Time</label>
+                    <Input
+                      type="time"
+                      className="h-8 text-xs bg-background"
+                      value={wtDailyEndTime}
+                      onChange={(e) => setWtDailyEndTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-muted-foreground mb-1.5 block">Active Days</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { code: 'mon', label: 'Mon' },
+                      { code: 'tue', label: 'Tue' },
+                      { code: 'wed', label: 'Wed' },
+                      { code: 'thu', label: 'Thu' },
+                      { code: 'fri', label: 'Fri' },
+                      { code: 'sat', label: 'Sat' },
+                      { code: 'sun', label: 'Sun' }
+                    ].map((d) => {
+                      const isActive = wtDailyActiveDays.includes(d.code);
+                      return (
+                        <button
+                          key={d.code}
+                          type="button"
+                          onClick={() => {
+                            if (isActive) {
+                              if (wtDailyActiveDays.length > 1) {
+                                setWtDailyActiveDays(wtDailyActiveDays.filter(x => x !== d.code));
+                              }
+                            } else {
+                              setWtDailyActiveDays([...wtDailyActiveDays, d.code]);
+                            }
+                          }}
+                          className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all ${isActive ? 'bg-amber-500 text-black border-amber-500 shadow-sm' : 'bg-background text-muted-foreground border-border hover:border-amber-500/50'}`}
+                        >
+                          {d.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end pt-1">
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground mb-1 block">Repetition Ends</label>
+                    <SearchableSelect
+                      options={[
+                        { label: "Never", value: "NEVER" },
+                        { label: "On Date", value: "ON_DATE" }
+                      ]}
+                      value={wtDailyRepetitionEnds}
+                      onChange={(val) => setWtDailyRepetitionEnds(val as any)}
+                      placeholder="Select..."
+                    />
+                  </div>
+                  {wtDailyRepetitionEnds === 'ON_DATE' && (
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground mb-1 block">End Date</label>
+                      <Input
+                        type="date"
+                        className="h-8 text-xs bg-background"
+                        value={wtDailyRepetitionEndDate}
+                        onChange={(e) => setWtDailyRepetitionEndDate(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-4 h-[700px] relative">
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-card border border-border p-2 px-4 shadow-lg rounded-xl flex flex-col md:flex-row items-center gap-3">
             <span className="text-xs font-bold text-muted-foreground whitespace-nowrap hidden md:inline">Flow Name:</span>
             <Input value={ruleName} onChange={(e) => setRuleName(e.target.value)} className="h-8 rounded-lg font-bold text-sm bg-secondary/30 min-w-[200px] md:min-w-[250px]" placeholder="Flow Name" />
@@ -2082,6 +2274,7 @@ export default function RulesPage() {
               <Controls />
             </ReactFlow>
           </div>
+        </div>
         </div>
       )}
 
