@@ -2085,7 +2085,7 @@ export default function RulesPage() {
         </div>
       )}
 
-          {/* Delete Rule Confirm Modal */}
+      {/* Delete Rule Confirm Modal */}
       <ConfirmModal
         isOpen={!!deleteTargetRule}
         title="Delete Rule"
@@ -2131,7 +2131,6 @@ export default function RulesPage() {
               <div className="space-y-1 bg-blue-500/5 p-3 rounded-lg border border-blue-500/15">
                 <label className="text-blue-700 dark:text-blue-300 font-bold flex items-center gap-1.5">
                   <span>Geofence Event Name</span>
-                  <span className="text-[10px] font-normal text-muted-foreground">(Optional - Displayed on Node)</span>
                 </label>
                 <Input
                   value={pickerGeofenceCustomName}
@@ -2392,7 +2391,8 @@ export default function RulesPage() {
                         className="h-8 rounded-lg text-xs"
                       />
                       <div className="mt-1 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-md text-[10px] text-yellow-600 dark:text-yellow-500 leading-tight">
-                        Send a message to <a href="https://t.me/userinfobot?start=start" target="_blank" rel="noopener noreferrer" className="text-yellow-600 font-bold">@userinfobot</a> to get your Chat ID.
+                        To get Chat ID, send a message to bot <a href="https://t.me/userinfobot?start=start" target="_blank" rel="noopener noreferrer" className="text-yellow-600 font-bold">@userinfobot</a> on Telegram.<br />
+                        Click the following link <a href="https://t.me/GeoMeshBot?start=start" target="_blank" rel="noopener noreferrer" className="text-yellow-600 font-bold">@GeoMeshBot</a> to allow GeoMesh bot to send notifications.
                       </div>
                     </div>
                     <div className="space-y-1">

@@ -1,37 +1,30 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = "postgresql://geouser:geopassword@127.0.0.1:5432/geomesh?schema=public"
 }
-
-// ------------------------------------------------------------------------------
-// 1. TENANCY & USERS
-// ------------------------------------------------------------------------------
 
 model Tenant {
   id               String             @id @default(cuid())
   name             String             @unique
-  status           String             @default("active") // active, inactive, suspended
-  agentLimit       Int                @default(5)
-  assetLimit       Int                @default(100)
-  logoUrl          String?
-  adminEmail       String?
-  users            User[]
-  sites            Site[]
-  gateways         Gateway[]
-  anchors          Anchor[]
-  assets           Asset[]
-  alerts           Alert[]
-  rules            RuleFlow[]
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+  agentLimit       Int                @default(5)
+  assetLimit       Int                @default(100)
+  status           String             @default("active")
+  adminEmail       String?
+  logoUrl          String?
+  alerts           Alert[]
+  anchors          Anchor[]
+  assets           Asset[]
   DashboardSection DashboardSection[]
+  gateways         Gateway[]
+  rules            RuleFlow[]
+  sites            Site[]
+  users            User[]
 }
 
 model User {
@@ -39,150 +32,129 @@ model User {
   email      String   @unique
   password   String?  @default("geomesh123")
   name       String?
-  role       String   @default("operator") // superadmin, tenant_admin, site_manager, operator
+  role       String   @default("operator")
   isVerified Boolean  @default(true)
   tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
-
-// ------------------------------------------------------------------------------
-// 2. INFRASTRUCTURE & ZONES
-// ------------------------------------------------------------------------------
 
 model Site {
   id        String   @id @default(cuid())
   name      String
   address   String?
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  zones     Zone[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zones     Zone[]
 }
 
 model Zone {
   id           String     @id @default(cuid())
   name         String
-  floorPlanUrl String? // URL/Path denah lantai (PNG/SVG)
-  width        Float      @default(100.0) // Lebar denah dalam meter (sumbu X)
-  height       Float      @default(100.0) // Tinggi denah dalam meter (sumbu Y)
-  offsetX      Float      @default(0.0) // Posisi X zona pada building plan (meter)
-  offsetY      Float      @default(0.0) // Posisi Y zona pada building plan (meter)
+  floorPlanUrl String?
+  width        Float      @default(100.0)
+  height       Float      @default(100.0)
   siteId       String
-  site         Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  offsetX      Float      @default(0.0)
+  offsetY      Float      @default(0.0)
   anchors      Anchor[]
   assets       Asset[]
   geofences    Geofence[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  site         Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
 model Gateway {
-  id        String   @id // MAC Address atau unique gateway ID (misal: "gw-00:11:22:33:44:55")
+  id        String   @id
   name      String
-  status    String   @default("offline") // online, offline
+  status    String   @default("offline")
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model Anchor {
-  id        String   @id // MAC Address atau node ID (misal: "anchor-00:11:22:33:44:56")
+  id        String   @id
   name      String
-  x         Float    @default(0.0) // Posisi sumbu X pada denah lantai (meter)
-  y         Float    @default(0.0) // Posisi sumbu Y pada denah lantai (meter)
+  x         Float    @default(0.0)
+  y         Float    @default(0.0)
   status    String   @default("offline")
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   zoneId    String?
-  zone      Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zone      Zone?    @relation(fields: [zoneId], references: [id])
 }
-
-// ------------------------------------------------------------------------------
-// 3. ASSETS & TAGS (IoT Devices)
-// ------------------------------------------------------------------------------
 
 model Asset {
   id          String   @id @default(cuid())
   name        String
   description String?
-  type        String   @default("FORKLIFT")
-  status      String   @default("static") // static, moving, tilt_warning, fall_detected, high_vibration, offline
-  latitude    Float? // GPS koordinat (derajat)
-  longitude   Float? // GPS koordinat (derajat)
-  planX       Float? // Posisi X pada denah lantai (meter, relatif ke zone)
-  planY       Float? // Posisi Y pada denah lantai (meter, relatif ke zone)
+  status      String   @default("static")
   tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   zoneId      String?
-  zone        Zone?    @relation(fields: [zoneId], references: [id], onDelete: SetNull)
-  parentId    String?
-  parent      Asset?   @relation("AssetToAsset", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Asset[]  @relation("AssetToAsset")
   tagId       String?  @unique
-  tag         Tag?     @relation(fields: [tagId], references: [id], onDelete: SetNull)
-  alerts      Alert[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  latitude    Float?
+  longitude   Float?
+  type        String   @default("FORKLIFT")
+  parentId    String?
+  planX       Float?
+  planY       Float?
+  alerts      Alert[]
+  parent      Asset?   @relation("AssetToAsset", fields: [parentId], references: [id])
+  children    Asset[]  @relation("AssetToAsset")
+  tag         Tag?     @relation(fields: [tagId], references: [id])
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zone        Zone?    @relation(fields: [zoneId], references: [id])
 }
 
 model Tag {
-  id          String    @id // Wirepas Node ID (misal: "node-439201")
+  id          String    @id
   name        String?
-  battery     Float? // Tegangan baterai (Volt)
-  rssi        Int? // Sinyal terakhir (dBm)
+  battery     Float?
+  rssi        Int?
   temperature Float?
   humidity    Float?
-  signals     String? // Menyimpan JSON data signal RSSI Anchor (e.g. '[{"anchorName":"Anchor A","rssi":-50}]')
   lastSeen    DateTime?
-  asset       Asset?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  signals     String?
+  asset       Asset?
 }
-
-// ------------------------------------------------------------------------------
-// 4. ALERTS
-// ------------------------------------------------------------------------------
 
 model Alert {
   id         String    @id @default(cuid())
-  type       String // fall_detected, tilt_warning, low_battery, temperature_critical
+  type       String
   message    String
   isResolved Boolean   @default(false)
   resolvedAt DateTime?
   tenantId   String
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assetId    String?
-  asset      Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  asset      Asset?    @relation(fields: [assetId], references: [id])
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
-
-// ------------------------------------------------------------------------------
-// 5. GEOFENCE ZONES (Indoor Polygon Boundaries)
-// ------------------------------------------------------------------------------
 
 model Geofence {
   id        String   @id @default(cuid())
   name      String
-  points    String // JSON array of {x, y} coordinates (meters relative to Zone floor plan)
+  points    String
   color     String   @default("#ef4444")
-  type      String   @default("RESTRICTED") // RESTRICTED, SAFE, WARNING
+  type      String   @default("RESTRICTED")
   zoneId    String
-  zone      Zone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  zone      Zone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
 }
-
-// ------------------------------------------------------------------------------
-// 6. TIMESCALEDB TELEMETRY RAW DATA
-// Catatan: Kunci primer komposit digunakan untuk kompatibilitas TimescaleDB.
-// ------------------------------------------------------------------------------
 
 model Telemetry {
   timestamp   DateTime
@@ -213,29 +185,25 @@ model TelemetryLog {
 model RuleFlow {
   id         String    @id @default(cuid())
   name       String
-  ruleType   String    @default("FLOW") // "WHEN_THEN" | "FLOW"
   isActive   Boolean   @default(true)
-  flowGraph  String?   @db.Text
-  ruleConfig String?   @db.Text
+  flowGraph  String?
   tenantId   String
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  logs       RuleLog[]
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  ruleConfig String?
+  ruleType   String    @default("FLOW")
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logs       RuleLog[]
 }
 
 model RuleLog {
   id        String   @id @default(cuid())
   ruleId    String
-  rule      RuleFlow @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  status    String // "SUCCESS" | "FAILED"
-  message   String   @db.Text
+  status    String
+  message   String
   createdAt DateTime @default(now())
+  rule      RuleFlow @relation(fields: [ruleId], references: [id], onDelete: Cascade)
 }
-
-// ------------------------------------------------------------------------------
-// 7. SYSTEM SETTINGS
-// ------------------------------------------------------------------------------
 
 model SystemSetting {
   key       String   @id
@@ -243,28 +211,24 @@ model SystemSetting {
   updatedAt DateTime @updatedAt
 }
 
-// ------------------------------------------------------------------------------
-// 8. DASHBOARD INSIGHTS
-// ------------------------------------------------------------------------------
-
 model DashboardSection {
   id        String            @id @default(cuid())
   name      String
   order     Int               @default(0)
-  layout    String?           @db.Text
+  layout    String?
   tenantId  String
-  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  widgets   DashboardWidget[]
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  widgets   DashboardWidget[]
 }
 
 model DashboardWidget {
   id        String           @id @default(cuid())
   type      String
-  config    String?          @db.Text
+  config    String?
   sectionId String
-  section   DashboardSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
+  section   DashboardSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 }

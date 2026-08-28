@@ -1712,19 +1712,15 @@ export default function AssetsPage() {
                                         Tersedia variabel <code>payload</code> (raw buffer / JSON) dan <code>topic</code>.
                                       </p>
                                       <div className="rounded-lg overflow-hidden border border-border">
-                                        <Editor
-                                          height="180px"
-                                          defaultLanguage="javascript"
-                                          theme="vs-dark"
+                                        <textarea
+                                          rows={8}
                                           value={attr.mqttDecodeFunctionCode || defaultGenericAttributeCode}
-                                          onChange={(val) => {
-                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttDecodeFunctionCode: val || '' } : a));
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttDecodeFunctionCode: val } : a));
                                           }}
-                                          options={{
-                                            minimap: { enabled: false },
-                                            fontSize: 11,
-                                            scrollBeyondLastLine: false,
-                                          }}
+                                          className="w-full font-mono text-[10.5px] p-2.5 bg-black/75 text-emerald-400 border border-border/85 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed"
+                                          placeholder="// Custom attribute JS code..."
                                         />
                                       </div>
                                     </div>
