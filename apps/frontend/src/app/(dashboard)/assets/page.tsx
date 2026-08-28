@@ -428,6 +428,7 @@ export default function AssetsPage() {
 
   // Dynamic parameters
   const [attributes, setAttributes] = useState<AssetAttribute[]>([]);
+  const [expandedAttributeIndex, setExpandedAttributeIndex] = useState<number | null>(null);
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
   // Map Picker Modal state
@@ -1459,230 +1460,276 @@ export default function AssetsPage() {
                   ) : (
                     <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
                       {attributes.map((attr, idx) => {
+                        const isExpanded = expandedAttributeIndex === idx;
                         return (
-                          <div key={idx} className="bg-secondary/15 border border-border p-4 rounded-xl space-y-3.5 relative">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setAttributes(prev => prev.filter((_, i) => i !== idx));
-                              }}
-                              className="absolute right-3 top-3 text-muted-foreground hover:text-red-400 transition-colors cursor-pointer"
-                              title="Remove Attribute"
+                          <div key={idx} className={`border rounded-xl transition-all ${isExpanded ? 'bg-secondary/15 border-primary/40 shadow-sm' : 'bg-secondary/5 border-border hover:bg-secondary/10'}`}>
+                            {/* Accordion Header (Summary) */}
+                            <div 
+                              className="flex items-center justify-between p-3 cursor-pointer select-none"
+                              onClick={() => setExpandedAttributeIndex(isExpanded ? null : idx)}
                             >
-                              <X className="h-4 w-4" />
-                            </button>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div className="space-y-1">
-                                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Attribute Name</label>
-                                <Input
-                                  type="text"
-                                  value={attr.name}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, name: val } : a));
-                                  }}
-                                  placeholder="e.g. temperature"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Data Type</label>
-                                <select
-                                  value={attr.dataType}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, dataType: val } : a));
-                                  }}
-                                  className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  className={`p-1 rounded-md transition-colors ${isExpanded ? 'bg-primary/20 text-primary' : 'bg-secondary/50 text-muted-foreground'}`}
                                 >
-                                  <option value="Number">Number</option>
-                                  <option value="String">String</option>
-                                  <option value="GeoPoint">GeoPoint (GPS)</option>
-                                  <option value="JSON">JSON</option>
-                                  <option value="Text">Text</option>
-                                  <option value="Integer">Integer</option>
-                                  <option value="Boolean">Boolean</option>
-                                </select>
+                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </button>
+                                <div className="flex items-center gap-2">
+                                  <span className={`font-bold text-sm ${isExpanded ? 'text-primary' : 'text-foreground'}`}>
+                                    {attr.name || <span className="text-muted-foreground italic font-normal">Unnamed Attribute</span>}
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-background border border-border text-muted-foreground">
+                                    {attr.dataType}
+                                  </span>
+                                </div>
                               </div>
-
-                              <div className="space-y-1">
-                                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Unit</label>
-                                <Input
-                                  type="text"
-                                  value={attr.unit}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, unit: val } : a));
+                              <div className="flex items-center gap-3">
+                                {attr.mqttAgentId && (
+                                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[9px] uppercase font-bold tracking-wide" title="Linked to IoT Agent">
+                                    <Activity className="h-3 w-3" />
+                                    <span className="hidden sm:inline">Linked</span>
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAttributes(prev => prev.filter((_, i) => i !== idx));
+                                    if (expandedAttributeIndex === idx) setExpandedAttributeIndex(null);
                                   }}
-                                  placeholder="e.g. °C"
-                                />
+                                  className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-md transition-colors"
+                                  title="Remove Attribute"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
                               </div>
                             </div>
 
-                            {/* Value / GPS Coordinates Picker Input */}
-                            <div className="pt-2 border-t border-border/30">
-                              {attr.dataType === 'GeoPoint' || attr.name === 'location' || attr.name === 'coordinates' || attr.name === 'maps' ? (
-                                <div className="space-y-2 bg-primary/5 border border-primary/20 p-3 rounded-lg">
-                                  <div className="flex items-center justify-between">
-                                    <label className="text-primary text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
-                                      <MapPin className="h-3.5 w-3.5" />
-                                      <span>GPS Coordinates (WGS84)</span>
-                                    </label>
-                                    <span className="text-[10px] text-muted-foreground italic font-normal">Format: Latitude, Longitude</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
+                            {/* Accordion Body (Expanded Form) */}
+                            {isExpanded && (
+                              <div className="p-4 pt-1 border-t border-border/50 space-y-3.5">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div className="space-y-1">
+                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Attribute Name</label>
                                     <Input
                                       type="text"
-                                      value={typeof attr.value === 'object' && attr.value !== null ? `${attr.value.lat ?? ''}, ${attr.value.lng ?? ''}` : (attr.value ?? '')}
+                                      value={attr.name}
                                       onChange={(e) => {
                                         const val = e.target.value;
-                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, value: val } : a));
+                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, name: val } : a));
                                       }}
-                                      placeholder="e.g. -6.168911, 106.899709"
-                                      className="font-mono text-xs bg-background/80"
+                                      placeholder="e.g. temperature"
                                     />
-                                    <Button
-                                      type="button"
-                                      onClick={() => {
-                                        setMapPickerTargetIndex(idx);
-                                        let initialLat = -6.168911;
-                                        let initialLng = 106.899709;
-                                        const rawVal = typeof attr.value === 'object' && attr.value !== null 
-                                          ? `${attr.value.lat ?? ''}, ${attr.value.lng ?? ''}` 
-                                          : (attr.value ?? '');
-                                        if (rawVal && typeof rawVal === 'string' && rawVal.includes(',')) {
-                                          const parts = rawVal.split(',').map((s: string) => parseFloat(s.trim()));
-                                          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                                            initialLat = parts[0];
-                                            initialLng = parts[1];
-                                          }
-                                        }
-                                        setMapPickerCoords({ lat: initialLat, lng: initialLng });
-                                        setMapPickerOpen(true);
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Data Type</label>
+                                    <select
+                                      value={attr.dataType}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, dataType: val } : a));
                                       }}
-                                      className="shrink-0 h-9 px-3.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                      className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
                                     >
-                                      <MapPin className="h-4 w-4" />
-                                      Pilih di Peta
-                                    </Button>
+                                      <option value="Number">Number</option>
+                                      <option value="String">String</option>
+                                      <option value="GeoPoint">GeoPoint (GPS)</option>
+                                      <option value="JSON">JSON</option>
+                                      <option value="Text">Text</option>
+                                      <option value="Integer">Integer</option>
+                                      <option value="Boolean">Boolean</option>
+                                    </select>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Unit</label>
+                                    <Input
+                                      type="text"
+                                      value={attr.unit}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, unit: val } : a));
+                                      }}
+                                      placeholder="e.g. °C"
+                                    />
                                   </div>
                                 </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Initial / Fallback Value</label>
-                                  <Input
-                                    type="text"
-                                    value={attr.value ?? ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, value: val } : a));
-                                    }}
-                                    placeholder="Initial or fallback value"
-                                  />
-                                </div>
-                              )}
-                            </div>
 
-                            {/* Agent Link selection */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/30">
-                              <div className="space-y-1">
-                                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Agent Link</label>
-                                <select
-                                  value={attr.mqttAgentId || ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setAttributes(prev => prev.map((a, i) => {
-                                      if (i === idx) {
-                                        const agent = assets.find(as => as.id === val);
-                                        const defaultCode = agent?.type === 'AGENT_MQTT_TELTONIKA' ? defaultTeltonikaDecodeCode : defaultGenericAttributeCode;
-                                        return {
-                                          ...a,
-                                          mqttAgentId: val || undefined,
-                                          mqttTopic: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? 'json-gw-event/received_data/#' : '') : '',
-                                          mqttValuePath: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? `$.${a.name}` : '') : '',
-                                          mqttDecodeFunctionCode: val ? defaultCode : undefined
-                                        };
+                                {/* Value / GPS Coordinates Picker Input */}
+                                <div className="pt-2 border-t border-border/30">
+                                  {attr.dataType === 'GeoPoint' || attr.name === 'location' || attr.name === 'coordinates' || attr.name === 'maps' ? (
+                                    <div className="space-y-2 bg-primary/5 border border-primary/20 p-3 rounded-lg">
+                                      <div className="flex items-center justify-between">
+                                        <label className="text-primary text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                          <MapPin className="h-3.5 w-3.5" />
+                                          <span>GPS Coordinates (WGS84)</span>
+                                        </label>
+                                        <span className="text-[10px] text-muted-foreground italic font-normal">Format: Latitude, Longitude</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          type="text"
+                                          value={typeof attr.value === 'object' && attr.value !== null ? `${attr.value.lat ?? ''}, ${attr.value.lng ?? ''}` : (attr.value ?? '')}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, value: val } : a));
+                                          }}
+                                          placeholder="e.g. -6.168911, 106.899709"
+                                          className="font-mono text-xs bg-background/80"
+                                        />
+                                        <Button
+                                          type="button"
+                                          onClick={() => {
+                                            setMapPickerTargetIndex(idx);
+                                            let initialLat = -6.168911;
+                                            let initialLng = 106.899709;
+                                            const rawVal = typeof attr.value === 'object' && attr.value !== null 
+                                              ? `${attr.value.lat ?? ''}, ${attr.value.lng ?? ''}` 
+                                              : (attr.value ?? '');
+                                            if (rawVal && typeof rawVal === 'string' && rawVal.includes(',')) {
+                                              const parts = rawVal.split(',').map((s: string) => parseFloat(s.trim()));
+                                              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                                                initialLat = parts[0];
+                                                initialLng = parts[1];
+                                              }
+                                            }
+                                            setMapPickerCoords({ lat: initialLat, lng: initialLng });
+                                            setMapPickerOpen(true);
+                                          }}
+                                          className="shrink-0 h-9 px-3.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                        >
+                                          <MapPin className="h-4 w-4" />
+                                          Pilih di Peta
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Initial / Fallback Value</label>
+                                      <Input
+                                        type="text"
+                                        value={attr.value ?? ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, value: val } : a));
+                                        }}
+                                        placeholder="Initial or fallback value"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Agent Link selection */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/30">
+                                  <div className="space-y-1">
+                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Agent Link</label>
+                                    <select
+                                      value={attr.mqttAgentId || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setAttributes(prev => prev.map((a, i) => {
+                                          if (i === idx) {
+                                            const agent = assets.find(as => as.id === val);
+                                            const defaultCode = agent?.type === 'AGENT_MQTT_TELTONIKA' ? defaultTeltonikaDecodeCode : defaultGenericAttributeCode;
+                                            return {
+                                              ...a,
+                                              mqttAgentId: val || undefined,
+                                              mqttTopic: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? 'json-gw-event/received_data/#' : '') : '',
+                                              mqttValuePath: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? `$.${a.name}` : '') : '',
+                                              mqttDecodeFunctionCode: val ? defaultCode : undefined
+                                            };
+                                          }
+                                          return a;
+                                        }));
+                                      }}
+                                      className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
+                                    >
+                                      <option value="">(None / Static Attribute)</option>
+                                      {assets
+                                        .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
+                                        .map(a => (
+                                          <option key={a.id} value={a.id}>
+                                            {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
+                                          </option>
+                                        ))
                                       }
-                                      return a;
-                                    }));
-                                  }}
-                                  className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                                >
-                                  <option value="">(None / Static Attribute)</option>
-                                  {assets
-                                    .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
-                                    .map(a => (
-                                      <option key={a.id} value={a.id}>
-                                        {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
-                                      </option>
-                                    ))
-                                  }
-                                </select>
-                              </div>
-
-                              {attr.mqttAgentId && (
-                                <div className="space-y-1">
-                                  <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Subscribe Topic</label>
-                                  <Input
-                                    type="text"
-                                    value={attr.mqttTopic || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttTopic: val } : a));
-                                    }}
-                                    placeholder="e.g. factory/temp/1 or json-gw-event/received_data/#"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                            {/* Sub-parameters for Agent Ingestions */}
-                            {attr.mqttAgentId && (
-                              <div className="space-y-3.5 pt-2">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                                  <div className="space-y-1">
-                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Publish Topic</label>
-                                    <Input
-                                      type="text"
-                                      value={attr.mqttPublishTopic || ''}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttPublishTopic: val } : a));
-                                      }}
-                                      placeholder="e.g. cmd/temp/1"
-                                    />
+                                    </select>
                                   </div>
 
-                                  <div className="space-y-1">
-                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Value Path</label>
-                                    <Input
-                                      type="text"
-                                      value={attr.mqttValuePath || ''}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttValuePath: val } : a));
-                                      }}
-                                      placeholder="e.g. $.source_address or $.val"
-                                    />
-                                  </div>
+                                  {attr.mqttAgentId && (
+                                    <div className="space-y-1">
+                                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Subscribe Topic</label>
+                                      <Input
+                                        type="text"
+                                        value={attr.mqttTopic || ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttTopic: val } : a));
+                                        }}
+                                        placeholder="e.g. factory/temp/1 or json-gw-event/received_data/#"
+                                      />
+                                    </div>
+                                  )}
                                 </div>
+                                {/* Sub-parameters for Agent Ingestions */}
+                                {attr.mqttAgentId && (
+                                  <div className="space-y-3.5 pt-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                      <div className="space-y-1">
+                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Publish Topic</label>
+                                        <Input
+                                          type="text"
+                                          value={attr.mqttPublishTopic || ''}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttPublishTopic: val } : a));
+                                          }}
+                                          placeholder="e.g. cmd/temp/1"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Value Path</label>
+                                        <Input
+                                          type="text"
+                                          value={attr.mqttValuePath || ''}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttValuePath: val } : a));
+                                          }}
+                                          placeholder="e.g. $.temperature"
+                                        />
+                                      </div>
+                                    </div>
 
-                                <div className="space-y-1.5">
-                                  <label className="text-muted-foreground flex items-center gap-1">
-                                    <Code className="h-3 w-3 text-primary" />
-                                    Attribute JS Ingestion Decoder Function
-                                  </label>
-                                  <textarea
-                                    rows={8}
-                                    value={attr.mqttDecodeFunctionCode || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttDecodeFunctionCode: val } : a));
-                                    }}
-                                    className="w-full font-mono text-[10.5px] p-2.5 bg-black/75 text-emerald-400 border border-border/85 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed"
-                                    placeholder="// Custom attribute JS code..."
-                                  />
-                                </div>
+                                    <div className="space-y-2">
+                                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                                        <Code className="h-3 w-3" /> Attribute JS Ingestion Decoder Function
+                                      </label>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        Function ini akan dipanggil untuk memproses payload raw MQTT. Extract nilai spesifik untuk atribut ini dan kembalikan (return). <br />
+                                        Tersedia variabel <code>payload</code> (raw buffer / JSON) dan <code>topic</code>.
+                                      </p>
+                                      <div className="rounded-lg overflow-hidden border border-border">
+                                        <Editor
+                                          height="180px"
+                                          defaultLanguage="javascript"
+                                          theme="vs-dark"
+                                          value={attr.mqttDecodeFunctionCode || defaultGenericAttributeCode}
+                                          onChange={(val) => {
+                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttDecodeFunctionCode: val || '' } : a));
+                                          }}
+                                          options={{
+                                            minimap: { enabled: false },
+                                            fontSize: 11,
+                                            scrollBeyondLastLine: false,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
