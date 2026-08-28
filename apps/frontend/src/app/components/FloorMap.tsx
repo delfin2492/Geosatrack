@@ -50,94 +50,78 @@ interface FloorMapProps {
 
 
 const getAssetMarkerIcon = (type: string = '', name: string = '') => {
-  const t = (type || '').toLowerCase();
+  const t = (type || '').toUpperCase();
   const n = (name || '').toLowerCase();
-  const combined = `${t} ${n}`;
+  const combined = `${type} ${name}`.toLowerCase();
 
-  // 1. Vehicle / Car / Mobil / Forklift / Truck / Fleet / Transport
-  if (combined.includes('car') || combined.includes('vehicle') || combined.includes('mobil') || combined.includes('forklift') || combined.includes('truck') || combined.includes('truk') || combined.includes('fleet') || combined.includes('transport')) {
+  // 1. ANCHOR -> MapPin (Rose Red)
+  if (t === 'ANCHOR' || n.startsWith('anchor_') || (n.includes('anchor') && !n.includes('tag'))) {
+    return {
+      color: '#f43f5e', // Rose Red
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
+    };
+  }
+
+  // 2. TAG -> HardDrive (Sky Blue)
+  if (t === 'TAG' || n.includes('tag') || n.includes('teltonika tag')) {
+    return {
+      color: '#3b82f6', // Sky Blue
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`
+    };
+  }
+
+  // 3. MESH_EYE_SENSOR / ENVIRONMENT -> Activity Pulse (Emerald Green)
+  if (t === 'MESH_EYE_SENSOR' || t === 'ENVIRONMENT' || n.startsWith('mesh_') || combined.includes('eye sensor')) {
+    return {
+      color: '#10b981', // Emerald Green
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`
+    };
+  }
+
+  // 4. FORKLIFT / THINGS -> Boxes (Amber Cargo)
+  if (t === 'FORKLIFT' || t === 'THINGS' || combined.includes('forklift') || combined.includes('pallet') || combined.includes('container') || combined.includes('cargo') || combined.includes('kargo')) {
+    return {
+      color: '#d97706', // Amber Cargo
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`
+    };
+  }
+
+  // 5. LIGHT / MACHINE -> Sliders (Yellow)
+  if (t === 'LIGHT' || t === 'MACHINE' || combined.includes('light') || combined.includes('lampu') || combined.includes('machine')) {
+    return {
+      color: '#eab308', // Yellow
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>`
+    };
+  }
+
+  // 6. BUILDING / DOOR / ROOM / RACK -> Folder (Purple)
+  if (t === 'BUILDING' || t === 'DOOR' || t === 'ROOM' || t === 'RACK' || combined.includes('building') || combined.includes('gedung') || combined.includes('door') || combined.includes('pintu') || combined.includes('room') || combined.includes('rack')) {
+    return {
+      color: '#8b5cf6', // Purple
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`
+    };
+  }
+
+  // 7. CITY / WEATHER / SHIP -> Globe (Cyan)
+  if (t === 'CITY' || t === 'WEATHER' || t === 'SHIP' || combined.includes('city') || combined.includes('weather') || combined.includes('ship')) {
+    return {
+      color: '#06b6d4', // Cyan
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
+    };
+  }
+
+  // 8. VEHICLE / CAR -> Car (Sky Blue)
+  if (combined.includes('car') || combined.includes('vehicle') || combined.includes('mobil') || combined.includes('truk') || combined.includes('truck')) {
     return {
       color: '#0284c7', // Sky Blue
       svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
     };
   }
 
-  // 2. Light / Lampu / Lighting
-  if (combined.includes('lamp') || combined.includes('light') || combined.includes('lampu') || combined.includes('lighting')) {
-    return {
-      color: '#eab308', // Yellow
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>`
-    };
-  }
-
-  // 3. Door / Pintu / Gate
-  if (combined.includes('door') || combined.includes('pintu') || combined.includes('gate')) {
-    return {
-      color: '#8b5cf6', // Purple
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M18 20V6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14"/><path d="M2 20h20"/><path d="M14 12v.01"/></svg>`
-    };
-  }
-
-  // 4. Building / Gedung / Office / Room / City
-  if (combined.includes('building') || combined.includes('gedung') || combined.includes('office') || combined.includes('room') || combined.includes('city')) {
-    return {
-      color: '#6366f1', // Indigo
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg>`
-    };
-  }
-
-  // 5. Container / Pallet / Cargo / Kargo / Box / Package / Storage / Inventory
-  if (combined.includes('container') || combined.includes('kontainer') || combined.includes('pallet') || combined.includes('cargo') || combined.includes('kargo') || combined.includes('box') || combined.includes('package') || combined.includes('paket') || combined.includes('storage')) {
-    return {
-      color: '#d97706', // Amber / Orange Cargo
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`
-    };
-  }
-
-  // 6. Camera / CCTV / Video
-  if (combined.includes('camera') || combined.includes('cctv') || combined.includes('video')) {
-    return {
-      color: '#06b6d4', // Cyan
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>`
-    };
-  }
-
-  // 7. Person / Employee / Worker / Staff / User / Karyawan
-  if (combined.includes('person') || combined.includes('people') || combined.includes('worker') || combined.includes('staff') || combined.includes('employee') || combined.includes('user') || combined.includes('karyawan') || combined.includes('orang')) {
-    return {
-      color: '#ec4899', // Pink
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
-    };
-  }
-
-  // 8. Battery / Power / Charger / Energy / Plug
-  if (combined.includes('battery') || combined.includes('baterai') || combined.includes('power') || combined.includes('charger') || combined.includes('plug') || combined.includes('electricity')) {
-    return {
-      color: '#10b981', // Emerald Green
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="16" height="10" x="2" y="7" rx="2" ry="2"/><line x1="22" x2="22" y1="11" y2="13"/><line x1="6" x2="6" y1="11" y2="13"/><line x1="10" x2="10" y1="11" y2="13"/></svg>`
-    };
-  }
-
-  // 9. Thermometer / Temperature / Suhu / Weather
-  if (combined.includes('temp') || combined.includes('suhu') || combined.includes('thermometer') || combined.includes('air quality') || combined.includes('weather')) {
-    return {
-      color: '#f43f5e', // Rose Red
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>`
-    };
-  }
-
-  // 10. Anchor / Gateway / Router / Mesh / Node
-  if (combined.includes('anchor') || combined.includes('gateway') || combined.includes('router') || combined.includes('mesh') || combined.includes('node')) {
-    return {
-      color: '#f97316', // Orange
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"/></svg>`
-    };
-  }
-
-  // Default: Tag / Radio / Beacon
+  // Default: HardDrive / Tag Card Icon (Indigo Blue)
   return {
-    color: '#f97316', // Default Amber Orange
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="1" fill="currentColor" /><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49" /></svg>`
+    color: '#6366f1', // Indigo
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`
   };
 };
 
