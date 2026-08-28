@@ -134,6 +134,7 @@ export default function FloorMap({
   const markersRef = useRef<Map<string, any>>(new Map());
   const [mapStyle, setMapStyle] = useState<'google_roadmap' | 'osm_standard'>('google_roadmap');
   const [mapReady, setMapReady] = useState(false);
+  const [clusterModalAssets, setClusterModalAssets] = useState<MapAsset[] | null>(null);
 
   const centerLat = -6.168911;
   const centerLon = 106.899709;
@@ -213,17 +214,54 @@ export default function FloorMap({
     (map as any)._tileLayer = newLayer;
   }, [mapStyle, mapReady]);
 
-  // Sync Markers dynamically on the map
+    // Sync Markers dynamically on the map (with proximity clustering)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const L = require('leaflet');
 
-    const currentAssetIds = new Set(assets.map(a => a.id));
+    // Group assets by proximity threshold (~0.00015 deg, approx 15m)
+    const threshold = 0.00015;
+    interface AssetCluster {
+      id: string;
+      lat: number;
+      lon: number;
+      assets: MapAsset[];
+    }
 
-    // Remove deleted assets
+    const clusters: AssetCluster[] = [];
+
+    assets.forEach((asset) => {
+      let lat = asset.lat ?? centerLat;
+      let lon = asset.lon ?? centerLon;
+
+      if (isNaN(lat) || isNaN(lon) || lat < -11.5 || lat > 6.5 || lon < 94.5 || lon > 141.5) {
+        lat = centerLat;
+        lon = centerLon;
+      }
+
+      // Check if this asset is near an existing cluster
+      const existingCluster = clusters.find(
+        (c) => Math.abs(c.lat - lat) < threshold && Math.abs(c.lon - lon) < threshold
+      );
+
+      if (existingCluster) {
+        existingCluster.assets.push(asset);
+      } else {
+        clusters.push({
+          id: `cluster-${asset.id}`,
+          lat,
+          lon,
+          assets: [asset],
+        });
+      }
+    });
+
+    const currentClusterIds = new Set(clusters.map((c) => c.id));
+
+    // Remove obsolete markers
     for (const [id, marker] of markersRef.current.entries()) {
-      if (!currentAssetIds.has(id)) {
+      if (!currentClusterIds.has(id)) {
         marker.remove();
         markersRef.current.delete(id);
       }
@@ -231,79 +269,123 @@ export default function FloorMap({
 
     const validCoords: [number, number][] = [];
 
-    // Upsert existing/new assets
-    assets.forEach((asset) => {
-      let lat = asset.lat ?? centerLat;
-      let lon = asset.lon ?? centerLon;
+    // Render single markers or grouped cluster markers
+    clusters.forEach((cluster) => {
+      validCoords.push([cluster.lat, cluster.lon]);
 
-      // Filter out invalid GPS coordinates outside Indonesia region
-      if (isNaN(lat) || isNaN(lon) || lat < -11.5 || lat > 6.5 || lon < 94.5 || lon > 141.5) {
-        lat = centerLat;
-        lon = centerLon;
-      }
-      validCoords.push([lat, lon]);
+      if (cluster.assets.length === 1) {
+        // SINGLE ASSET MARKER
+        const asset = cluster.assets[0];
+        const lastSeenDate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : null;
+        const isOnline = lastSeenDate ? Date.now() - lastSeenDate.getTime() < 300000 : false;
+        const statusColor = isOnline ? '#10b981' : '#ef4444';
 
-      // Determine online/offline status based on lastSeen (threshold 5 minutes = 300,000 ms)
-      const lastSeenDate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : null;
-      const isOnline = lastSeenDate ? (Date.now() - lastSeenDate.getTime() < 300000) : false;
-      const statusColor = isOnline ? '#10b981' : '#ef4444'; // green vs red
+        const markerIconInfo = getAssetMarkerIcon(asset.type, asset.name);
+        let pinColor = markerIconInfo.color;
+        if (asset.status === 'tilt_warning' || asset.status === 'fall_detected') {
+          pinColor = '#ef4444';
+        }
 
-      const markerIconInfo = getAssetMarkerIcon(asset.type, asset.name);
-
-      let pinColor = markerIconInfo.color;
-      if (asset.status === 'tilt_warning' || asset.status === 'fall_detected') {
-        pinColor = '#ef4444'; // red for alert/danger status
-      }
-
-      // Vector Map Pin teardrop icon shape with asset-specific icon inside & status badge dot
-      const customIcon = L.divIcon({
-        className: 'custom-asset-icon',
-        html: `
-          <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
-            <!-- Pin label badge (using actual asset display name with white background) -->
-            <div class="bg-white text-slate-800 border border-slate-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10">
-              ${asset.name}
-            </div>
-
-            <!-- Pin Container -->
-            <div style="position: relative; width: 34px; height: 34px;">
-              <!-- Classic Map Pin Teardrop SVG -->
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.5"/>
-              </svg>
-
-              <!-- Asset-specific Icon inside Pin -->
-              <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
-                ${markerIconInfo.svg}
+        const customIcon = L.divIcon({
+          className: 'custom-asset-icon',
+          html: `
+            <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
+              <div class="bg-white text-slate-800 border border-slate-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10">
+                ${asset.name}
               </div>
-
-              <!-- Status Dot (Red/Green) in the top-right corner of the Pin shoulder -->
-              <div style="position: absolute; top: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; background-color: ${statusColor}; border: 1.5px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 10;">
-                <!-- Subtle pulsing effect if online -->
-                ${isOnline ? `<div class="absolute inset-0 rounded-full animate-ping bg-emerald-400 opacity-60"></div>` : ''}
+              <div style="position: relative; width: 34px; height: 34px;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.5"/>
+                </svg>
+                <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
+                  ${markerIconInfo.svg}
+                </div>
+                <div style="position: absolute; top: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; background-color: ${statusColor}; border: 1.5px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 10;">
+                  ${isOnline ? `<div class="absolute inset-0 rounded-full animate-ping bg-emerald-400 opacity-60"></div>` : ''}
+                </div>
               </div>
+              <div style="width: 18px; height: 5px; background: rgba(0,0,0,0.25); border-radius: 50%; filter: blur(2px); margin-top: 1px;"></div>
             </div>
-
-            <!-- Bayangan marker di bawahnya -->
-            <div style="width: 18px; height: 5px; background: rgba(0,0,0,0.25); border-radius: 50%; filter: blur(2px); margin-top: 1px;"></div>
-          </div>
-        `,
-        iconSize: [60, 60],
-        iconAnchor: [30, 48],
-      });
-
-      const existingMarker = markersRef.current.get(asset.id);
-      if (existingMarker) {
-        existingMarker.setLatLng([lat, lon]);
-        existingMarker.setIcon(customIcon);
-      } else {
-        const marker = L.marker([lat, lon], { icon: customIcon }).addTo(map);
-        marker.on('click', () => {
-          // Smooth flyTo zoom animation when clicked
-          map.flyTo([lat, lon], 18, { duration: 1.2 });
-          if (onSelectAsset) onSelectAsset(asset);
+          `,
+          iconSize: [60, 60],
+          iconAnchor: [30, 48],
         });
-        markersRef.current.set(asset.id, marker);
+
+        const existingMarker = markersRef.current.get(cluster.id);
+        if (existingMarker) {
+          existingMarker.setLatLng([cluster.lat, cluster.lon]);
+          existingMarker.setIcon(customIcon);
+        } else {
+          const marker = L.marker([cluster.lat, cluster.lon], { icon: customIcon }).addTo(map);
+          marker.on('click', () => {
+            map.flyTo([cluster.lat, cluster.lon], 18, { duration: 1.2 });
+            if (onSelectAsset) onSelectAsset(asset);
+          });
+          markersRef.current.set(cluster.id, marker);
+        }
+      } else {
+        // GROUPED CLUSTER MARKER (Multiple assets at same location)
+        const hasWarning = cluster.assets.some(
+          (a) => a.status === 'tilt_warning' || a.status === 'fall_detected'
+        );
+        const onlineCount = cluster.assets.filter((a) => {
+          const ls = a.tag?.lastSeen ? new Date(a.tag.lastSeen) : null;
+          return ls ? Date.now() - ls.getTime() < 300000 : false;
+        }).length;
+
+        const clusterIcon = L.divIcon({
+          className: 'custom-cluster-icon',
+          html: `
+            <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 90px; height: 70px; cursor: pointer;">
+              <!-- Cluster Header Tag -->
+              <div class="bg-slate-900/95 text-white border border-slate-700/80 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-xl whitespace-nowrap mb-1 z-10 flex items-center gap-1.5 backdrop-blur-md">
+                <span class="bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded-full text-[9px] font-black">${cluster.assets.length}</span>
+                <span class="truncate max-w-[70px]">${cluster.assets[0].name}</span>
+              </div>
+
+              <!-- Cluster Glowing Pin Container -->
+              <div style="position: relative; width: 42px; height: 42px;">
+                <!-- Animated Ring -->
+                <div style="position: absolute; inset: -3px; border-radius: 50%; background: ${hasWarning ? '#ef4444' : '#f59e0b'}; opacity: 0.35; filter: blur(4px);" class="animate-pulse"></div>
+
+                <!-- Main Circle -->
+                <div style="position: relative; width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2.5px solid ${hasWarning ? '#ef4444' : '#f59e0b'}; box-shadow: 0 4px 14px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 5;">
+                  <!-- Layers Icon -->
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${hasWarning ? '#ef4444' : '#f59e0b'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                  </svg>
+                </div>
+
+                <!-- Online Indicator Badge -->
+                <div style="position: absolute; top: -2px; right: -2px; width: 14px; height: 14px; border-radius: 50%; background-color: ${onlineCount > 0 ? '#10b981' : '#ef4444'}; border: 2px solid #0f172a; display: flex; align-items: center; justify-content: center; z-index: 10; font-size: 8px; font-weight: bold; color: white;">
+                </div>
+              </div>
+
+              <!-- Base Shadow -->
+              <div style="width: 24px; height: 6px; background: rgba(0,0,0,0.3); border-radius: 50%; filter: blur(2.5px); margin-top: 2px;"></div>
+            </div>
+          `,
+          iconSize: [90, 70],
+          iconAnchor: [45, 52],
+        });
+
+        const existingMarker = markersRef.current.get(cluster.id);
+        if (existingMarker) {
+          existingMarker.setLatLng([cluster.lat, cluster.lon]);
+          existingMarker.setIcon(clusterIcon);
+        } else {
+          const marker = L.marker([cluster.lat, cluster.lon], { icon: clusterIcon }).addTo(map);
+          marker.on('click', () => {
+            map.flyTo([cluster.lat, cluster.lon], Math.min(map.getZoom() + 2, 19), { duration: 1.0 });
+            setClusterModalAssets(cluster.assets);
+            if (onSelectAsset && cluster.assets.length > 0) {
+              onSelectAsset(cluster.assets[0]);
+            }
+          });
+          markersRef.current.set(cluster.id, marker);
+        }
       }
     });
 
@@ -333,7 +415,65 @@ export default function FloorMap({
       {/* LEAFLET MAP ELEMENT CONTAINER */}
       <div ref={mapContainerRef} className="w-full h-full min-h-[580px] block z-0 bg-secondary/15" />
       
-      {/* TOP-LEFT TOOLBAR (overlaying map) */}
+
+      {/* CLUSTER GROUP INSPECTOR MODAL */}
+      {clusterModalAssets && (
+        <div className="absolute bottom-4 left-4 z-[1000] w-80 bg-card/95 border border-border rounded-2xl p-3 shadow-2xl backdrop-blur-md space-y-2.5 max-h-[350px] flex flex-col">
+          <div className="flex items-center justify-between border-b border-border/60 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="bg-amber-500 text-slate-950 text-xs font-black px-2 py-0.5 rounded-full">
+                {clusterModalAssets.length}
+              </span>
+              <span className="text-xs font-bold text-foreground">Assets in Location</span>
+            </div>
+            <button
+              onClick={() => setClusterModalAssets(null)}
+              className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-secondary cursor-pointer transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="overflow-y-auto space-y-1.5 pr-1 flex-1">
+            {clusterModalAssets.map((asset) => {
+              const iconInfo = getAssetMarkerIcon(asset.type, asset.name);
+              const lastSeenDate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : null;
+              const isOnline = lastSeenDate ? Date.now() - lastSeenDate.getTime() < 300000 : false;
+
+              return (
+                <div
+                  key={asset.id}
+                  onClick={() => {
+                    if (onSelectAsset) onSelectAsset(asset);
+                  }}
+                  className="flex items-center justify-between p-2 rounded-xl border border-border/50 bg-secondary/20 hover:bg-secondary/60 cursor-pointer transition-all"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white shadow-sm"
+                      style={{ backgroundColor: iconInfo.color }}
+                      dangerouslySetInnerHTML={{ __html: iconInfo.svg }}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-foreground truncate">{asset.name}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono uppercase">{asset.type}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                    <span className="text-[10px] font-bold text-muted-foreground">
+                      {isOnline ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+            {/* TOP-LEFT TOOLBAR (overlaying map) */}
       <div className="absolute top-4 left-4 z-[1000] flex items-center gap-2">
         {/* Clean Tools Bar */}
         <div className="flex items-center gap-1.5 bg-card/95 border border-border px-2.5 py-1 rounded-xl shadow-lg backdrop-blur-md">
