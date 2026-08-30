@@ -133,6 +133,7 @@ export default function FloorMap({
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const clusterGroupRef = useRef<any>(null);
+  const hasInitializedBoundsRef = useRef<boolean>(false);
   const [mapStyle, setMapStyle] = useState<'google_roadmap' | 'osm_standard'>('google_roadmap');
   const [mapReady, setMapReady] = useState(false);
   const [clusterModalAssets, setClusterModalAssets] = useState<MapAsset[] | null>(null);
@@ -355,6 +356,8 @@ export default function FloorMap({
       });
 
       marker.on('click', () => {
+        // Pan smoothly to selected asset without changing current zoom level
+        map.panTo([lat, lon]);
         if (onSelectAsset) onSelectAsset(asset);
       });
 
@@ -362,7 +365,8 @@ export default function FloorMap({
       markersRef.current.set(asset.id, marker);
     });
 
-    if (validCoords.length > 0) {
+    // Only fit map bounds ONCE on initial load, so clicking assets or state changes will NOT zoom out the user
+    if (!hasInitializedBoundsRef.current && validCoords.length > 0) {
       if (validCoords.length === 1) {
         map.setView(validCoords[0], 17);
       } else {
@@ -371,13 +375,13 @@ export default function FloorMap({
           map.fitBounds(bounds, { padding: [60, 60], maxZoom: 18 });
         }
       }
-    } else {
-      map.setView([centerLat, centerLon], 16);
+      hasInitializedBoundsRef.current = true;
     }
   }, [assets, mapReady, onSelectAsset]);
 
     const handleReset = () => {
     if (mapRef.current) {
+      hasInitializedBoundsRef.current = false;
       mapRef.current.setView([centerLat, centerLon], 16);
     }
   };
