@@ -132,6 +132,7 @@ export default function FloorMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
+  const clusterGroupRef = useRef<any>(null);
   const [mapStyle, setMapStyle] = useState<'google_roadmap' | 'osm_standard'>('google_roadmap');
   const [mapReady, setMapReady] = useState(false);
   const [clusterModalAssets, setClusterModalAssets] = useState<MapAsset[] | null>(null);
@@ -172,6 +173,83 @@ export default function FloorMap({
     }).addTo(map);
     
     (map as any)._tileLayer = defaultLayer;
+
+    // Initialize Leaflet MarkerCluster Group with Donut Ring Icon
+    require('leaflet.markercluster');
+    const clusterGroup = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      animate: true,
+      iconCreateFunction: (cluster: any) => {
+        const childMarkers = cluster.getAllChildMarkers();
+        const count = childMarkers.length;
+
+        // Tally category colors for conic-gradient outer ring
+        const colorCounts: Record<string, number> = {};
+        childMarkers.forEach((m: any) => {
+          const color = m.options.assetColor || '#6366f1';
+          colorCounts[color] = (colorCounts[color] || 0) + 1;
+        });
+
+        let gradientStops: string[] = [];
+        let currentPercent = 0;
+        const colors = Object.keys(colorCounts);
+
+        if (colors.length === 1) {
+          gradientStops.push(`${colors[0]} 0% 100%`);
+        } else {
+          colors.forEach((color) => {
+            const pct = (colorCounts[color] / count) * 100;
+            gradientStops.push(`${color} ${currentPercent}% ${currentPercent + pct}%`);
+            currentPercent += pct;
+          });
+        }
+
+        const conicGradient = `conic-gradient(${gradientStops.join(', ')})`;
+
+        return L.divIcon({
+          html: `
+            <div style="
+              position: relative;
+              width: 44px;
+              height: 44px;
+              border-radius: 50%;
+              background: ${conicGradient};
+              padding: 4px;
+              box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            ">
+              <div style="
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                background: #ffffff;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #0f172a;
+                font-weight: 800;
+                font-size: 13px;
+                font-family: system-ui, -apple-system, sans-serif;
+                box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+              ">
+                ${count}
+              </div>
+            </div>
+          `,
+          className: 'custom-donut-cluster-icon',
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
+        });
+      },
+    });
+
+    map.addLayer(clusterGroup);
+    clusterGroupRef.current = clusterGroup;
 
     setMapReady(true);
 
@@ -214,22 +292,17 @@ export default function FloorMap({
     (map as any)._tileLayer = newLayer;
   }, [mapStyle, mapReady]);
 
-    // Sync Markers dynamically on the map (with proximity clustering)
+    // Sync Markers dynamically on the map using Leaflet MarkerCluster
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady) return;
+    const clusterGroup = clusterGroupRef.current;
+    if (!map || !mapReady || !clusterGroup) return;
     const L = require('leaflet');
 
-    // Group assets by proximity threshold (~0.00015 deg, approx 15m)
-    const threshold = 0.00015;
-    interface AssetCluster {
-      id: string;
-      lat: number;
-      lon: number;
-      assets: MapAsset[];
-    }
+    clusterGroup.clearLayers();
+    markersRef.current.clear();
 
-    const clusters: AssetCluster[] = [];
+    const validCoords: [number, number][] = [];
 
     assets.forEach((asset) => {
       let lat = asset.lat ?? centerLat;
@@ -239,157 +312,56 @@ export default function FloorMap({
         lat = centerLat;
         lon = centerLon;
       }
+      validCoords.push([lat, lon]);
 
-      // Check if this asset is near an existing cluster
-      const existingCluster = clusters.find(
-        (c) => Math.abs(c.lat - lat) < threshold && Math.abs(c.lon - lon) < threshold
-      );
+      const lastSeenDate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : null;
+      const isOnline = lastSeenDate ? Date.now() - lastSeenDate.getTime() < 300000 : false;
+      const statusColor = isOnline ? '#10b981' : '#ef4444';
 
-      if (existingCluster) {
-        existingCluster.assets.push(asset);
-      } else {
-        clusters.push({
-          id: `cluster-${asset.id}`,
-          lat,
-          lon,
-          assets: [asset],
-        });
+      const markerIconInfo = getAssetMarkerIcon(asset.type, asset.name);
+      let pinColor = markerIconInfo.color;
+      if (asset.status === 'tilt_warning' || asset.status === 'fall_detected') {
+        pinColor = '#ef4444';
       }
+
+      const customIcon = L.divIcon({
+        className: 'custom-asset-icon',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
+            <div class="bg-white text-slate-800 border border-slate-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10">
+              ${asset.name}
+            </div>
+            <div style="position: relative; width: 34px; height: 34px;">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.5"/>
+              </svg>
+              <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
+                ${markerIconInfo.svg}
+              </div>
+              <div style="position: absolute; top: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; background-color: ${statusColor}; border: 1.5px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 10;">
+                ${isOnline ? `<div class="absolute inset-0 rounded-full animate-ping bg-emerald-400 opacity-60"></div>` : ''}
+              </div>
+            </div>
+            <div style="width: 18px; height: 5px; background: rgba(0,0,0,0.25); border-radius: 50%; filter: blur(2px); margin-top: 1px;"></div>
+          </div>
+        `,
+        iconSize: [60, 60],
+        iconAnchor: [30, 48],
+      });
+
+      const marker = L.marker([lat, lon], {
+        icon: customIcon,
+        assetColor: pinColor,
+      });
+
+      marker.on('click', () => {
+        if (onSelectAsset) onSelectAsset(asset);
+      });
+
+      clusterGroup.addLayer(marker);
+      markersRef.current.set(asset.id, marker);
     });
 
-    const currentClusterIds = new Set(clusters.map((c) => c.id));
-
-    // Remove obsolete markers
-    for (const [id, marker] of markersRef.current.entries()) {
-      if (!currentClusterIds.has(id)) {
-        marker.remove();
-        markersRef.current.delete(id);
-      }
-    }
-
-    const validCoords: [number, number][] = [];
-
-    // Render single markers or grouped cluster markers
-    clusters.forEach((cluster) => {
-      validCoords.push([cluster.lat, cluster.lon]);
-
-      if (cluster.assets.length === 1) {
-        // SINGLE ASSET MARKER
-        const asset = cluster.assets[0];
-        const lastSeenDate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : null;
-        const isOnline = lastSeenDate ? Date.now() - lastSeenDate.getTime() < 300000 : false;
-        const statusColor = isOnline ? '#10b981' : '#ef4444';
-
-        const markerIconInfo = getAssetMarkerIcon(asset.type, asset.name);
-        let pinColor = markerIconInfo.color;
-        if (asset.status === 'tilt_warning' || asset.status === 'fall_detected') {
-          pinColor = '#ef4444';
-        }
-
-        const customIcon = L.divIcon({
-          className: 'custom-asset-icon',
-          html: `
-            <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
-              <div class="bg-white text-slate-800 border border-slate-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10">
-                ${asset.name}
-              </div>
-              <div style="position: relative; width: 34px; height: 34px;">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.5"/>
-                </svg>
-                <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
-                  ${markerIconInfo.svg}
-                </div>
-                <div style="position: absolute; top: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; background-color: ${statusColor}; border: 1.5px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 10;">
-                  ${isOnline ? `<div class="absolute inset-0 rounded-full animate-ping bg-emerald-400 opacity-60"></div>` : ''}
-                </div>
-              </div>
-              <div style="width: 18px; height: 5px; background: rgba(0,0,0,0.25); border-radius: 50%; filter: blur(2px); margin-top: 1px;"></div>
-            </div>
-          `,
-          iconSize: [60, 60],
-          iconAnchor: [30, 48],
-        });
-
-        const existingMarker = markersRef.current.get(cluster.id);
-        if (existingMarker) {
-          existingMarker.setLatLng([cluster.lat, cluster.lon]);
-          existingMarker.setIcon(customIcon);
-        } else {
-          const marker = L.marker([cluster.lat, cluster.lon], { icon: customIcon }).addTo(map);
-          marker.on('click', () => {
-            map.flyTo([cluster.lat, cluster.lon], 18, { duration: 1.2 });
-            if (onSelectAsset) onSelectAsset(asset);
-          });
-          markersRef.current.set(cluster.id, marker);
-        }
-      } else {
-        // GROUPED CLUSTER MARKER (Multiple assets at same location)
-        const hasWarning = cluster.assets.some(
-          (a) => a.status === 'tilt_warning' || a.status === 'fall_detected'
-        );
-        const onlineCount = cluster.assets.filter((a) => {
-          const ls = a.tag?.lastSeen ? new Date(a.tag.lastSeen) : null;
-          return ls ? Date.now() - ls.getTime() < 300000 : false;
-        }).length;
-
-        const clusterIcon = L.divIcon({
-          className: 'custom-cluster-icon',
-          html: `
-            <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 90px; height: 70px; cursor: pointer;">
-              <!-- Cluster Header Tag -->
-              <div class="bg-slate-900/95 text-white border border-slate-700/80 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-xl whitespace-nowrap mb-1 z-10 flex items-center gap-1.5 backdrop-blur-md">
-                <span class="bg-amber-500 text-slate-950 px-1.5 py-0.2 rounded-full text-[9px] font-black">${cluster.assets.length}</span>
-                <span class="truncate max-w-[70px]">${cluster.assets[0].name}</span>
-              </div>
-
-              <!-- Cluster Glowing Pin Container -->
-              <div style="position: relative; width: 42px; height: 42px;">
-                <!-- Animated Ring -->
-                <div style="position: absolute; inset: -3px; border-radius: 50%; background: ${hasWarning ? '#ef4444' : '#f59e0b'}; opacity: 0.35; filter: blur(4px);" class="animate-pulse"></div>
-
-                <!-- Main Circle -->
-                <div style="position: relative; width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2.5px solid ${hasWarning ? '#ef4444' : '#f59e0b'}; box-shadow: 0 4px 14px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 5;">
-                  <!-- Layers Icon -->
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${hasWarning ? '#ef4444' : '#f59e0b'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20">
-                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                    <polyline points="2 17 12 22 22 17"></polyline>
-                    <polyline points="2 12 12 17 22 12"></polyline>
-                  </svg>
-                </div>
-
-                <!-- Online Indicator Badge -->
-                <div style="position: absolute; top: -2px; right: -2px; width: 14px; height: 14px; border-radius: 50%; background-color: ${onlineCount > 0 ? '#10b981' : '#ef4444'}; border: 2px solid #0f172a; display: flex; align-items: center; justify-content: center; z-index: 10; font-size: 8px; font-weight: bold; color: white;">
-                </div>
-              </div>
-
-              <!-- Base Shadow -->
-              <div style="width: 24px; height: 6px; background: rgba(0,0,0,0.3); border-radius: 50%; filter: blur(2.5px); margin-top: 2px;"></div>
-            </div>
-          `,
-          iconSize: [90, 70],
-          iconAnchor: [45, 52],
-        });
-
-        const existingMarker = markersRef.current.get(cluster.id);
-        if (existingMarker) {
-          existingMarker.setLatLng([cluster.lat, cluster.lon]);
-          existingMarker.setIcon(clusterIcon);
-        } else {
-          const marker = L.marker([cluster.lat, cluster.lon], { icon: clusterIcon }).addTo(map);
-          marker.on('click', () => {
-            map.flyTo([cluster.lat, cluster.lon], Math.min(map.getZoom() + 2, 19), { duration: 1.0 });
-            setClusterModalAssets(cluster.assets);
-            if (onSelectAsset && cluster.assets.length > 0) {
-              onSelectAsset(cluster.assets[0]);
-            }
-          });
-          markersRef.current.set(cluster.id, marker);
-        }
-      }
-    });
-
-    // Auto fit map bounds if valid coordinates exist
     if (validCoords.length > 0) {
       if (validCoords.length === 1) {
         map.setView(validCoords[0], 17);
@@ -404,7 +376,7 @@ export default function FloorMap({
     }
   }, [assets, mapReady, onSelectAsset]);
 
-  const handleReset = () => {
+    const handleReset = () => {
     if (mapRef.current) {
       mapRef.current.setView([centerLat, centerLon], 16);
     }

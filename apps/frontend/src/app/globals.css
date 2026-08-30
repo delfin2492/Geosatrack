@@ -184,3 +184,27 @@ html, body {
 .anchor-info-tooltip .leaflet-tooltip-tip {
   display: none !important;
 }
+
+/* Leaflet MarkerCluster & Donut Badge Styles */
+.leaflet-cluster-anim .leaflet-marker-icon, .leaflet-cluster-anim .leaflet-marker-shadow {
+	-webkit-transition: -webkit-transform 0.3s ease-out, opacity 0.3s ease-in;
+	-moz-transition: -moz-transform 0.3s ease-out, opacity 0.3s ease-in;
+	-o-transition: -o-transform 0.3s ease-out, opacity 0.3s ease-in;
+	transition: transform 0.3s ease-out, opacity 0.3s ease-in;
+}
+
+.leaflet-cluster-spider-leg {
+	-webkit-transition: -webkit-stroke-dashoffset 0.3s ease-in, stroke-dashoffset 0.3s ease-in;
+	-moz-transition: -moz-stroke-dashoffset 0.3s ease-in, stroke-dashoffset 0.3s ease-in;
+	-o-transition: -o-stroke-dashoffset 0.3s ease-in, stroke-dashoffset 0.3s ease-in;
+	transition: stroke-dashoffset 0.3s ease-in;
+}
+
+.custom-donut-cluster-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.custom-donut-cluster-icon > div:hover {
+  transform: scale(1.12);
+}
