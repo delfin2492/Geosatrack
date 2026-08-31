@@ -29,12 +29,59 @@ import {
   Globe,
   Target,
   Code,
-  Copy
+  Copy,
+  Truck, Wrench, Battery, Zap, Plug, Box, Building, DoorClosed, Car, Tv, Navigation, Layers, Wifi, Database, Server, Anchor, Gauge, Compass, Eye, Settings, SlidersHorizontal, Lightbulb, Monitor, Cpu, Radio, Tag
 } from 'lucide-react';
+
+const ICON_MAP: Record<string, React.ElementType> = {
+  MapPin, HardDrive, Activity, Boxes, Sliders: SlidersHorizontal, SlidersHorizontal, Folder, Globe, Car, Cpu, Radio, Zap, Shield: Target, Truck, Wrench, Battery, Tag, Tv, Navigation, Layers, Wifi, Database, Server, Anchor, Gauge, Compass, Eye, Settings, Lightbulb, DoorClosed, Building, Box, Plug, Monitor
+};
+
+let globalDbAssetTypesCache: any[] = [];
+export const setGlobalAssetTypesCache = (types: any[]) => {
+  globalDbAssetTypesCache = types;
+};
+
+const getLucideSvg = (iconName: string) => {
+  switch (iconName) {
+    case 'MapPin':
+    case 'Anchor':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+    case 'HardDrive':
+    case 'Tag':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`;
+    case 'Activity':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
+    case 'Boxes':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`;
+    case 'Truck':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="9" height="11" x="1" y="3" rx="1"/><polygon points="10 8 15 8 19 12 19 16 10 16 10 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="16.5" cy="18.5" r="2.5"/></svg>`;
+    case 'Sliders':
+    case 'SlidersHorizontal':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>`;
+    case 'Folder':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`;
+    case 'Globe':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+    case 'Car':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`;
+    case 'Cpu':
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>`;
+    default:
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`;
+  }
+};
 
 
 const getAssetMarkerIcon = (type: string = '', name: string = '') => {
   const t = (type || '').toUpperCase();
+  const matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === t);
+  if (matched) {
+    return {
+      color: matched.color || '#3b82f6',
+      svg: getLucideSvg(matched.icon)
+    };
+  }
   const n = (name || '').toLowerCase();
   const combined = `${type} ${name}`.toLowerCase();
 
@@ -381,6 +428,11 @@ const typeIconLookup: Record<string, React.ComponentType<any>> = {
 };
 
 const getTypeIcon = (type: string) => {
+  const t = (type || '').toUpperCase();
+  const matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === t);
+  if (matched && matched.icon && ICON_MAP[matched.icon]) {
+    return ICON_MAP[matched.icon];
+  }
   return typeIconLookup[type] || Boxes;
 };
 
@@ -472,6 +524,24 @@ export default function AssetsPage() {
 
   // Selection states
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+
+  const [dbAssetTypes, setDbAssetTypes] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchDbAssetTypes = async () => {
+      try {
+        const res = await fetch(`${getApiUrl()}/asset-types`);
+        if (res.ok) {
+          const data = await res.json();
+          setDbAssetTypes(data);
+          setGlobalAssetTypesCache(data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch asset types in assets page:', e);
+      }
+    };
+    fetchDbAssetTypes();
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
