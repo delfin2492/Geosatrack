@@ -97,14 +97,34 @@ const getLucideSvg = (iconName: string) => {
 
 const getAssetMarkerIcon = (type: string = '', name: string = '', assetTypesList: any[] = []) => {
   const t = (type || '').toUpperCase();
-  const matched = assetTypesList.find((x: any) => x.code.toUpperCase() === t);
+  const n = (name || '').toLowerCase();
+
+  // 1. Direct code match
+  let matched = assetTypesList.find((x: any) => x.code.toUpperCase() === t);
+
+  // 2. Fuzzy match by name or type keyword if direct code match failed
+  if (!matched && assetTypesList.length > 0) {
+    if (t === 'ANCHOR' || n.includes('anchor')) {
+      matched = assetTypesList.find((x: any) => x.code.toUpperCase() === 'ANCHOR');
+    } else if (t === 'TAG' || n.includes('tag')) {
+      matched = assetTypesList.find((x: any) => x.code.toUpperCase() === 'TAG');
+    } else if (t === 'MESH_EYE_SENSOR' || n.includes('mesh')) {
+      matched = assetTypesList.find((x: any) => x.code.toUpperCase() === 'MESH_EYE_SENSOR');
+    } else if (t === 'FORKLIFT' || n.includes('forklift')) {
+      matched = assetTypesList.find((x: any) => x.code.toUpperCase() === 'FORKLIFT');
+    } else if (t === 'LIGHT' || n.includes('light') || n.includes('lampu')) {
+      matched = assetTypesList.find((x: any) => x.code.toUpperCase() === 'LIGHT');
+    } else if (t === 'CAR' || n.includes('car') || n.includes('mobil') || n.includes('truck')) {
+      matched = assetTypesList.find((x: any) => x.code.toUpperCase() === 'CAR');
+    }
+  }
+
   if (matched) {
     return {
       color: matched.color || '#3b82f6',
       svg: getLucideSvg(matched.icon)
     };
   }
-  const n = (name || '').toLowerCase();
   const combined = `${type} ${name}`.toLowerCase();
 
   // 1. ANCHOR -> MapPin (Rose Red)
@@ -463,7 +483,7 @@ export default function FloorMap({
       }
       hasInitializedBoundsRef.current = true;
     }
-  }, [assets, mapReady, onSelectAsset, selectedAssetId]);
+  }, [assets, mapReady, onSelectAsset, selectedAssetId, dbAssetTypes]);
 
   // Handle selected asset zoomToShowLayer when selectedAssetId changes
   useEffect(() => {
@@ -514,7 +534,7 @@ export default function FloorMap({
 
           <div className="overflow-y-auto space-y-1.5 pr-1 flex-1">
             {clusterModalAssets.map((asset) => {
-              const iconInfo = getAssetMarkerIcon(asset.type, asset.name);
+              const iconInfo = getAssetMarkerIcon(asset.type, asset.name, dbAssetTypes);
               const lastSeenDate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : null;
               const isOnline = lastSeenDate ? Date.now() - lastSeenDate.getTime() < 300000 : false;
 
