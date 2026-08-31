@@ -502,18 +502,12 @@ interface RuleExecutionLog {
   createdAt: string;
 }
 
-const getAssetIcon = (type: string) => {
-  const t = (type || '').toLowerCase();
-  if (t.includes('building')) return Building;
-  if (t.includes('city')) return MapIcon;
-  if (t.includes('console') || t.includes('air quality')) return Monitor;
-  if (t.includes('door')) return DoorClosed;
-  if (t.includes('vehicle') || t.includes('fleet')) return Car;
-  if (t.includes('battery')) return Battery;
-  if (t.includes('charger')) return Zap;
-  if (t.includes('electricity') || t.includes('consumer')) return Plug;
-  if (t.includes('sensor')) return Activity;
-  return Box;
+const getAssetIcon = (assetInput: any) => {
+  const assetObj = typeof assetInput === 'object' && assetInput !== null 
+    ? assetInput 
+    : { type: String(assetInput || '') };
+  const { IconComp } = getAssetIconAndColor(assetObj, assetObj.name || String(assetInput || ''));
+  return IconComp;
 };
 
 const getAttributeUnit = (attrName: string, customUnit?: string) => {
@@ -2803,7 +2797,7 @@ export default function RulesPage() {
 
                     return flattened.map(({ asset, depth, hasChildren, isCollapsed }) => {
                       const isSelected = pickerSelectedAssetId === asset.id;
-                      const IconComp = getAssetIcon(asset.type);
+                      const { IconComp, color: iconColor } = getAssetIconAndColor(asset, asset.name);
                       const indentPadding = Math.min(depth * 14 + 10, 48);
 
                       return (
@@ -2834,7 +2828,10 @@ export default function RulesPage() {
                           ) : (
                             <span className="w-3.5 h-3.5 shrink-0" />
                           )}
-                          <IconComp className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : 'text-muted-foreground'}`} />
+                          <IconComp
+                            className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : ''}`}
+                            style={{ color: isSelected ? undefined : iconColor }}
+                          />
                           <span className="truncate text-xs flex-1">{asset.name}</span>
                           {hasChildren && (
                             <span
