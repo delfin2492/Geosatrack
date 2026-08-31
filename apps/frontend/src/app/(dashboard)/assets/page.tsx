@@ -73,9 +73,10 @@ const getLucideSvg = (iconName: string) => {
 };
 
 
-const getAssetMarkerIcon = (type: string = '', name: string = '') => {
+const getAssetMarkerIcon = (type: string = '', name: string = '', assetTypesList: any[] = globalDbAssetTypesCache) => {
   const t = (type || '').toUpperCase();
-  const matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === t);
+  const list = assetTypesList && assetTypesList.length > 0 ? assetTypesList : globalDbAssetTypesCache;
+  const matched = list.find((x: any) => x.code.toUpperCase() === t);
   if (matched) {
     return {
       color: matched.color || '#3b82f6',
@@ -1152,7 +1153,7 @@ export default function AssetsPage() {
     const lat = parseFloat(String(selectedAsset.latitude));
     const lng = parseFloat(String(selectedAsset.longitude));
 
-    const markerIconInfo = getAssetMarkerIcon(selectedAsset.type, selectedAsset.name);
+    const markerIconInfo = getAssetMarkerIcon(selectedAsset.type, selectedAsset.name, dbAssetTypes);
     let pinColor = markerIconInfo.color;
     if (selectedAsset.status === 'tilt_warning' || selectedAsset.status === 'fall_detected') {
       pinColor = '#ef4444';
@@ -1197,7 +1198,7 @@ export default function AssetsPage() {
         (mapContainer as any)._leaflet_id = null;
       }
     };
-  }, [selectedAssetId, mode]);
+  }, [selectedAssetId, mode, selectedAsset, dbAssetTypes]);
 
   // Filter based on search query
   const filteredAssets = assets.filter((a) =>
