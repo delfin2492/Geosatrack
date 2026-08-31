@@ -11,7 +11,8 @@ import {
   ShieldAlert, Plus, Trash2, Save, X, ToggleLeft, ToggleRight,
   Settings, ClipboardList, ChevronDown, ChevronRight, Search, Copy,
   Building, Map as MapIcon, Monitor, DoorClosed, Car, Battery, Zap, Plug, Box, Activity,
-  Download, Filter, Calculator, BellRing, Mail, Send, Clock, Lightbulb, SlidersHorizontal, Undo2, RefreshCw, LogIn, LogOut
+  Download, Filter, Calculator, BellRing, Mail, Send, Clock, Lightbulb, SlidersHorizontal, Undo2, RefreshCw, LogIn, LogOut,
+  MapPin, HardDrive, Boxes, Folder, Globe, Cpu, Radio, Truck, Wrench, Tag, Tv, Navigation, Layers, Wifi, Database, Server, Anchor, Gauge, Compass, Eye
 } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 import ReactFlow, {
@@ -32,6 +33,83 @@ import ReactFlow, {
   SelectionMode
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+
+const ICON_MAP: Record<string, React.ElementType> = {
+  MapPin,
+  HardDrive,
+  Activity,
+  Boxes,
+  Sliders: SlidersHorizontal,
+  SlidersHorizontal,
+  Folder,
+  Globe,
+  Car,
+  Cpu,
+  Radio,
+  Zap,
+  Shield: ShieldAlert,
+  Truck,
+  Wrench,
+  Battery,
+  Tag,
+  Tv,
+  Navigation,
+  Layers,
+  Wifi,
+  Database,
+  Server,
+  Anchor,
+  Gauge,
+  Compass,
+  Eye,
+  Settings,
+  Lightbulb,
+  DoorClosed,
+  Building,
+  Box,
+  Plug,
+  Monitor
+};
+
+const getAssetIconAndColor = (asset: any, fallbackName = '') => {
+  let IconComp = Zap;
+  let color = '#3b82f6';
+
+  if (asset) {
+    if (asset.color) color = asset.color;
+
+    // 1. Check direct asset.icon string (from AssetType DB)
+    if (asset.icon && ICON_MAP[asset.icon]) {
+      return { IconComp: ICON_MAP[asset.icon], color };
+    }
+
+    // 2. Check asset.type or asset.code
+    const t = String(asset.type || asset.code || '').toUpperCase();
+    if (t === 'ANCHOR') return { IconComp: MapPin, color: color || '#f43f5e' };
+    if (t === 'TAG' || t.includes('BLE')) return { IconComp: HardDrive, color: color || '#3b82f6' };
+    if (t === 'MESH_EYE_SENSOR' || t.includes('SENSOR')) return { IconComp: Activity, color: color || '#10b981' };
+    if (t === 'FORKLIFT' || t.includes('CARGO') || t.includes('THINGS')) return { IconComp: Boxes, color: color || '#d97706' };
+    if (t === 'LIGHT' || t.includes('MACHINE')) return { IconComp: SlidersHorizontal, color: color || '#eab308' };
+    if (t === 'BUILDING' || t.includes('ROOM') || t.includes('DOOR')) return { IconComp: Folder, color: color || '#8b5cf6' };
+    if (t === 'CITY' || t.includes('WEATHER')) return { IconComp: Globe, color: color || '#06b6d4' };
+    if (t === 'CAR' || t.includes('VEHICLE') || t.includes('TRUCK')) return { IconComp: Car, color: color || '#0284c7' };
+    if (t.includes('TELTONIKA') || t.includes('CPU')) return { IconComp: Cpu, color: color || '#6366f1' };
+    if (t.includes('MQTT') || t.includes('RADIO')) return { IconComp: Radio, color: color || '#8b5cf6' };
+  }
+
+  // 3. Fallback name checking
+  const nameLower = (fallbackName || asset?.name || '').toLowerCase();
+  if (nameLower.includes('lampu') || nameLower.includes('light')) return { IconComp: Lightbulb, color: color || '#eab308' };
+  if (nameLower.includes('mobil') || nameLower.includes('car')) return { IconComp: Car, color: color || '#0284c7' };
+  if (nameLower.includes('door') || nameLower.includes('pintu')) return { IconComp: DoorClosed, color: color || '#8b5cf6' };
+  if (nameLower.includes('building') || nameLower.includes('gedung')) return { IconComp: Building, color: color || '#8b5cf6' };
+  if (nameLower.includes('forklift') || nameLower.includes('cargo')) return { IconComp: Boxes, color: color || '#d97706' };
+  if (nameLower.includes('tag')) return { IconComp: HardDrive, color: color || '#3b82f6' };
+  if (nameLower.includes('anchor')) return { IconComp: MapPin, color: color || '#f43f5e' };
+  if (nameLower.includes('mesh') || nameLower.includes('sensor')) return { IconComp: Activity, color: color || '#10b981' };
+
+  return { IconComp, color };
+};
 
 const CustomNode = ({ data, id, selected }: any) => {
   const isNodeSelected = selected || data.isSelected;
@@ -208,12 +286,7 @@ const CustomNode = ({ data, id, selected }: any) => {
     const assetName = rawAssetName || (selectedId ? 'Selected Asset' : (isAction ? 'Select Target Asset' : 'Select Asset'));
     const attrName = (isAction ? data.targetAttribute : data.attributeName) || data.attributeName || 'Select Attribute';
 
-    let AssetIcon = Zap;
-    const nameLower = assetName.toLowerCase();
-    if (nameLower.includes('lampu') || nameLower.includes('light')) AssetIcon = Lightbulb;
-    else if (nameLower.includes('mobil') || nameLower.includes('car')) AssetIcon = Car;
-    else if (nameLower.includes('door') || nameLower.includes('pintu')) AssetIcon = DoorClosed;
-    else if (nameLower.includes('building') || nameLower.includes('gedung')) AssetIcon = Building;
+    const { IconComp: AssetIcon, color: iconColor } = getAssetIconAndColor(assetObj, assetName);
 
     const headerBg = isAction ? 'bg-purple-700' : 'bg-blue-700';
     const headerTitle = isAction ? 'Set attribute value' : 'Attribute value';
@@ -243,7 +316,14 @@ const CustomNode = ({ data, id, selected }: any) => {
             }}
             className="flex-1 bg-white dark:bg-zinc-800 hover:bg-amber-50/70 dark:hover:bg-amber-950/40 border border-gray-300 dark:border-zinc-700 hover:border-amber-500 rounded-md p-1.5 flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all active:scale-[0.98] text-left group/btn"
           >
-            <div className={`w-5 h-5 rounded-full ${isAction ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600' : 'bg-rose-100 dark:bg-rose-900/30 text-rose-500'} flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform`}>
+            <div
+              className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform shadow-xs"
+              style={{
+                backgroundColor: `${iconColor}25`,
+                color: iconColor,
+                border: `1px solid ${iconColor}40`,
+              }}
+            >
               <AssetIcon className="w-3 h-3" />
             </div>
             <div className="flex flex-col leading-tight overflow-hidden">
@@ -1362,7 +1442,24 @@ export default function RulesPage() {
             </div>
           )
         ) : (
-          <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {/* INLINE ACTIVE RULE SCHEDULE DROPDOWN */}
+            <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-0.5 rounded-xl shadow-2xs">
+              <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <div className="w-48">
+                <SearchableSelect
+                  options={[
+                    { label: "Always Active (24/7)", value: "ALWAYS" },
+                    { label: "Specific Time Period", value: "SPECIFIC_PERIOD" },
+                    { label: "Daily Time Period", value: "DAILY_PERIOD" }
+                  ]}
+                  value={wtActiveMode}
+                  onChange={(val) => setWtActiveMode(val as any)}
+                  placeholder="Active Schedule..."
+                />
+              </div>
+            </div>
+
             <Button onClick={() => setActiveTab('list')} variant="outline" className="flex-1 md:flex-none text-xs font-bold cursor-pointer h-8 rounded-xl">
               <X className="h-4 w-4 mr-1" /> Cancel
             </Button>
@@ -1480,26 +1577,9 @@ export default function RulesPage() {
             <Input value={ruleName} onChange={(e) => setRuleName(e.target.value)} className="h-10 rounded-lg font-bold text-sm bg-background border-border w-full" placeholder="Enter rule name..." />
           </div>
 
-          {/* Top Bar: Rule Active Schedule */}
-          <div className="bg-card border border-border p-4 rounded-2xl shadow-sm space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-amber-500" />
-                <span className="text-xs font-bold text-foreground uppercase tracking-wider">Active Rule Schedule</span>
-              </div>
-              <div className="w-64">
-                <SearchableSelect
-                  options={[
-                    { label: "Always Active (24/7)", value: "ALWAYS" },
-                    { label: "Specific Time Period", value: "SPECIFIC_PERIOD" },
-                    { label: "Daily Time Period", value: "DAILY_PERIOD" }
-                  ]}
-                  value={wtActiveMode}
-                  onChange={(val) => setWtActiveMode(val as any)}
-                  placeholder="Select Active Schedule..."
-                />
-              </div>
-            </div>
+          {/* Active Schedule Configuration Sub-bar (Only when SPECIFIC_PERIOD or DAILY_PERIOD) */}
+          {wtActiveMode !== 'ALWAYS' && (
+            <div className="bg-card border border-border p-4 rounded-2xl shadow-sm space-y-3">
 
             {wtActiveMode === 'SPECIFIC_PERIOD' && (
               <div className="space-y-3 pt-2 border-t border-border/60">
@@ -1647,6 +1727,7 @@ export default function RulesPage() {
               </div>
             )}
           </div>
+        )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
             {/* WHEN Panel */}
@@ -2004,26 +2085,9 @@ export default function RulesPage() {
       ) : (
         // FLOW EDITOR
         <div className="space-y-4">
-          {/* Top Bar: Rule Active Schedule */}
-          <div className="bg-card border border-border p-4 rounded-2xl shadow-sm space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-amber-500" />
-                <span className="text-xs font-bold text-foreground uppercase tracking-wider">Active Rule Schedule</span>
-              </div>
-              <div className="w-64">
-                <SearchableSelect
-                  options={[
-                    { label: "Always Active (24/7)", value: "ALWAYS" },
-                    { label: "Specific Time Period", value: "SPECIFIC_PERIOD" },
-                    { label: "Daily Time Period", value: "DAILY_PERIOD" }
-                  ]}
-                  value={wtActiveMode}
-                  onChange={(val) => setWtActiveMode(val as any)}
-                  placeholder="Select Active Schedule..."
-                />
-              </div>
-            </div>
+          {/* Active Schedule Configuration Sub-bar (Only when SPECIFIC_PERIOD or DAILY_PERIOD) */}
+          {wtActiveMode !== 'ALWAYS' && (
+            <div className="bg-card border border-border p-4 rounded-2xl shadow-sm space-y-3">
 
             {wtActiveMode === 'SPECIFIC_PERIOD' && (
               <div className="space-y-3 pt-2 border-t border-border/60">
@@ -2171,6 +2235,7 @@ export default function RulesPage() {
               </div>
             )}
           </div>
+        )}
 
           <div className="flex flex-col lg:flex-row gap-4 h-[700px] relative">
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-card border border-border p-2 px-4 shadow-lg rounded-xl flex flex-col md:flex-row items-center gap-3">
