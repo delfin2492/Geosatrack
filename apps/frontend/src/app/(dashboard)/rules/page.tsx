@@ -253,12 +253,14 @@ const CustomNode = ({ data, id, selected }: any) => {
           </button>
           {!isAction && <span className="text-[10px] font-bold text-muted-foreground shrink-0 ml-1">Value</span>}
         </div>
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="output"
-          style={{ right: '-6px', top: '65%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
-        />
+        {!isAction && (
+          <Handle
+            type="source"
+            position={Position.Right}
+            id="output"
+            style={{ right: '-6px', top: '65%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
+          />
+        )}
       </div>
     );
   }
