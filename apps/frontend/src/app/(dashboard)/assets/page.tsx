@@ -1105,11 +1105,11 @@ export default function AssetsPage() {
     });
 
     const map = L.map(mapContainer, {
-      zoomControl: true,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
+      zoomControl: false,
+      scrollWheelZoom: true,
+      doubleClickZoom: true,
       dragging: true
-    }).setView([lat, lng], 13);
+    }).setView([lat, lng], 16);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
