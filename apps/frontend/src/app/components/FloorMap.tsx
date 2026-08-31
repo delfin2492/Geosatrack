@@ -44,6 +44,7 @@ interface FloorMapProps {
   anchors: MapAnchor[];
   onAnchorUpdate?: (id: string, x: number, y: number) => void;
   onSelectAsset?: (asset: MapAsset) => void;
+  selectedAssetId?: string | null;
   widthMeters?: number;
   heightMeters?: number;
 }
@@ -128,6 +129,7 @@ const getAssetMarkerIcon = (type: string = '', name: string = '') => {
 export default function FloorMap({
   assets,
   onSelectAsset,
+  selectedAssetId,
 }: FloorMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -293,18 +295,26 @@ export default function FloorMap({
     (map as any)._tileLayer = newLayer;
   }, [mapStyle, mapReady]);
 
-    // Sync Markers dynamically on the map using Leaflet MarkerCluster
+    // Sync Markers dynamically on the map using Leaflet MarkerCluster (Incremental Updates)
   useEffect(() => {
     const map = mapRef.current;
     const clusterGroup = clusterGroupRef.current;
     if (!map || !mapReady || !clusterGroup) return;
     const L = require('leaflet');
 
-    clusterGroup.clearLayers();
-    markersRef.current.clear();
+    const currentAssetIds = new Set(assets.map((a) => a.id));
+
+    // 1. Remove markers for assets that no longer exist
+    for (const [id, marker] of markersRef.current.entries()) {
+      if (!currentAssetIds.has(id)) {
+        clusterGroup.removeLayer(marker);
+        markersRef.current.delete(id);
+      }
+    }
 
     const validCoords: [number, number][] = [];
 
+    // 2. Add new markers or update existing markers in place without resetting cluster state
     assets.forEach((asset) => {
       let lat = asset.lat ?? centerLat;
       let lon = asset.lon ?? centerLon;
@@ -325,16 +335,18 @@ export default function FloorMap({
         pinColor = '#ef4444';
       }
 
+      const isSelected = selectedAssetId === asset.id;
+
       const customIcon = L.divIcon({
         className: 'custom-asset-icon',
         html: `
           <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
-            <div class="bg-white text-slate-800 border border-slate-200/80 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10">
+            <div class="${isSelected ? 'bg-amber-400 text-slate-950 font-black scale-110 border-amber-500 shadow-lg' : 'bg-white text-slate-800 border-slate-200/80'} border px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10 transition-all">
               ${asset.name}
             </div>
             <div style="position: relative; width: 34px; height: 34px;">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.5"/>
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="${isSelected ? '#f59e0b' : '#ffffff'}" stroke-width="${isSelected ? '2.5' : '1.5'}"/>
               </svg>
               <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
                 ${markerIconInfo.svg}
@@ -350,22 +362,28 @@ export default function FloorMap({
         iconAnchor: [30, 48],
       });
 
-      const marker = L.marker([lat, lon], {
-        icon: customIcon,
-        assetColor: pinColor,
-      });
+      const existingMarker = markersRef.current.get(asset.id);
+      if (existingMarker) {
+        existingMarker.setLatLng([lat, lon]);
+        existingMarker.setIcon(customIcon);
+        existingMarker.options.assetColor = pinColor;
+      } else {
+        const marker = L.marker([lat, lon], {
+          icon: customIcon,
+          assetColor: pinColor,
+        });
 
-      marker.on('click', () => {
-        // Pan smoothly to selected asset without changing current zoom level
-        map.panTo([lat, lon]);
-        if (onSelectAsset) onSelectAsset(asset);
-      });
+        marker.on('click', () => {
+          map.panTo([lat, lon]);
+          if (onSelectAsset) onSelectAsset(asset);
+        });
 
-      clusterGroup.addLayer(marker);
-      markersRef.current.set(asset.id, marker);
+        clusterGroup.addLayer(marker);
+        markersRef.current.set(asset.id, marker);
+      }
     });
 
-    // Only fit map bounds ONCE on initial load, so clicking assets or state changes will NOT zoom out the user
+    // 3. Only fit map bounds ONCE on initial load
     if (!hasInitializedBoundsRef.current && validCoords.length > 0) {
       if (validCoords.length === 1) {
         map.setView(validCoords[0], 17);
@@ -377,7 +395,23 @@ export default function FloorMap({
       }
       hasInitializedBoundsRef.current = true;
     }
-  }, [assets, mapReady, onSelectAsset]);
+  }, [assets, mapReady, onSelectAsset, selectedAssetId]);
+
+  // Handle selected asset zoomToShowLayer when selectedAssetId changes
+  useEffect(() => {
+    const clusterGroup = clusterGroupRef.current;
+    if (!clusterGroup || !selectedAssetId) return;
+
+    const selectedMarker = markersRef.current.get(selectedAssetId);
+    if (selectedMarker) {
+      // Automatically zoom/uncluster if necessary so the selected asset marker is revealed
+      clusterGroup.zoomToShowLayer(selectedMarker, () => {
+        if (mapRef.current) {
+          mapRef.current.panTo(selectedMarker.getLatLng());
+        }
+      });
+    }
+  }, [selectedAssetId]);
 
     const handleReset = () => {
     if (mapRef.current) {

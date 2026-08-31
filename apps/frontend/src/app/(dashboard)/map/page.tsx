@@ -390,6 +390,7 @@ export default function MapPage() {
           <FloorMap
             assets={mapAssets}
             anchors={currentAnchors}
+            selectedAssetId={selectedAssetId}
             onSelectAsset={(asset) => setSelectedAssetId(asset.id)}
             onAnchorUpdate={handleAnchorUpdate}
           />
