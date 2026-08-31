@@ -199,12 +199,14 @@ const CustomNode = ({ data, id, selected }: any) => {
     );
   }
 
-  // 2. ATTRIBUTE VALUE NODE (Interactive Button UI matching Select Attributes image)
-  if (data.type === 'input_attribute' || data.type === 'trigger_telemetry') {
-    const assetObj = (data.assets || []).find((a: any) => a.id === data.assetId);
-    const rawAssetName = data.assetName || assetObj?.name || (data.assetId === 'ANY' ? 'Any Asset' : '');
-    const assetName = rawAssetName || (data.assetId ? 'Selected Asset' : 'Select Asset');
-    const attrName = data.attributeName || 'Select Attribute';
+  // 2. ATTRIBUTE VALUE NODE & SET ATTRIBUTE VALUE NODE (Interactive Button UI matching Select Attributes image)
+  if (data.type === 'input_attribute' || data.type === 'trigger_telemetry' || data.type === 'action_attribute') {
+    const isAction = data.type === 'action_attribute';
+    const selectedId = isAction ? (data.targetAssetId || data.assetId) : data.assetId;
+    const assetObj = (data.assets || []).find((a: any) => a.id === selectedId);
+    const rawAssetName = data.assetName || assetObj?.name || (!isAction && data.assetId === 'ANY' ? 'Any Asset' : '');
+    const assetName = rawAssetName || (selectedId ? 'Selected Asset' : (isAction ? 'Select Target Asset' : 'Select Asset'));
+    const attrName = (isAction ? data.targetAttribute : data.attributeName) || data.attributeName || 'Select Attribute';
 
     let AssetIcon = Zap;
     const nameLower = assetName.toLowerCase();
@@ -213,12 +215,23 @@ const CustomNode = ({ data, id, selected }: any) => {
     else if (nameLower.includes('door') || nameLower.includes('pintu')) AssetIcon = DoorClosed;
     else if (nameLower.includes('building') || nameLower.includes('gedung')) AssetIcon = Building;
 
+    const headerBg = isAction ? 'bg-purple-700' : 'bg-blue-700';
+    const headerTitle = isAction ? 'Set attribute value' : 'Attribute value';
+
     return (
       <div className={`min-w-[190px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
-        <div className="bg-blue-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
-          Attribute value
+        <div className={`${headerBg} px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]`}>
+          {headerTitle}
         </div>
         <div className="p-2.5 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
+          {isAction && (
+            <Handle
+              type="target"
+              position={Position.Left}
+              id="input_a"
+              style={{ left: '-6px', top: '65%', width: '12px', height: '12px', backgroundColor: '#a3e635', borderColor: '#3f6212', borderWidth: '2px', zIndex: 30 }}
+            />
+          )}
           {/* INTERACTIVE CLICKABLE ASSET SELECTOR BUTTON */}
           <button
             type="button"
@@ -230,7 +243,7 @@ const CustomNode = ({ data, id, selected }: any) => {
             }}
             className="flex-1 bg-white dark:bg-zinc-800 hover:bg-amber-50/70 dark:hover:bg-amber-950/40 border border-gray-300 dark:border-zinc-700 hover:border-amber-500 rounded-md p-1.5 flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all active:scale-[0.98] text-left group/btn"
           >
-            <div className="w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-900/30 text-rose-500 flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform">
+            <div className={`w-5 h-5 rounded-full ${isAction ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600' : 'bg-rose-100 dark:bg-rose-900/30 text-rose-500'} flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform`}>
               <AssetIcon className="w-3 h-3" />
             </div>
             <div className="flex flex-col leading-tight overflow-hidden">
@@ -238,7 +251,7 @@ const CustomNode = ({ data, id, selected }: any) => {
               <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[95px]">{attrName}</span>
             </div>
           </button>
-          <span className="text-[10px] font-bold text-muted-foreground shrink-0 ml-1">Value</span>
+          {!isAction && <span className="text-[10px] font-bold text-muted-foreground shrink-0 ml-1">Value</span>}
         </div>
         <Handle
           type="source"
@@ -586,8 +599,13 @@ export default function RulesPage() {
 
   const handleOpenAttributePicker = (nodeId: string, nodeData: any) => {
     setAttrPickerNode({ id: nodeId, data: nodeData });
-    const initAssetId = nodeData.assetId && nodeData.assetId !== 'ANY' ? nodeData.assetId : (assets[0]?.id || '');
-    const initAttr = nodeData.attributeName || '';
+    const isAction = nodeData.type === 'action_attribute';
+    const initAssetId = isAction
+      ? (nodeData.targetAssetId || nodeData.assetId || assets[0]?.id || '')
+      : (nodeData.assetId && nodeData.assetId !== 'ANY' ? nodeData.assetId : (assets[0]?.id || ''));
+    const initAttr = isAction
+      ? (nodeData.targetAttribute || nodeData.attributeName || '')
+      : (nodeData.attributeName || '');
     setPickerSelectedAssetId(initAssetId);
     setPickerSelectedAttribute(initAttr);
     setInitialAssetId(initAssetId);
@@ -2848,8 +2866,10 @@ export default function RulesPage() {
                       const newData = {
                         ...n.data,
                         assetId: pickerSelectedAssetId,
+                        targetAssetId: pickerSelectedAssetId,
                         assetName: assetName,
-                        attributeName: pickerSelectedAttribute
+                        attributeName: pickerSelectedAttribute,
+                        targetAttribute: pickerSelectedAttribute,
                       };
                       return { ...n, data: newData };
                     }
