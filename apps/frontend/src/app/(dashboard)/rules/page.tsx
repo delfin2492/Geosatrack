@@ -1165,7 +1165,7 @@ export default function RulesPage() {
         setWtDailyActiveDays(config.dailyPeriod?.activeDays || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
         setWtDailyRepetitionEnds(config.dailyPeriod?.repetitionEnds || 'NEVER');
         setWtDailyRepetitionEndDate(config.dailyPeriod?.repetitionEndDate || '');
-      } catch (e) {}
+      } catch (e) { }
       setSelectedNode(null);
       setActiveTab('editor_flow');
     }
@@ -2153,128 +2153,128 @@ export default function RulesPage() {
           </div>
 
           <div className="flex flex-col lg:flex-row gap-4 h-[700px] relative">
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-card border border-border p-2 px-4 shadow-lg rounded-xl flex flex-col md:flex-row items-center gap-3">
-            <span className="text-xs font-bold text-muted-foreground whitespace-nowrap hidden md:inline">Flow Name:</span>
-            <Input value={ruleName} onChange={(e) => setRuleName(e.target.value)} className="h-8 rounded-lg font-bold text-sm bg-secondary/30 min-w-[200px] md:min-w-[250px]" placeholder="Flow Name" />
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-card border border-border p-2 px-4 shadow-lg rounded-xl flex flex-col md:flex-row items-center gap-3">
+              <span className="text-xs font-bold text-muted-foreground whitespace-nowrap hidden md:inline">Flow Name:</span>
+              <Input value={ruleName} onChange={(e) => setRuleName(e.target.value)} className="h-8 rounded-lg font-bold text-sm bg-secondary/30 min-w-[200px] md:min-w-[250px]" placeholder="Flow Name" />
+            </div>
+
+            {/* SIDEBAR NODE PALETTE */}
+            <div className="w-full lg:w-56 border border-border shadow-md rounded-2xl flex lg:flex-col lg:shrink-0 bg-card overflow-x-auto lg:overflow-y-auto p-3 gap-4 lg:gap-0 lg:space-y-4">
+              <div className="shrink-0 min-w-[120px]">
+                <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-2">Triggers / Inputs</div>
+                <div className="flex lg:flex-col gap-1.5">
+                  <div draggable onDragStart={(e) => onDragStart(e, 'input_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Attribute Value</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'trigger_geofence')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Geofence Event</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'input_number')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Number Value</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'input_boolean')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Boolean Value</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'input_string')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">String Value</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'input_text')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Text Template</div>
+                </div>
+              </div>
+
+              <div className="shrink-0 min-w-[140px]">
+                <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Math Processors</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div draggable onDragStart={(e) => onDragStart(e, 'math_add')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">+</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'math_sub')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">-</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'math_mul')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">×</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'math_div')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">÷</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'math_avg')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">Avg</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'math_pct')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">%</div>
+                </div>
+              </div>
+
+              <div className="shrink-0 min-w-[140px]">
+                <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Logic Processors</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div draggable onDragStart={(e) => onDragStart(e, 'logic_gt')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&gt;</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'logic_lt')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&lt;</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'logic_eq')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">=</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'logic_neq')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">!=</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'logic_gte')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&gt;=</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'logic_lte')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&lt;=</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'logic_and')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">AND</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'logic_or')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">OR</div>
+                </div>
+              </div>
+
+              <div className="shrink-0 min-w-[140px]">
+                <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-2">Outputs / Actions</div>
+                <div className="flex lg:flex-col gap-1.5">
+                  <div draggable onDragStart={(e) => onDragStart(e, 'action_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-600 text-white hover:bg-purple-500 shadow-sm transition-all active:scale-95">Set Attribute Value</div>
+                  <div draggable onDragStart={(e) => onDragStart(e, 'action_notification')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-600 text-white hover:bg-purple-500 shadow-sm transition-all active:scale-95">Alarm Notification</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 border border-border rounded-2xl overflow-hidden shadow-2xl relative bg-background">
+              <ReactFlow
+                nodes={nodes.map(n => {
+                  const isSelected = n.id === selectedNodeId;
+                  return {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      assets,
+                      isSelected,
+                      onOpenPicker: (id: string, data: any) => handleOpenAttributePicker(id, data),
+                      onUpdateData: (id: string, key: string, val: any) => updateNodeData(id, key, val),
+                      onOpenNotificationPicker: (id: string, data: any) => handleOpenNotificationPicker(id, data),
+                      onOpenGeofencePicker: (id: string, data: any) => handleOpenGeofencePicker(id, data),
+                      geofences
+                    }
+                  };
+                })}
+                edges={edges.map(e => {
+                  const isSelected = e.id === selectedEdgeId || e.selected;
+                  return {
+                    ...e,
+                    selected: isSelected,
+                    animated: false,
+                    style: {
+                      strokeWidth: isSelected ? 4 : 2.5,
+                      stroke: isSelected ? '#f59e0b' : '#3b82f6',
+                      filter: isSelected ? 'drop-shadow(0 0 6px rgba(245, 158, 11, 0.7))' : 'none'
+                    }
+                  };
+                })}
+                nodeTypes={nodeTypes}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeClick={(_, node) => {
+                  setSelectedNodeId(node.id);
+                  setSelectedEdgeId(null);
+                  setSelectedNode(null);
+                }}
+                onEdgeClick={(_, edge) => {
+                  setSelectedEdgeId(edge.id);
+                  setSelectedNodeId(null);
+                  setSelectedNode(null);
+                }}
+                onPaneClick={() => {
+                  setSelectedNodeId(null);
+                  setSelectedEdgeId(null);
+                  setSelectedNode(null);
+                }}
+                selectionOnDrag={true}
+                selectionMode={SelectionMode.Partial}
+                panOnDrag={[1, 2]}
+                zoomOnScroll={true}
+                zoomOnPinch={true}
+                panOnScroll={false}
+                deleteKeyCode={['Delete', 'Backspace']}
+                onInit={setReactFlowInstance}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                fitView
+                className="w-full h-full"
+              >
+                <Background color="#64748b" gap={16} />
+                <Controls />
+              </ReactFlow>
+            </div>
           </div>
-
-          {/* SIDEBAR NODE PALETTE */}
-          <div className="w-full lg:w-56 border border-border shadow-md rounded-2xl flex lg:flex-col lg:shrink-0 bg-card overflow-x-auto lg:overflow-y-auto p-3 gap-4 lg:gap-0 lg:space-y-4">
-            <div className="shrink-0 min-w-[120px]">
-              <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-2">Triggers / Inputs</div>
-              <div className="flex lg:flex-col gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Attribute Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'trigger_geofence')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Geofence Event</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_number')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Number Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_boolean')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Boolean Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_string')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">String Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'input_text')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-blue-600 text-white hover:bg-blue-500 shadow-sm transition-all active:scale-95">Text Template</div>
-              </div>
-            </div>
-
-            <div className="shrink-0 min-w-[140px]">
-              <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Math Processors</div>
-              <div className="grid grid-cols-2 gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_add')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">+</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_sub')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">-</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_mul')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">×</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_div')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">÷</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_avg')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">Avg</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'math_pct')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">%</div>
-              </div>
-            </div>
-
-            <div className="shrink-0 min-w-[140px]">
-              <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Logic Processors</div>
-              <div className="grid grid-cols-2 gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_gt')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&gt;</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_lt')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&lt;</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_eq')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">=</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_neq')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">!=</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_gte')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&gt;=</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_lte')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">&lt;=</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_and')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">AND</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'logic_or')} className="flex items-center justify-center text-xs h-7 px-1 border border-emerald-500 cursor-pointer rounded-lg font-black bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm transition-all active:scale-95">OR</div>
-              </div>
-            </div>
-
-            <div className="shrink-0 min-w-[140px]">
-              <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-2">Outputs / Actions</div>
-              <div className="flex lg:flex-col gap-1.5">
-                <div draggable onDragStart={(e) => onDragStart(e, 'action_attribute')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-600 text-white hover:bg-purple-500 shadow-sm transition-all active:scale-95">Set Attribute Value</div>
-                <div draggable onDragStart={(e) => onDragStart(e, 'action_notification')} className="flex items-center w-full text-[10px] h-7 px-2 border border-border cursor-pointer rounded-md font-medium bg-purple-600 text-white hover:bg-purple-500 shadow-sm transition-all active:scale-95">Alarm Notification</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1 border border-border rounded-2xl overflow-hidden shadow-2xl relative bg-background">
-            <ReactFlow
-              nodes={nodes.map(n => {
-                const isSelected = n.id === selectedNodeId;
-                return {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    assets,
-                    isSelected,
-                    onOpenPicker: (id: string, data: any) => handleOpenAttributePicker(id, data),
-                    onUpdateData: (id: string, key: string, val: any) => updateNodeData(id, key, val),
-                    onOpenNotificationPicker: (id: string, data: any) => handleOpenNotificationPicker(id, data),
-                    onOpenGeofencePicker: (id: string, data: any) => handleOpenGeofencePicker(id, data),
-                    geofences
-                  }
-                };
-              })}
-              edges={edges.map(e => {
-                const isSelected = e.id === selectedEdgeId || e.selected;
-                return {
-                  ...e,
-                  selected: isSelected,
-                  animated: false,
-                  style: {
-                    strokeWidth: isSelected ? 4 : 2.5,
-                    stroke: isSelected ? '#f59e0b' : '#3b82f6',
-                    filter: isSelected ? 'drop-shadow(0 0 6px rgba(245, 158, 11, 0.7))' : 'none'
-                  }
-                };
-              })}
-              nodeTypes={nodeTypes}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeClick={(_, node) => {
-                setSelectedNodeId(node.id);
-                setSelectedEdgeId(null);
-                setSelectedNode(null);
-              }}
-              onEdgeClick={(_, edge) => {
-                setSelectedEdgeId(edge.id);
-                setSelectedNodeId(null);
-                setSelectedNode(null);
-              }}
-              onPaneClick={() => {
-                setSelectedNodeId(null);
-                setSelectedEdgeId(null);
-                setSelectedNode(null);
-              }}
-              selectionOnDrag={true}
-              selectionMode={SelectionMode.Partial}
-              panOnDrag={[1, 2]}
-              zoomOnScroll={true}
-              zoomOnPinch={true}
-              panOnScroll={false}
-              deleteKeyCode={['Delete', 'Backspace']}
-              onInit={setReactFlowInstance}
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              fitView
-              className="w-full h-full"
-            >
-              <Background color="#64748b" gap={16} />
-              <Controls />
-            </ReactFlow>
-          </div>
-        </div>
         </div>
       )}
 

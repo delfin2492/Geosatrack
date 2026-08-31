@@ -21,6 +21,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AlertModule } from './modules/alert/alert.module';
 import { SystemSettingModule } from './modules/system-setting/system-setting.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { AssetTypeModule } from './modules/asset-type/asset-type.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     AlertModule,
     SystemSettingModule,
     DashboardModule,
+    AssetTypeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

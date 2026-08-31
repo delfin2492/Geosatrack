@@ -92,6 +92,18 @@ model Anchor {
   zone      Zone?    @relation(fields: [zoneId], references: [id])
 }
 
+model AssetType {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  icon        String   @default("HardDrive")
+  color       String   @default("#3b82f6")
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Asset {
   id          String   @id @default(cuid())
   name        String
@@ -104,7 +116,7 @@ model Asset {
   updatedAt   DateTime @updatedAt
   latitude    Float?
   longitude   Float?
-  type        String   @default("FORKLIFT")
+  type        String     @default("FORKLIFT")
   parentId    String?
   planX       Float?
   planY       Float?

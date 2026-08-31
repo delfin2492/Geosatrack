@@ -24,6 +24,7 @@ import {
   X,
   Terminal,
   Settings,
+  Palette,
   Loader2
 } from 'lucide-react';
 import NotificationDropdown from '../components/NotificationDropdown';
@@ -100,10 +101,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Dynamic Navigation based on Superadmin status and Impersonation status
   const navigation = isSuperAdmin
     ? (isImpersonating 
-        ? [...baseNavigation, { name: 'Tenants Manager', href: '/tenants', icon: Building2 }]
+        ? [...baseNavigation, { name: 'Tenants Manager', href: '/tenants', icon: Building2 }, { name: 'Appearance', href: '/appearance', icon: Palette }]
         : [
             { name: 'Tenants Manager', href: '/tenants', icon: Building2 },
-            { name: 'System Settings', href: '/system-settings', icon: Settings }
+            { name: 'System Settings', href: '/system-settings', icon: Settings },
+            { name: 'Appearance', href: '/appearance', icon: Palette }
           ])
     : baseNavigation;
 

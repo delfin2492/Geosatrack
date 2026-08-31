@@ -99,7 +99,7 @@ export class RulesEngineService {
           let status: 'SUCCESS' | 'FAILED' = 'SUCCESS';
 
           try {
-            await this.executeNode(triggerNode, graph, payload, logMessages);
+            await this.executeNode(triggerNode, graph, payload, logMessages, new Set());
           } catch (executionErr: any) {
             status = 'FAILED';
             logMessages.push(`[ERROR] Flow execution stopped: ${executionErr.message}`);
@@ -130,16 +130,27 @@ export class RulesEngineService {
   }
 
   /**
-   * Recursively traverse and execute the rule graph.
+   * Recursively traverse and execute the rule graph with cycle detection.
    */
   private async executeNode(
     currentNode: FlowNode,
     graph: FlowGraph,
     payload: any,
     logMessages: string[],
+    visitedNodeIds: Set<string> = new Set(),
   ): Promise<void> {
+    if (visitedNodeIds.has(currentNode.id)) {
+      return;
+    }
+    visitedNodeIds.add(currentNode.id);
+
     const nodeType = currentNode.data?.type || currentNode.type;
     logMessages.push(`Executing Node: ${nodeType} (${currentNode.id})`);
+
+    if (!payload.nodeOutputs) payload.nodeOutputs = {};
+    if (payload.nodeOutputs[currentNode.id] === undefined && payload.value !== undefined) {
+      payload.nodeOutputs[currentNode.id] = payload.value;
+    }
 
     // 1. Execute logic of current node
     let proceed = true;
@@ -156,7 +167,6 @@ export class RulesEngineService {
       if (nodeType === 'input_boolean') val = Boolean(val);
       if (nodeType === 'input_string' || nodeType === 'input_text') val = String(val || '');
 
-      if (!payload.nodeOutputs) payload.nodeOutputs = {};
       payload.nodeOutputs[currentNode.id] = val;
       payload.value = val;
       logMessages.push(`[INPUT VALUE] ${nodeType} (${currentNode.id}) value: ${val}`);
@@ -183,8 +193,8 @@ export class RulesEngineService {
         let srcVal = payload.nodeOutputs?.[edgeA.source];
         if (srcVal === undefined) {
           const srcNode = graph.nodes.find(n => n.id === edgeA.source);
-          if (srcNode) {
-            await this.executeNode(srcNode, graph, payload, logMessages);
+          if (srcNode && !visitedNodeIds.has(srcNode.id)) {
+            await this.executeNode(srcNode, graph, payload, logMessages, visitedNodeIds);
             srcVal = payload.nodeOutputs?.[edgeA.source];
           }
         }
@@ -195,8 +205,8 @@ export class RulesEngineService {
         let srcVal = payload.nodeOutputs?.[edgeB.source];
         if (srcVal === undefined) {
           const srcNode = graph.nodes.find(n => n.id === edgeB.source);
-          if (srcNode) {
-            await this.executeNode(srcNode, graph, payload, logMessages);
+          if (srcNode && !visitedNodeIds.has(srcNode.id)) {
+            await this.executeNode(srcNode, graph, payload, logMessages, visitedNodeIds);
             srcVal = payload.nodeOutputs?.[edgeB.source];
           }
         }
@@ -220,7 +230,6 @@ export class RulesEngineService {
       else if (op === 'PCT') res = (valA * valB) / 100;
 
       payload.value = res;
-      if (!payload.nodeOutputs) payload.nodeOutputs = {};
       payload.nodeOutputs[currentNode.id] = res;
 
       logMessages.push(`[MATH ${op}] Calculation: ${valA} ${op} ${valB} = ${res}`);
@@ -240,7 +249,7 @@ export class RulesEngineService {
     ) {
       const inboundEdges = graph.edges.filter(e => e.target === currentNode.id);
       let valA = Number(payload.value || 0);
-      let valB = Number(currentNode.data?.thresholdValue || 0);
+      let valB = Number(currentNode.data?.thresholdValue ?? currentNode.data?.value ?? 0);
 
       const edgeA = inboundEdges.find(e => e.targetHandle === 'input_a' || (!e.targetHandle && e === inboundEdges[0]));
       const edgeB = inboundEdges.find(e => e.targetHandle === 'input_b' || (!e.targetHandle && e === inboundEdges[1]));
@@ -249,8 +258,8 @@ export class RulesEngineService {
         let srcVal = payload.nodeOutputs?.[edgeA.source];
         if (srcVal === undefined) {
           const srcNode = graph.nodes.find(n => n.id === edgeA.source);
-          if (srcNode) {
-            await this.executeNode(srcNode, graph, payload, logMessages);
+          if (srcNode && !visitedNodeIds.has(srcNode.id)) {
+            await this.executeNode(srcNode, graph, payload, logMessages, visitedNodeIds);
             srcVal = payload.nodeOutputs?.[edgeA.source];
           }
         }
@@ -261,8 +270,8 @@ export class RulesEngineService {
         let srcVal = payload.nodeOutputs?.[edgeB.source];
         if (srcVal === undefined) {
           const srcNode = graph.nodes.find(n => n.id === edgeB.source);
-          if (srcNode) {
-            await this.executeNode(srcNode, graph, payload, logMessages);
+          if (srcNode && !visitedNodeIds.has(srcNode.id)) {
+            await this.executeNode(srcNode, graph, payload, logMessages, visitedNodeIds);
             srcVal = payload.nodeOutputs?.[edgeB.source];
           }
         }
@@ -272,7 +281,7 @@ export class RulesEngineService {
       const val = valA;
       const thresh = valB;
 
-      let condType = currentNode.data?.conditionType;
+      let condType = (currentNode.data?.conditionType || currentNode.data?.operator || currentNode.data?.condition || '').toUpperCase().trim();
       if (nodeType === 'logic_gt') condType = 'GT';
       else if (nodeType === 'logic_lt') condType = 'LT';
       else if (nodeType === 'logic_eq') condType = 'EQ';
@@ -281,6 +290,7 @@ export class RulesEngineService {
       else if (nodeType === 'logic_lte') condType = 'LTE';
       else if (nodeType === 'logic_and') condType = 'AND';
       else if (nodeType === 'logic_or') condType = 'OR';
+      if (!condType) condType = 'GT';
 
       let conditionMet = false;
       if (condType === 'GT' || condType === '>') conditionMet = val > thresh;
@@ -290,6 +300,8 @@ export class RulesEngineService {
       else if (condType === 'GTE' || condType === '>=') conditionMet = val >= thresh;
       else if (condType === 'LTE' || condType === '<=') conditionMet = val <= thresh;
       else if (condType === 'AND' || condType === 'OR') conditionMet = true;
+
+      payload.nodeOutputs[currentNode.id] = conditionMet;
 
       if (!conditionMet) {
         proceed = false;
@@ -469,32 +481,57 @@ export class RulesEngineService {
           throw new Error('Global Telegram Bot Token is not configured in System Settings.');
         }
 
-        const messageText = this.interpolateTemplate(
-          messageTemplate || `⚠️ *GeoMesh Alert*\nAsset: *${payload.assetName}*\nEvent: *${payload.geofenceName || payload.attributeName}*`,
+        // Convert common markdown asterisks to HTML b tags if user typed markdown in template
+        let formattedTemplate = messageTemplate;
+        if (formattedTemplate && !formattedTemplate.includes('<b>')) {
+          formattedTemplate = formattedTemplate.replace(/\*(.*?)\*/g, '<b>$1</b>');
+        }
+
+        const htmlMessageText = this.interpolateTemplate(
+          formattedTemplate || `⚠️ <b>GeoMesh Alert</b>\nAsset: <b>${payload.assetName || 'Device'}</b>\nEvent: <b>${payload.geofenceName || payload.attributeName || 'Alert'}</b>\nValue: <b>${payload.value !== undefined ? payload.value : ''}</b>`,
           payload,
         );
 
         const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-        const res = await fetch(url, {
+        
+        // 1. Try sending with HTML parse_mode
+        let res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: chatId,
-            text: messageText,
-            parse_mode: 'Markdown',
+            text: htmlMessageText,
+            parse_mode: 'HTML',
           }),
         });
 
+        // 2. Fallback to Plain Text if entity parsing fails (e.g. invalid HTML tags or unescaped characters)
         if (!res.ok) {
           const errBody = await res.json();
-          throw new Error(errBody.description || `Telegram API returned status ${res.status}`);
+          const errDesc = errBody.description || '';
+          this.logger.warn(`Telegram HTML parse failed (${errDesc}). Retrying with Plain Text fallback.`);
+
+          const plainMessageText = htmlMessageText.replace(/<[^>]*>/g, '');
+          res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: plainMessageText,
+            }),
+          });
+
+          if (!res.ok) {
+            const finalErr = await res.json();
+            throw new Error(finalErr.description || `Telegram API returned status ${res.status}`);
+          }
         }
 
         const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
         const createdAlert = await this.prisma.alert.create({
           data: {
             type: 'telegram',
-            message: `Telegram Sent (${chatId}): ${messageText.replace(/\*/g, '')}`,
+            message: `Telegram Sent (${chatId}): ${htmlMessageText.replace(/<[^>]*>/g, '')}`,
             tenantId: targetTenantId,
             assetId: payload.assetId,
           },
@@ -515,7 +552,7 @@ export class RulesEngineService {
     for (const edge of outboundEdges) {
       const childNode = graph.nodes.find((n) => n.id === edge.target);
       if (childNode) {
-        await this.executeNode(childNode, graph, payload, logMessages);
+        await this.executeNode(childNode, graph, payload, logMessages, visitedNodeIds);
       }
     }
   }
