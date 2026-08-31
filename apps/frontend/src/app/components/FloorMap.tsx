@@ -25,6 +25,8 @@ export interface MapAsset {
   locationName?: string;
   lat?: number;
   lon?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   tag: TagData | null;
 }
 

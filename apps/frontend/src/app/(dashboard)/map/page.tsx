@@ -16,14 +16,133 @@ import {
   Activity, 
   AlertTriangle,
   Radio,
-  Globe
+  Globe,
+  HardDrive,
+  Boxes,
+  Sliders,
+  Folder,
+  Car,
+  Cpu,
+  Zap,
+  Shield,
+  Crosshair,
+  Truck,
+  Wrench,
+  Tag,
+  Tv,
+  Navigation,
+  Layers,
+  Wifi,
+  Database,
+  Server,
+  Anchor,
+  Gauge,
+  Compass,
+  Eye,
+  Settings,
+  Flame,
+  Sun,
+  Wind,
+  Clock,
+  Key,
+  Lock,
+  Bell,
+  Inbox,
+  Maximize2,
+  Building,
+  DoorClosed,
+  Lightbulb,
+  Monitor,
 } from 'lucide-react';
+
+const ICON_MAP: Record<string, React.ElementType> = {
+  MapPin,
+  HardDrive,
+  Activity,
+  Boxes,
+  Sliders,
+  Folder,
+  Globe,
+  Car,
+  Cpu,
+  Radio,
+  Zap,
+  Shield,
+  Crosshair,
+  Truck,
+  Wrench,
+  Battery,
+  Tag,
+  Tv,
+  Navigation,
+  Layers,
+  Wifi,
+  Database,
+  Server,
+  Anchor,
+  Gauge,
+  Compass,
+  Eye,
+  Settings,
+  Flame,
+  Sun,
+  Wind,
+  Thermometer,
+  Clock,
+  Key,
+  Lock,
+  Bell,
+  Inbox,
+  Maximize2,
+  Building,
+  DoorClosed,
+  Lightbulb,
+  Monitor,
+};
 
 export default function MapPage() {
   const { tenantId, token } = useAuth();
   const { assets, simulationActive, setSimulationActive } = useSocket();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [dbAnchors, setDbAnchors] = useState<any[]>([]);
+  const [dbAssetTypes, setDbAssetTypes] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchAssetTypes = async () => {
+      try {
+        const res = await fetch(`${getApiUrl()}/asset-types`);
+        if (res.ok) {
+          const data = await res.json();
+          setDbAssetTypes(data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch asset types in MapPage:', e);
+      }
+    };
+    fetchAssetTypes();
+  }, []);
+
+  const getSelectedAssetIconComp = (type: string = '', name: string = '') => {
+    const t = (type || '').toUpperCase();
+    const n = (name || '').toLowerCase();
+
+    let matched = dbAssetTypes.find((x: any) => x.code.toUpperCase() === t);
+
+    if (!matched && dbAssetTypes.length > 0) {
+      if (t === 'ANCHOR' || n.includes('anchor')) {
+        matched = dbAssetTypes.find((x: any) => x.code.toUpperCase() === 'ANCHOR');
+      } else if (t === 'TAG' || n.includes('tag')) {
+        matched = dbAssetTypes.find((x: any) => x.code.toUpperCase() === 'TAG');
+      } else if (t === 'MESH_EYE_SENSOR' || n.includes('mesh')) {
+        matched = dbAssetTypes.find((x: any) => x.code.toUpperCase() === 'MESH_EYE_SENSOR');
+      } else if (t === 'FORKLIFT' || n.includes('forklift')) {
+        matched = dbAssetTypes.find((x: any) => x.code.toUpperCase() === 'FORKLIFT');
+      }
+    }
+
+    const iconName = matched?.icon || (t === 'ANCHOR' ? 'Anchor' : t === 'TAG' ? 'HardDrive' : t === 'MESH_EYE_SENSOR' ? 'Activity' : t === 'FORKLIFT' ? 'Boxes' : 'Radio');
+    return ICON_MAP[iconName] || Radio;
+  };
 
   const fetchDbAnchors = async () => {
     try {
@@ -407,7 +526,9 @@ export default function MapPage() {
                   : 'bg-gradient-to-r from-slate-700 to-slate-900'
               }`}>
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <Radio className="h-4 w-4 animate-pulse shrink-0" />
+                  {React.createElement(getSelectedAssetIconComp(selectedAsset.type, selectedAsset.name), {
+                    className: 'h-4 w-4 shrink-0 animate-pulse'
+                  })}
                   <div className="min-w-0">
                     <h4 className="text-[9px] font-bold tracking-wider uppercase opacity-90">{selectedAsset.type}</h4>
                     <h3 className="text-xs font-black truncate max-w-[180px]">{selectedAsset.name}</h3>
