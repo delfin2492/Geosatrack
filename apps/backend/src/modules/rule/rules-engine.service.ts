@@ -630,6 +630,19 @@ export class RulesEngineService {
 
     if (groups.length === 0) return;
 
+    // Filter out irrelevant telemetry events that do not match any attribute condition in this rule
+    if (eventType === 'TELEMETRY_ALERT' && payload.attributeName) {
+      const allConditions = groups.flatMap((g: any) => g.conditions || []);
+      const isAttributeRelevant = allConditions.some((c: any) => {
+        if (!c.attribute || c.attribute === 'ANY') return true;
+        return c.attribute === payload.attributeName;
+      });
+
+      if (!isAttributeRelevant) {
+        return;
+      }
+    }
+
     const activeMode = config.activeMode || 'ALWAYS';
     const thenFrequency = config.thenFrequency || 'ALWAYS';
     const cooldownMinutes = Number(config.cooldownMinutes) || 0;
