@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import { getApiUrl } from '../../lib/api';
@@ -53,6 +53,9 @@ import {
   DoorClosed,
   Lightbulb,
   Monitor,
+  ChevronUp,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -106,6 +109,8 @@ export default function MapPage() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [dbAnchors, setDbAnchors] = useState<any[]>([]);
   const [dbAssetTypes, setDbAssetTypes] = useState<any[]>([]);
+  const [hiddenTypes, setHiddenTypes] = useState<string[]>([]);
+  const [legendOpen, setLegendOpen] = useState<boolean>(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -465,10 +470,74 @@ export default function MapPage() {
   };
 
   const mapAssets = getMapAssets();
-  const selectedAsset = mapAssets.find((a) => a.id === selectedAssetId) || null;
 
-  // Calculate online/offline assets count based on lastSeen timestamp (active in the last 5 minutes)
-  const filteredAssetsOnly = assets.filter(
+  const tenantAssetTypeCounts = useMemo(() => {
+    const counts: Record<string, { code: string; name: string; icon: string; color: string; count: number }> = {};
+
+    dbAssetTypes.forEach((at) => {
+      counts[at.code.toUpperCase()] = {
+        code: at.code.toUpperCase(),
+        name: at.name,
+        icon: at.icon || 'HardDrive',
+        color: at.color || '#3b82f6',
+        count: 0,
+      };
+    });
+
+    mapAssets.forEach((a) => {
+      const t = (a.type || '').toUpperCase();
+      const n = (a.name || '').toLowerCase();
+
+      let matchedCode = Object.keys(counts).find((code) => code.toUpperCase() === t);
+      if (!matchedCode) {
+        if (t === 'ANCHOR' || n.includes('anchor')) matchedCode = 'ANCHOR';
+        else if (t === 'TAG' || n.includes('tag')) matchedCode = 'TAG';
+        else if (t === 'MESH_EYE_SENSOR' || n.includes('mesh')) matchedCode = 'MESH_EYE_SENSOR';
+        else if (t === 'FORKLIFT' || n.includes('forklift')) matchedCode = 'FORKLIFT';
+      }
+
+      if (matchedCode && counts[matchedCode]) {
+        counts[matchedCode].count += 1;
+      } else {
+        counts[t] = {
+          code: t,
+          name: a.type || 'Other Asset',
+          icon: 'Radio',
+          color: '#64748b',
+          count: (counts[t]?.count || 0) + 1,
+        };
+      }
+    });
+
+    return Object.values(counts)
+      .filter((item) => item.count > 0 || ['ANCHOR', 'TAG', 'MESH_EYE_SENSOR', 'FORKLIFT'].includes(item.code))
+      .sort((a, b) => b.count - a.count);
+  }, [dbAssetTypes, mapAssets]);
+
+  const visibleMapAssets = useMemo(() => {
+    return mapAssets.filter((asset) => {
+      const typeCode = (asset.type || '').toUpperCase();
+      if (hiddenTypes.includes(typeCode)) return false;
+
+      const n = (asset.name || '').toLowerCase();
+      if ((typeCode === 'ANCHOR' || n.includes('anchor')) && hiddenTypes.includes('ANCHOR')) return false;
+      if ((typeCode === 'TAG' || n.includes('tag')) && hiddenTypes.includes('TAG')) return false;
+      if ((typeCode === 'MESH_EYE_SENSOR' || n.includes('mesh')) && hiddenTypes.includes('MESH_EYE_SENSOR')) return false;
+      if ((typeCode === 'FORKLIFT' || n.includes('forklift')) && hiddenTypes.includes('FORKLIFT')) return false;
+
+      return true;
+    });
+  }, [mapAssets, hiddenTypes]);
+
+  const visibleAnchors = useMemo(() => {
+    if (hiddenTypes.includes('ANCHOR')) return [];
+    return currentAnchors;
+  }, [currentAnchors, hiddenTypes]);
+
+  const selectedAsset = visibleMapAssets.find((a) => a.id === selectedAssetId) || null;
+
+  // Calculate online/offline assets count based on visible assets
+  const filteredAssetsOnly = visibleMapAssets.filter(
     (a) => !a.type.startsWith('AGENT_') && a.type !== 'ANCHOR' && a.type !== 'CITY' && a.type !== 'BUILDING'
   );
   const onlineAssetsCount = filteredAssetsOnly.filter((a) => {
@@ -509,12 +578,122 @@ export default function MapPage() {
         {/* OpenStreetMap Canvas Area */}
         <div className="w-full h-full relative min-h-[580px]">
           <FloorMap
-            assets={mapAssets}
-            anchors={currentAnchors}
+            assets={visibleMapAssets}
+            anchors={visibleAnchors}
             selectedAssetId={selectedAssetId}
             onSelectAsset={(asset) => setSelectedAssetId(asset.id)}
             onAnchorUpdate={handleAnchorUpdate}
           />
+
+          {/* Floating Map Legend & Category Layer Filter Panel */}
+          <div className="absolute top-4 left-4 z-20 w-72 transition-all duration-300 pointer-events-auto">
+            <div className="bg-card/95 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl overflow-hidden">
+              {/* Card Header with Collapse Toggle */}
+              <div 
+                className="p-3 bg-secondary/30 flex items-center justify-between cursor-pointer select-none border-b border-border/50 hover:bg-secondary/50 transition-colors"
+                onClick={() => setLegendOpen(!legendOpen)}
+              >
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-primary" />
+                  <span className="text-xs font-bold text-foreground tracking-wide">Map Legend & Filter</span>
+                  <span className="bg-primary/10 text-primary text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full border border-primary/20">
+                    {tenantAssetTypeCounts.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 text-muted-foreground hover:text-foreground p-1 rounded-md">
+                  {legendOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </div>
+              </div>
+
+              {/* Expandable Content */}
+              {legendOpen && (
+                <div className="p-3 space-y-2.5 max-h-[320px] overflow-y-auto text-xs">
+                  {/* Quick Actions (Select All / Hide All) */}
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground pb-1.5 border-b border-border/40">
+                    <span className="font-semibold uppercase tracking-wider text-[9px]">Asset Categories</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setHiddenTypes([])}
+                        className="text-primary hover:underline font-bold"
+                      >
+                        Show All
+                      </button>
+                      <span>•</span>
+                      <button
+                        onClick={() => setHiddenTypes(tenantAssetTypeCounts.map((t) => t.code))}
+                        className="text-muted-foreground hover:text-foreground hover:underline"
+                      >
+                        Hide All
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Asset Types Filter List */}
+                  <div className="space-y-1.5">
+                    {tenantAssetTypeCounts.map((item) => {
+                      const isHidden = hiddenTypes.includes(item.code);
+                      const IconComp = ICON_MAP[item.icon] || Radio;
+
+                      return (
+                        <div
+                          key={item.code}
+                          onClick={() => {
+                            if (isHidden) {
+                              setHiddenTypes(hiddenTypes.filter((c) => c !== item.code));
+                            } else {
+                              setHiddenTypes([...hiddenTypes, item.code]);
+                            }
+                          }}
+                          className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all ${
+                            isHidden
+                              ? 'bg-secondary/10 border-border/40 text-muted-foreground opacity-60'
+                              : 'bg-secondary/40 border-border hover:border-primary/40 text-foreground font-medium shadow-sm'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {/* Checkbox Toggle */}
+                            <div
+                              className={`w-4 h-4 rounded-md flex items-center justify-center border transition-all ${
+                                !isHidden
+                                  ? 'bg-primary border-primary text-primary-foreground'
+                                  : 'border-muted-foreground/40 bg-transparent'
+                              }`}
+                            >
+                              {!isHidden && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+
+                            {/* Icon Badge */}
+                            <div
+                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 shadow-sm"
+                              style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                            >
+                              <IconComp className="w-3.5 h-3.5" />
+                            </div>
+
+                            {/* Category Name */}
+                            <span className={`text-xs truncate max-w-[120px] ${isHidden ? 'line-through opacity-70' : ''}`}>
+                              {item.name}
+                            </span>
+                          </div>
+
+                          {/* Count Badge */}
+                          <span
+                            className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full"
+                            style={{
+                              backgroundColor: isHidden ? 'var(--secondary)' : `${item.color}25`,
+                              color: isHidden ? 'currentColor' : item.color,
+                            }}
+                          >
+                            {item.count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Floating Telemetry Inspector Popup Card (over map) */}
           {selectedAsset && (
