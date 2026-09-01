@@ -448,17 +448,19 @@ export class RulesEngineService {
         return;
       }
 
-      if (frequency === 'ONCE' && !isRecoveryPhase && payload.assetId) {
-        const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
-        const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
-        if (wasNodeTriggered) {
-          logMessages.push(`[ONCE_THROTTLE] Node "${currentNode.data?.label || currentNode.id}" already triggered once for asset ${payload.assetId}. Skipping duplicate action.`);
-          return;
+      if (channel === 'SYSTEM') {
+        if (frequency === 'ONCE' && !isRecoveryPhase && payload.assetId) {
+          const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
+          const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
+          if (wasNodeTriggered) {
+            logMessages.push(`[ONCE_THROTTLE] Node "${currentNode.data?.label || currentNode.id}" already triggered once for asset ${payload.assetId}. Skipping duplicate action.`);
+            return;
+          }
+          RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
+        } else if (isRecoveryPhase && payload.assetId) {
+          const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
+          RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
         }
-        RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
-      } else if (isRecoveryPhase && payload.assetId) {
-        const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
-        RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
       }
 
       if (channel === 'EMAIL') {
