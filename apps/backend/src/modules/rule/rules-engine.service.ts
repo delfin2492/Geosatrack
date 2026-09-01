@@ -882,7 +882,10 @@ export class RulesEngineService {
         });
 
         // 2. Create Recovery Alert
-        const recoveryMsg = `✅ RECOVERED: ${payload.assetName || 'Asset'} - ${payload.attributeName || 'Attribute'} kembali normal (Nilai: ${payload.value ?? 'normal'})`;
+        const attrLabel = payload.attributeName ? `${payload.attributeName}` : 'Parameter telemetri';
+        const valLabel = payload.value !== undefined ? ` (Nilai: ${payload.value})` : '';
+        const recoveryMsg = `✅ RECOVERED: ${payload.assetName || 'Asset'} - ${attrLabel} kembali normal${valLabel}`;
+
         const createdAlert = await this.prisma.alert.create({
           data: {
             type: 'alert_recovery',
@@ -906,7 +909,7 @@ export class RulesEngineService {
                   type: 'action_email',
                   alarmState: 'RECOVERY',
                   toEmail: action.toEmail,
-                  subjectTemplate: `✅ RECOVERED: ${payload.assetName || 'Asset'} ${payload.attributeName || 'Attribute'} Normal`,
+                  subjectTemplate: `✅ RECOVERED: ${payload.assetName || 'Asset'} ${attrLabel} Normal`,
                   bodyTemplate: recoveryMsg,
                 }
               }, { nodes: [], edges: [] }, payload, logMessages);
@@ -922,7 +925,7 @@ export class RulesEngineService {
                   type: 'action_telegram',
                   alarmState: 'RECOVERY',
                   chatId: action.chatId,
-                  messageTemplate: `✅ *RECOVERED*: *${payload.assetName || 'Asset'}* - *${payload.attributeName || 'Attribute'}* kembali normal (Nilai: ${payload.value})`,
+                  messageTemplate: `✅ *RECOVERED*: *${payload.assetName || 'Asset'}* - *${attrLabel}* kembali normal${valLabel}`,
                 }
               }, { nodes: [], edges: [] }, payload, logMessages);
             } catch (e: any) {

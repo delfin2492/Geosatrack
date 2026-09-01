@@ -1950,25 +1950,47 @@ export default function RulesPage() {
 
             {/* THEN Panel */}
             <div className="relative">
-              <div className="flex items-center gap-2 mb-4 justify-between bg-card border border-border p-3 rounded-xl">
+              <div className="flex flex-wrap items-center gap-2 mb-4 justify-between bg-card border border-border p-3 rounded-xl">
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-1.5 bg-blue-500 rounded-full"></div>
                   <h3 className="text-lg font-black text-foreground">Then...</h3>
                 </div>
-                <div className="w-44">
-                  <SearchableSelect
-                    options={[
-                      { label: "ALWAYS", value: "ALWAYS" },
-                      { label: "ONCE", value: "ONCE" },
-                      { label: "ONCE PER MINUTE", value: "ONCE_PER_MINUTE" },
-                      { label: "ONCE PER HOUR", value: "ONCE_PER_HOUR" },
-                      { label: "ONCE PER DAY", value: "ONCE_PER_DAY" },
-                      { label: "ONCE PER WEEK", value: "ONCE_PER_WEEK" }
-                    ]}
-                    value={wtThenFrequency}
-                    onChange={(val) => setWtThenFrequency(val)}
-                    placeholder="Frequency..."
-                  />
+                <div className="flex items-center gap-3">
+                  {/* Inline Auto Recovery Toggle Button */}
+                  <div
+                    onClick={() => setWtAutoRecovery(!wtAutoRecovery)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-all select-none ${
+                      wtAutoRecovery
+                        ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold shadow-sm'
+                        : 'bg-secondary/40 border-border text-muted-foreground hover:text-foreground'
+                    }`}
+                    title="Kirim notifikasi pemulihan otomatis saat nilai kembali normal"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={wtAutoRecovery}
+                      onChange={(e) => setWtAutoRecovery(e.target.checked)}
+                      className="rounded border-gray-300 text-emerald-500 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span className="text-xs font-bold whitespace-nowrap">Auto Recovery</span>
+                  </div>
+
+                  <div className="w-44">
+                    <SearchableSelect
+                      options={[
+                        { label: "ALWAYS", value: "ALWAYS" },
+                        { label: "ONCE", value: "ONCE" },
+                        { label: "ONCE PER MINUTE", value: "ONCE_PER_MINUTE" },
+                        { label: "ONCE PER HOUR", value: "ONCE_PER_HOUR" },
+                        { label: "ONCE PER DAY", value: "ONCE_PER_DAY" },
+                        { label: "ONCE PER WEEK", value: "ONCE_PER_WEEK" }
+                      ]}
+                      value={wtThenFrequency}
+                      onChange={(val) => setWtThenFrequency(val)}
+                      placeholder="Frequency..."
+                    />
+                  </div>
                 </div>
               </div>
               <div className="space-y-4">
@@ -2086,25 +2108,6 @@ export default function RulesPage() {
               <Button onClick={() => setWtActions([...wtActions, { id: Date.now().toString(), actionType: 'trigger_asset', assetId: '', attribute: '', command: '' }])} variant="ghost" className="mt-6 text-xs font-bold text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 ml-2">
                 <Plus className="h-3.5 w-3.5 mr-1" /> ADD ACTION
               </Button>
-
-              {/* Auto Recovery Notification Checkbox Card */}
-              <div className="mt-5 p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    id="autoRecoveryCheckbox"
-                    checked={wtAutoRecovery}
-                    onChange={(e) => setWtAutoRecovery(e.target.checked)}
-                    className="rounded border-gray-300 text-emerald-500 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
-                  />
-                  <label htmlFor="autoRecoveryCheckbox" className="text-xs font-bold text-foreground cursor-pointer select-none">
-                    Kirim notifikasi pemulihan otomatis saat nilai kembali normal (Auto Recovery Notification)
-                  </label>
-                </div>
-                <Badge className="bg-emerald-500/20 text-emerald-500 text-[10px] border-none font-extrabold px-2.5 py-1 rounded-full">
-                  ✅ AUTO RECOVERY
-                </Badge>
-              </div>
             </div>
           </div>
         </div>
