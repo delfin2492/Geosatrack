@@ -466,12 +466,15 @@ export class RulesEngineService {
         });
 
         const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
+        const isEmailRecovery = currentNode.data?.alarmState === 'RECOVERY';
         const createdAlert = await this.prisma.alert.create({
           data: {
             type: 'email',
             message: `Email Sent to ${toEmail}: ${subject}`,
             tenantId: targetTenantId,
             assetId: payload.assetId,
+            isResolved: isEmailRecovery,
+            resolvedAt: isEmailRecovery ? new Date() : null,
           },
         });
         this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
@@ -544,12 +547,15 @@ export class RulesEngineService {
         }
 
         const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
+        const isTgRecovery = currentNode.data?.alarmState === 'RECOVERY';
         const createdAlert = await this.prisma.alert.create({
           data: {
             type: 'telegram',
             message: `Telegram Sent (${chatId}): ${htmlMessageText.replace(/<[^>]*>/g, '')}`,
             tenantId: targetTenantId,
             assetId: payload.assetId,
+            isResolved: isTgRecovery,
+            resolvedAt: isTgRecovery ? new Date() : null,
           },
         });
         this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
@@ -874,7 +880,7 @@ export class RulesEngineService {
 
     if (!wasTriggered && payload.assetId) {
       const activeAlert = await this.prisma.alert.findFirst({
-        where: { assetId: payload.assetId, isResolved: false },
+        where: { assetId: payload.assetId, isResolved: false, type: 'alert_alarm' },
       });
       if (activeAlert) {
         wasTriggered = true;
