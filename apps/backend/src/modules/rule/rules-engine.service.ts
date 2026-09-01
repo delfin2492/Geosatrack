@@ -82,10 +82,14 @@ export class RulesEngineService {
             );
           }
           if (eventType === 'TELEMETRY_ALERT') {
+            const pAttr = (payload.attributeName || '').toLowerCase().trim();
+            const pAssetId = payload.assetId || '';
+            const pAssetName = payload.assetName || '';
+
             return (
               (nodeType === 'trigger_telemetry' || nodeType === 'input_attribute') &&
-              (node.data?.attributeName === 'ANY' || !node.data?.attributeName || node.data?.attributeName === payload.attributeName) &&
-              (node.data?.assetId === 'ANY' || !node.data?.assetId || node.data?.assetId === payload.assetId)
+              (node.data?.attributeName === 'ANY' || !node.data?.attributeName || (node.data?.attributeName || '').toLowerCase().trim() === pAttr) &&
+              (node.data?.assetId === 'ANY' || !node.data?.assetId || node.data?.assetId === pAssetId || node.data?.assetId === pAssetName)
             );
           }
           return false;
@@ -450,7 +454,7 @@ export class RulesEngineService {
       }
 
       if (frequency === 'ONCE' && !isRecoveryNode && payload.assetId) {
-        const nodeStateKey = `flow_node:${currentNode.id}:${payload.assetId}`;
+        const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
         const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
         if (wasNodeTriggered) {
           logMessages.push(`[ONCE_THROTTLE] Node "${currentNode.data?.label || currentNode.id}" already triggered once for asset ${payload.assetId}. Skipping duplicate action.`);
@@ -458,7 +462,7 @@ export class RulesEngineService {
         }
         RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
       } else if (isRecoveryNode && payload.assetId) {
-        const nodeStateKey = `flow_node:${currentNode.id}:${payload.assetId}`;
+        const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
         RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
       }
 

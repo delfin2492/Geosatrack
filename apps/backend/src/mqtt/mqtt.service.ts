@@ -630,6 +630,20 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
                       await this.syncLegacyTag(targetAsset, decoded);
 
+                      if (this.rulesEngine && decoded) {
+                        for (const key of Object.keys(decoded)) {
+                          const val = parseFloat(String(decoded[key]));
+                          if (!isNaN(val) && key !== 'timestamp' && key !== 'time') {
+                            this.rulesEngine.processEvent(targetAsset.tenantId, 'TELEMETRY_ALERT', {
+                              assetId: targetAsset.id,
+                              assetName: targetAsset.name,
+                              attributeName: key,
+                              value: val,
+                            }).catch(err => this.logger.error('Error processing rules: ' + err.message));
+                          }
+                        }
+                      }
+
                       const updatedTarget = await this.prisma.asset.findUnique({
 
                         where: { id: targetAsset.id },
@@ -841,6 +855,20 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
             });
 
             await this.syncLegacyTag(asset, decodedObj);
+
+            if (this.rulesEngine && decodedObj) {
+              for (const key of Object.keys(decodedObj)) {
+                const val = parseFloat(String(decodedObj[key]));
+                if (!isNaN(val) && key !== 'timestamp' && key !== 'time') {
+                  this.rulesEngine.processEvent(asset.tenantId, 'TELEMETRY_ALERT', {
+                    assetId: asset.id,
+                    assetName: asset.name,
+                    attributeName: key,
+                    value: val,
+                  }).catch(err => this.logger.error('Error processing rules: ' + err.message));
+                }
+              }
+            }
 
             const updatedAsset = await this.prisma.asset.findUnique({
 
