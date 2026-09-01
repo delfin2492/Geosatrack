@@ -510,7 +510,7 @@ export default function MapPage() {
     });
 
     return Object.values(counts)
-      .filter((item) => item.count > 0 || ['ANCHOR', 'TAG', 'MESH_EYE_SENSOR', 'FORKLIFT'].includes(item.code))
+      .filter((item) => item.count > 0)
       .sort((a, b) => b.count - a.count);
   }, [dbAssetTypes, mapAssets]);
 
@@ -585,8 +585,8 @@ export default function MapPage() {
             onAnchorUpdate={handleAnchorUpdate}
           />
 
-          {/* Floating Map Legend & Category Layer Filter Panel */}
-          <div className="absolute top-4 left-4 z-20 w-72 transition-all duration-300 pointer-events-auto">
+          {/* Floating Map Legend & Category Layer Filter Panel (placed top-16 to avoid overlapping map style buttons) */}
+          <div className="absolute top-16 left-4 z-20 w-72 transition-all duration-300 pointer-events-auto">
             <div className="bg-card/95 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl overflow-hidden">
               {/* Card Header with Collapse Toggle */}
               <div 
