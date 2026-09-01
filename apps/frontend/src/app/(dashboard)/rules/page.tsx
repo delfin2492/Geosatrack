@@ -400,6 +400,9 @@ const CustomNode = ({ data, id, selected }: any) => {
   // 3.5 UNIFIED ALARM NOTIFICATION NODE
   if (data.type === 'action_notification') {
     const channel = data.channel || 'SYSTEM';
+    const alarmState = data.alarmState || 'TRIGGER';
+    const isRecovery = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+
     let ActionIcon = BellRing;
     let label = data.label || 'System Alarm';
     let detailText = 'Dashboard Bell';
@@ -416,8 +419,8 @@ const CustomNode = ({ data, id, selected }: any) => {
 
     return (
       <div className={`min-w-[190px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
-        <div className="bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px]">
-          Alarm Notification
+        <div className={`${isRecovery ? 'bg-emerald-600' : 'bg-purple-700'} px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px] flex items-center justify-center gap-1.5`}>
+          <span>{isRecovery ? '🟢 CLEAR / RECOVERY' : '🔴 CRITICAL / TRIGGER'}</span>
         </div>
         <div className="p-2.5 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
           {/* INTERACTIVE CLICKABLE NOTIFICATION SELECTOR BUTTON */}
@@ -431,13 +434,13 @@ const CustomNode = ({ data, id, selected }: any) => {
             }}
             className="flex-1 bg-white dark:bg-zinc-800 hover:bg-amber-50/70 dark:hover:bg-amber-950/40 border border-gray-300 dark:border-zinc-700 hover:border-amber-500 rounded-md p-1.5 flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all active:scale-[0.98] text-left group/btn"
           >
-            <div className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform">
+            <div className={`w-5 h-5 rounded-full ${isRecovery ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600'} flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform`}>
               <ActionIcon className="w-3 h-3" />
             </div>
             <div className="flex flex-col leading-tight overflow-hidden">
               <span className="text-[10px] font-bold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">{label}</span>
               {data.customName ? (
-                <span className="text-[9px] font-semibold text-purple-600 dark:text-purple-400 truncate max-w-[100px]">{data.customName}</span>
+                <span className={`text-[9px] font-semibold ${isRecovery ? 'text-emerald-600 dark:text-emerald-400' : 'text-purple-600 dark:text-purple-400'} truncate max-w-[100px]`}>{data.customName}</span>
               ) : (
                 <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[100px]">{detailText}</span>
               )}
@@ -751,6 +754,7 @@ export default function RulesPage() {
   // State for Image-matching "Select Alarm Notification" Modal
   const [notificationPickerNode, setNotificationPickerNode] = useState<{ id: string; data: any } | null>(null);
   const [pickerChannel, setPickerChannel] = useState<'SYSTEM' | 'EMAIL' | 'TELEGRAM'>('SYSTEM');
+  const [pickerAlarmState, setPickerAlarmState] = useState<'TRIGGER' | 'RECOVERY'>('TRIGGER');
   const [pickerCustomName, setPickerCustomName] = useState<string>('');
   const [pickerMessageTemplate, setPickerMessageTemplate] = useState<string>('');
   const [pickerToEmail, setPickerToEmail] = useState<string>('');
@@ -759,16 +763,18 @@ export default function RulesPage() {
 
   const [initialNotificationState, setInitialNotificationState] = useState<{
     channel: string;
+    alarmState: string;
     customName: string;
     messageTemplate: string;
     toEmail: string;
     subjectTemplate: string;
     chatId: string;
-  }>({ channel: 'SYSTEM', customName: '', messageTemplate: '', toEmail: '', subjectTemplate: '', chatId: '' });
+  }>({ channel: 'SYSTEM', alarmState: 'TRIGGER', customName: '', messageTemplate: '', toEmail: '', subjectTemplate: '', chatId: '' });
 
   const handleOpenNotificationPicker = (nodeId: string, nodeData: any) => {
     setNotificationPickerNode({ id: nodeId, data: nodeData });
     const initChannel: any = nodeData.channel || (nodeData.type === 'action_email' ? 'EMAIL' : nodeData.type === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
+    const initAlarmState: any = nodeData.alarmState || 'TRIGGER';
     const initCustomName = nodeData.customName || '';
     const initMsg = nodeData.messageTemplate || nodeData.bodyTemplate || '';
     const initEmail = nodeData.toEmail || '';
@@ -776,6 +782,7 @@ export default function RulesPage() {
     const initChat = nodeData.chatId || '';
 
     setPickerChannel(initChannel);
+    setPickerAlarmState(initAlarmState);
     setPickerCustomName(initCustomName);
     setPickerMessageTemplate(initMsg);
     setPickerToEmail(initEmail);
@@ -784,6 +791,7 @@ export default function RulesPage() {
 
     setInitialNotificationState({
       channel: initChannel,
+      alarmState: initAlarmState,
       customName: initCustomName,
       messageTemplate: initMsg,
       toEmail: initEmail,
@@ -801,6 +809,7 @@ export default function RulesPage() {
     if (pickerChannel === 'TELEGRAM') label = 'Telegram Bot';
 
     updateNodeData(notificationPickerNode.id, 'channel', pickerChannel);
+    updateNodeData(notificationPickerNode.id, 'alarmState', pickerAlarmState);
     updateNodeData(notificationPickerNode.id, 'label', label);
     updateNodeData(notificationPickerNode.id, 'customName', pickerCustomName);
     updateNodeData(notificationPickerNode.id, 'messageTemplate', pickerMessageTemplate);
@@ -814,6 +823,7 @@ export default function RulesPage() {
 
   const isNotificationUnchanged =
     pickerChannel === initialNotificationState.channel &&
+    pickerAlarmState === initialNotificationState.alarmState &&
     pickerCustomName === initialNotificationState.customName &&
     pickerMessageTemplate === initialNotificationState.messageTemplate &&
     pickerToEmail === initialNotificationState.toEmail &&
@@ -989,6 +999,7 @@ export default function RulesPage() {
   const [wtGroups, setWtGroups] = useState<any[]>([]);
   const [wtActions, setWtActions] = useState<any[]>([]);
   const [wtThenFrequency, setWtThenFrequency] = useState<string>('ALWAYS');
+  const [wtAutoRecovery, setWtAutoRecovery] = useState<boolean>(true);
   const [wtActiveMode, setWtActiveMode] = useState<'ALWAYS' | 'SPECIFIC_PERIOD' | 'DAILY_PERIOD'>('ALWAYS');
   const [wtSpecificStartDate, setWtSpecificStartDate] = useState<string>('');
   const [wtSpecificEndDate, setWtSpecificEndDate] = useState<string>('');
@@ -1194,6 +1205,7 @@ export default function RulesPage() {
         }
         setWtActions(config.actions || []);
         setWtThenFrequency(config.thenFrequency || 'ALWAYS');
+        setWtAutoRecovery(config.autoRecoveryNotification !== false);
         setWtActiveMode(config.activeMode || 'ALWAYS');
         setWtSpecificStartDate(config.specificPeriod?.startDate || '');
         setWtSpecificEndDate(config.specificPeriod?.endDate || '');
@@ -1286,6 +1298,7 @@ export default function RulesPage() {
       },
       ...(isWhenThen ? {
         thenFrequency: wtThenFrequency,
+        autoRecoveryNotification: wtAutoRecovery,
         groups: wtGroups,
         actions: wtActions
       } : {})
@@ -2073,6 +2086,25 @@ export default function RulesPage() {
               <Button onClick={() => setWtActions([...wtActions, { id: Date.now().toString(), actionType: 'trigger_asset', assetId: '', attribute: '', command: '' }])} variant="ghost" className="mt-6 text-xs font-bold text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 ml-2">
                 <Plus className="h-3.5 w-3.5 mr-1" /> ADD ACTION
               </Button>
+
+              {/* Auto Recovery Notification Checkbox Card */}
+              <div className="mt-5 p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-between shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="autoRecoveryCheckbox"
+                    checked={wtAutoRecovery}
+                    onChange={(e) => setWtAutoRecovery(e.target.checked)}
+                    className="rounded border-gray-300 text-emerald-500 focus:ring-emerald-500 h-4 w-4 cursor-pointer"
+                  />
+                  <label htmlFor="autoRecoveryCheckbox" className="text-xs font-bold text-foreground cursor-pointer select-none">
+                    Kirim notifikasi pemulihan otomatis saat nilai kembali normal (Auto Recovery Notification)
+                  </label>
+                </div>
+                <Badge className="bg-emerald-500/20 text-emerald-500 text-[10px] border-none font-extrabold px-2.5 py-1 rounded-full">
+                  ✅ AUTO RECOVERY
+                </Badge>
+              </div>
             </div>
           </div>
         </div>
@@ -2599,6 +2631,33 @@ export default function RulesPage() {
                     placeholder="e.g. Overheat Warning Team A"
                     className="h-8 rounded-lg text-xs bg-background"
                   />
+                </div>
+
+                {/* ALARM STATE (CRITICAL / RECOVERY) SELECTOR */}
+                <div className="space-y-1">
+                  <label className="text-muted-foreground font-semibold block">Alarm State Mode</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div
+                      onClick={() => setPickerAlarmState('TRIGGER')}
+                      className={`p-2 rounded-lg border cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                        pickerAlarmState === 'TRIGGER'
+                          ? 'bg-rose-500/10 border-rose-500 font-bold text-rose-600 dark:text-rose-400 shadow-sm'
+                          : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground'
+                      }`}
+                    >
+                      <span className="text-[11px]">🔴 CRITICAL / TRIGGER</span>
+                    </div>
+                    <div
+                      onClick={() => setPickerAlarmState('RECOVERY')}
+                      className={`p-2 rounded-lg border cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                        pickerAlarmState === 'RECOVERY'
+                          ? 'bg-emerald-500/10 border-emerald-500 font-bold text-emerald-600 dark:text-emerald-400 shadow-sm'
+                          : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground'
+                      }`}
+                    >
+                      <span className="text-[11px]">🟢 CLEAR / RECOVERY</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* SYSTEM ALARM FORM */}

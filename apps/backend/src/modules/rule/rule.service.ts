@@ -68,7 +68,7 @@ export class RuleService {
     });
   }
 
-  async createLog(ruleId: string, status: 'SUCCESS' | 'FAILED', message: string) {
+  async createLog(ruleId: string, status: 'SUCCESS' | 'FAILED' | 'RECOVERED' | string, message: string) {
     return this.prisma.ruleLog.create({
       data: {
         ruleId,

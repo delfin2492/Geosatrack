@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getApiUrl } from '../../lib/api';
-import { Trash2, Filter, Bell, Mail, Send, AlertTriangle, ShieldAlert, Activity } from 'lucide-react';
+import { Trash2, Filter, Bell, Mail, Send, AlertTriangle, ShieldAlert, Activity, CheckCircle2 } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 
 export default function NotificationsPage() {
@@ -126,6 +126,37 @@ export default function NotificationsPage() {
     );
   };
 
+  const resolveAlert = async (id: string) => {
+    if (!tenantId && !token) return;
+    try {
+      const res = await fetch(`${getApiUrl()}/alerts/${id}/resolve`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        setHistory(prev => prev.map(a => a.id === id ? { ...a, isResolved: true, resolvedAt: new Date().toISOString() } : a));
+      }
+    } catch (err) {}
+  };
+
+  const renderStatusBadge = (item: any) => {
+    const isResolved = item.isResolved || item.type === 'alert_recovery' || (item.message && item.message.includes('RECOVERED'));
+
+    if (isResolved) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-bold border border-emerald-500/20">
+          <CheckCircle2 className="h-3.5 w-3.5" /> RESOLVED / CLEARED
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-500 text-xs font-bold border border-rose-500/20 animate-pulse">
+        <AlertTriangle className="h-3.5 w-3.5" /> ACTIVE ALARM
+      </span>
+    );
+  };
+
   return (
     <div className="h-full flex flex-col space-y-4">
       {/* Header */}
@@ -133,9 +164,9 @@ export default function NotificationsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Bell className="h-6 w-6 text-primary" />
-            Notifications History
+            Notifications & Alarm History
           </h2>
-          <p className="text-muted-foreground text-sm">View full history of system alerts and automation rules</p>
+          <p className="text-muted-foreground text-sm">Monitor live alarms, active warnings, and auto-recovered statuses</p>
         </div>
 
         <div className="flex gap-4 items-center">
@@ -183,37 +214,56 @@ export default function NotificationsPage() {
           <table className="w-full text-left border-collapse text-sm">
             <thead className="bg-card sticky top-0 z-10 border-b border-border shadow-sm">
               <tr className="bg-card">
-                <th className="px-6 py-4 font-semibold text-muted-foreground w-48 bg-card">Timestamp</th>
-                <th className="px-6 py-4 font-semibold text-muted-foreground w-44 bg-card">Type</th>
+                <th className="px-6 py-4 font-semibold text-muted-foreground w-44 bg-card">Timestamp</th>
+                <th className="px-6 py-4 font-semibold text-muted-foreground w-40 bg-card">Status Alarm</th>
+                <th className="px-6 py-4 font-semibold text-muted-foreground w-36 bg-card">Channel</th>
                 <th className="px-6 py-4 font-semibold text-muted-foreground bg-card">Message</th>
-                <th className="px-6 py-4 font-semibold text-muted-foreground text-right w-24 bg-card">Actions</th>
+                <th className="px-6 py-4 font-semibold text-muted-foreground text-right w-32 bg-card">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {history.map(item => (
-                <tr key={item.id} className="hover:bg-secondary/20 transition-colors">
-                  <td className="px-6 py-4 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(item.createdAt).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {renderTypeBadge(item.type)}
-                  </td>
-                  <td className="px-6 py-4 font-medium text-foreground">
-                    {item.message}
-                  </td>
-                  <td className="px-6 py-4 text-right whitespace-nowrap">
-                    {isAdmin && (
-                      <button
-                        onClick={() => deleteAlert(item.id)}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors cursor-pointer"
-                        title="Delete notification"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {history.map(item => {
+                const isResolved = item.isResolved || item.type === 'alert_recovery' || (item.message && item.message.includes('RECOVERED'));
+
+                return (
+                  <tr key={item.id} className="hover:bg-secondary/20 transition-colors">
+                    <td className="px-6 py-4 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {renderStatusBadge(item)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {renderTypeBadge(item.type)}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-foreground">
+                      {item.message}
+                    </td>
+                    <td className="px-6 py-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {!isResolved && (
+                          <button
+                            onClick={() => resolveAlert(item.id)}
+                            className="px-2 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Mark alarm as resolved"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Resolve
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={() => deleteAlert(item.id)}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors cursor-pointer"
+                            title="Delete notification"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

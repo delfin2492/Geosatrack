@@ -26,6 +26,7 @@ interface FlowGraph {
 @Injectable()
 export class RulesEngineService {
   private readonly logger = new Logger(RulesEngineService.name);
+  private static ruleAssetStates = new Map<string, boolean>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -350,29 +351,44 @@ export class RulesEngineService {
       }
     } else if (nodeType === 'action_notification' || nodeType === 'action_alarm') {
       const channel = currentNode.data?.channel || (nodeType === 'action_email' ? 'EMAIL' : nodeType === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
+      const alarmState = currentNode.data?.alarmState || 'TRIGGER';
+
       if (channel === 'EMAIL') {
-        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_email' } }, graph, payload, logMessages);
+        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_email', alarmState } }, graph, payload, logMessages);
       } else if (channel === 'TELEGRAM') {
-        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_telegram' } }, graph, payload, logMessages);
+        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_telegram', alarmState } }, graph, payload, logMessages);
       } else {
         try {
-          const message =
-            currentNode.data.messageTemplate ||
-            `Critical alert: Asset ${payload.assetName || 'Device'} ${payload.geofenceName ? `triggered ${payload.geofenceName}` : (payload.attributeName || 'threshold triggered')}`;
-          
+          const isRecovery = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+          const defaultMsg = isRecovery
+            ? `✅ RECOVERED: Asset ${payload.assetName || 'Device'} - ${payload.attributeName || 'Attribute'} kembali normal (Nilai: ${payload.value ?? 'normal'})`
+            : `Critical alert: Asset ${payload.assetName || 'Device'} ${payload.geofenceName ? `triggered ${payload.geofenceName}` : (payload.attributeName || 'threshold triggered')}`;
+
+          const rawMessage = currentNode.data.messageTemplate || defaultMsg;
+          const message = this.interpolateTemplate(rawMessage, payload);
           const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
+
+          if (isRecovery && payload.assetId) {
+            await this.prisma.alert.updateMany({
+              where: { tenantId: targetTenantId, assetId: payload.assetId, isResolved: false },
+              data: { isResolved: true, resolvedAt: new Date() },
+            });
+          }
+
           const createdAlert = await this.prisma.alert.create({
             data: {
-              type: payload.geofenceId ? 'alert_alarm' : 'alert_alarm',
-              message: this.interpolateTemplate(message, payload),
+              type: isRecovery ? 'alert_recovery' : 'alert_alarm',
+              message,
               tenantId: targetTenantId,
               assetId: payload.assetId,
+              isResolved: isRecovery,
+              resolvedAt: isRecovery ? new Date() : null,
             },
           });
-          
+
           // Broadcast the alert via WebSockets to notify frontend dashboard in real-time!
           this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
-          logMessages.push(`[ACTION] Successfully created and broadcasted system alarm alert.`);
+          logMessages.push(`[ACTION ${alarmState}] Successfully created system ${isRecovery ? 'recovery' : 'alarm'} alert.`);
         } catch (err: any) {
           logMessages.push(`[ACTION_ERROR] Failed to create alarm alert: ${err.message}`);
           throw err;
@@ -591,6 +607,7 @@ export class RulesEngineService {
       specificPeriod?: { allDays?: boolean; startDate?: string; endDate?: string };
       dailyPeriod?: { startTime?: string; endTime?: string; activeDays?: string[]; repetitionEnds?: string; repetitionEndDate?: string };
       thenFrequency?: string;
+      autoRecoveryNotification?: boolean;
       cooldownMinutes?: number;
       groups?: any[];
       conditions?: any[];
@@ -847,9 +864,88 @@ export class RulesEngineService {
       }
     }
 
+    const stateKey = `${rule.id}:${payload.assetId || 'GLOBAL'}`;
+    const wasTriggered = RulesEngineService.ruleAssetStates.get(stateKey) || false;
+
     if (!anyGroupMatched) {
+      const autoRecovery = config.autoRecoveryNotification !== false;
+      if (wasTriggered && autoRecovery && payload.assetId) {
+        RulesEngineService.ruleAssetStates.set(stateKey, false);
+        logMessages.push(`[RECOVERY] Telemetry returned to normal for "${payload.assetName || 'Asset'}". Triggering auto recovery notification...`);
+
+        const targetTenantId = payload.tenantId || rule.tenantId || (await this.getTenantFromAsset(payload.assetId));
+
+        // 1. Resolve active alerts for asset
+        await this.prisma.alert.updateMany({
+          where: { tenantId: targetTenantId, assetId: payload.assetId, isResolved: false },
+          data: { isResolved: true, resolvedAt: new Date() },
+        });
+
+        // 2. Create Recovery Alert
+        const recoveryMsg = `✅ RECOVERED: ${payload.assetName || 'Asset'} - ${payload.attributeName || 'Attribute'} kembali normal (Nilai: ${payload.value ?? 'normal'})`;
+        const createdAlert = await this.prisma.alert.create({
+          data: {
+            type: 'alert_recovery',
+            message: recoveryMsg,
+            tenantId: targetTenantId,
+            assetId: payload.assetId,
+            isResolved: true,
+            resolvedAt: new Date(),
+          },
+        });
+        this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
+
+        // 3. Dispatch recovery notifications to Telegram/Email if configured on rule
+        for (const action of actions) {
+          if (action.actionType === 'email' && action.toEmail) {
+            try {
+              await this.executeNode({
+                id: 'recovery_email',
+                type: 'action_email',
+                data: {
+                  type: 'action_email',
+                  alarmState: 'RECOVERY',
+                  toEmail: action.toEmail,
+                  subjectTemplate: `✅ RECOVERED: ${payload.assetName || 'Asset'} ${payload.attributeName || 'Attribute'} Normal`,
+                  bodyTemplate: recoveryMsg,
+                }
+              }, { nodes: [], edges: [] }, payload, logMessages);
+            } catch (e: any) {
+              logMessages.push(`[RECOVERY_EMAIL_ERROR] ${e.message}`);
+            }
+          } else if (action.actionType === 'telegram' && action.chatId) {
+            try {
+              await this.executeNode({
+                id: 'recovery_telegram',
+                type: 'action_telegram',
+                data: {
+                  type: 'action_telegram',
+                  alarmState: 'RECOVERY',
+                  chatId: action.chatId,
+                  messageTemplate: `✅ *RECOVERED*: *${payload.assetName || 'Asset'}* - *${payload.attributeName || 'Attribute'}* kembali normal (Nilai: ${payload.value})`,
+                }
+              }, { nodes: [], edges: [] }, payload, logMessages);
+            } catch (e: any) {
+              logMessages.push(`[RECOVERY_TELEGRAM_ERROR] ${e.message}`);
+            }
+          }
+        }
+
+        const fullLog = logMessages.join('\n');
+        await this.ruleService.createLog(rule.id, 'RECOVERED', fullLog);
+        this.websocketGateway.sendToTenant(rule.tenantId, 'systemLog', {
+          level: 'success',
+          source: 'RULES_ENGINE',
+          deviceName: payload.assetName || rule.name,
+          message: `When-Then rule "${rule.name}" auto-recovered`,
+          data: { ruleId: rule.id, payload, executionLogs: logMessages },
+          timestamp: new Date().toISOString(),
+        });
+      }
       return;
     }
+
+    RulesEngineService.ruleAssetStates.set(stateKey, true);
 
     let status: 'SUCCESS' | 'FAILED' = 'SUCCESS';
 
