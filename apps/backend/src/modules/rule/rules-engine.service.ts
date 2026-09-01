@@ -100,7 +100,7 @@ export class RulesEngineService {
           let status: 'SUCCESS' | 'FAILED' = 'SUCCESS';
 
           try {
-            await this.executeNode(triggerNode, graph, payload, logMessages, new Set());
+            await this.executeNode(triggerNode, graph, { ...payload, ruleId: rule.id, tenantId: rule.tenantId }, logMessages, new Set());
           } catch (executionErr: any) {
             status = 'FAILED';
             logMessages.push(`[ERROR] Flow execution stopped: ${executionErr.message}`);
@@ -307,7 +307,73 @@ export class RulesEngineService {
       if (!conditionMet) {
         proceed = false;
         logMessages.push(`[LOGIC ${condType}] Condition failed: ${val} is not ${condType} ${thresh}. Stopping flow path.`);
+
+        // Flow Auto-Recovery Logic when telemetry returns to normal
+        const flowRuleId = payload.ruleId || 'GLOBAL';
+        const flowStateKey = `flow_rule:${flowRuleId}:${payload.assetId || 'GLOBAL'}`;
+        let wasFlowTriggered = RulesEngineService.ruleAssetStates.get(flowStateKey) || false;
+
+        if (!wasFlowTriggered && payload.assetId) {
+          const activeAlert = await this.prisma.alert.findFirst({
+            where: { assetId: payload.assetId, isResolved: false, type: 'alert_alarm' },
+          });
+          if (activeAlert) wasFlowTriggered = true;
+        }
+
+        if (wasFlowTriggered && payload.assetId) {
+          RulesEngineService.ruleAssetStates.set(flowStateKey, false);
+          logMessages.push(`[FLOW_RECOVERY] Telemetry returned to normal for "${payload.assetName || 'Asset'}". Triggering flow recovery...`);
+
+          // Reset all node-level ONCE states for this asset
+          for (const node of graph.nodes) {
+            const nodeStateKey = `flow_node:${node.id}:${payload.assetId}`;
+            RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
+          }
+
+          // Check if there are explicit recovery nodes in the graph (alarmState === 'RECOVERY' or 'CLEAR')
+          const recoveryNodes = graph.nodes.filter((n: any) => {
+            const nType = n.data?.type || n.type;
+            const aState = n.data?.alarmState;
+            return (nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram') && (aState === 'RECOVERY' || aState === 'CLEAR');
+          });
+
+          if (recoveryNodes.length > 0) {
+            for (const recNode of recoveryNodes) {
+              try {
+                await this.executeNode(recNode, graph, payload, logMessages, visitedNodeIds);
+              } catch (e: any) {
+                logMessages.push(`[RECOVERY_NODE_ERROR] ${e.message}`);
+              }
+            }
+          } else {
+            // Default Auto Recovery if no explicit recovery node was placed in flow graph
+            const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
+            await this.prisma.alert.updateMany({
+              where: { tenantId: targetTenantId, assetId: payload.assetId, isResolved: false },
+              data: { isResolved: true, resolvedAt: new Date() },
+            });
+
+            const attrLabel = payload.attributeName ? `${payload.attributeName}` : 'Parameter telemetri';
+            const valLabel = payload.value !== undefined ? ` (Nilai: ${payload.value})` : '';
+            const recoveryMsg = `✅ RECOVERED: ${payload.assetName || 'Asset'} - ${attrLabel} kembali normal${valLabel}`;
+
+            const createdAlert = await this.prisma.alert.create({
+              data: {
+                type: 'alert_recovery',
+                message: recoveryMsg,
+                tenantId: targetTenantId,
+                assetId: payload.assetId,
+                isResolved: true,
+                resolvedAt: new Date(),
+              },
+            });
+            this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
+          }
+        }
       } else {
+        const flowRuleId = payload.ruleId || 'GLOBAL';
+        const flowStateKey = `flow_rule:${flowRuleId}:${payload.assetId || 'GLOBAL'}`;
+        RulesEngineService.ruleAssetStates.set(flowStateKey, true);
         logMessages.push(`[LOGIC ${condType}] Condition passed: ${val} ${condType} ${thresh}`);
       }
     }
