@@ -307,6 +307,7 @@ export class RulesEngineService {
       else if (condType === 'AND' || condType === 'OR') conditionMet = true;
 
       payload.nodeOutputs[currentNode.id] = conditionMet;
+      payload.value = val;
 
       if (!conditionMet) {
         proceed = false;
@@ -319,7 +320,7 @@ export class RulesEngineService {
 
         if (!wasFlowTriggered && payload.assetId) {
           const activeAlert = await this.prisma.alert.findFirst({
-            where: { assetId: payload.assetId, isResolved: false, type: 'alert_alarm' },
+            where: { assetId: payload.assetId, isResolved: false, type: { in: ['alert_alarm', 'email', 'telegram'] } },
           });
           if (activeAlert) wasFlowTriggered = true;
         }
