@@ -324,35 +324,52 @@ export class RulesEngineService {
           RulesEngineService.ruleAssetStates.set(flowStateKey, false);
           logMessages.push(`[FLOW_RECOVERY] Telemetry returned to normal for "${payload.assetName || 'Asset'}". Triggering flow recovery...`);
 
-          // Reset all node-level ONCE states for this asset
+          // 1. Reset all node-level ONCE states for this asset
           for (const node of graph.nodes) {
-            const nodeStateKey = `flow_node:${node.id}:${payload.assetId}`;
+            const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${node.id}:${payload.assetId}`;
             RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
           }
 
-          // Check if there are explicit recovery nodes in the graph (alarmState === 'RECOVERY' or 'CLEAR')
-          const recoveryNodes = graph.nodes.filter((n: any) => {
-            const nType = n.data?.type || n.type;
-            const aState = n.data?.alarmState;
-            return (nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram') && (aState === 'RECOVERY' || aState === 'CLEAR');
+          // 2. Resolve active alerts in DB for asset
+          const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
+          await this.prisma.alert.updateMany({
+            where: { tenantId: targetTenantId, assetId: payload.assetId, isResolved: false },
+            data: { isResolved: true, resolvedAt: new Date() },
           });
 
-          if (recoveryNodes.length > 0) {
-            for (const recNode of recoveryNodes) {
+          // 3. Find all notification action nodes in the flow graph
+          const actionNodes = graph.nodes.filter((n: any) => {
+            const nType = n.data?.type || n.type;
+            return nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram';
+          });
+
+          // 4. Automatically trigger recovery on all notification action nodes in the flow
+          if (actionNodes.length > 0) {
+            for (const actionNode of actionNodes) {
               try {
-                await this.executeNode(recNode, graph, { ...payload, isRecoveryPhase: true }, logMessages, visitedNodeIds);
+                const nodeType = actionNode.data?.type || actionNode.type;
+                const alarmState = 'RECOVERY';
+
+                if (nodeType === 'action_notification' || nodeType === 'action_alarm') {
+                  const channel = actionNode.data?.channel || 'SYSTEM';
+                  if (channel === 'EMAIL') {
+                    await this.executeNode({ ...actionNode, data: { ...actionNode.data, type: 'action_email', alarmState } }, graph, { ...payload, isRecoveryPhase: true }, logMessages, visitedNodeIds);
+                  } else if (channel === 'TELEGRAM') {
+                    await this.executeNode({ ...actionNode, data: { ...actionNode.data, type: 'action_telegram', alarmState } }, graph, { ...payload, isRecoveryPhase: true }, logMessages, visitedNodeIds);
+                  } else {
+                    await this.executeNode({ ...actionNode, data: { ...actionNode.data, alarmState } }, graph, { ...payload, isRecoveryPhase: true }, logMessages, visitedNodeIds);
+                  }
+                } else if (nodeType === 'action_email') {
+                  await this.executeNode({ ...actionNode, data: { ...actionNode.data, alarmState } }, graph, { ...payload, isRecoveryPhase: true }, logMessages, visitedNodeIds);
+                } else if (nodeType === 'action_telegram') {
+                  await this.executeNode({ ...actionNode, data: { ...actionNode.data, alarmState } }, graph, { ...payload, isRecoveryPhase: true }, logMessages, visitedNodeIds);
+                }
               } catch (e: any) {
-                logMessages.push(`[RECOVERY_NODE_ERROR] ${e.message}`);
+                logMessages.push(`[RECOVERY_ACTION_ERROR] ${e.message}`);
               }
             }
           } else {
-            // Default Auto Recovery if no explicit recovery node was placed in flow graph
-            const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
-            await this.prisma.alert.updateMany({
-              where: { tenantId: targetTenantId, assetId: payload.assetId, isResolved: false },
-              data: { isResolved: true, resolvedAt: new Date() },
-            });
-
+            // Default Auto Recovery if no notification node was in the flow graph
             const attrLabel = payload.attributeName ? `${payload.attributeName}` : 'Parameter telemetri';
             const valLabel = payload.value !== undefined ? ` (Nilai: ${payload.value})` : '';
             const recoveryMsg = `✅ RECOVERED: ${payload.assetName || 'Asset'} - ${attrLabel} kembali normal${valLabel}`;
