@@ -877,7 +877,16 @@ export class RulesEngineService {
     }
 
     const stateKey = `${rule.id}:${payload.assetId || 'GLOBAL'}`;
-    const wasTriggered = RulesEngineService.ruleAssetStates.get(stateKey) || false;
+    let wasTriggered = RulesEngineService.ruleAssetStates.get(stateKey) || false;
+
+    if (!wasTriggered && payload.assetId) {
+      const activeAlert = await this.prisma.alert.findFirst({
+        where: { assetId: payload.assetId, isResolved: false },
+      });
+      if (activeAlert) {
+        wasTriggered = true;
+      }
+    }
 
     if (!anyGroupMatched) {
       const autoRecovery = config.autoRecoveryNotification !== false;
