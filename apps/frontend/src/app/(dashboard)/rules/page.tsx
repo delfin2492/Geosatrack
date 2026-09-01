@@ -419,8 +419,11 @@ const CustomNode = ({ data, id, selected }: any) => {
 
     return (
       <div className={`min-w-[190px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
-        <div className={`${isRecovery ? 'bg-emerald-600' : 'bg-purple-700'} px-3 py-1 text-white font-bold text-[11px] tracking-wide text-center select-none rounded-t-[7px] flex items-center justify-center gap-1.5`}>
+        <div className={`${isRecovery ? 'bg-emerald-600' : 'bg-purple-700'} px-3 py-1 text-white font-bold text-[11px] tracking-wide select-none rounded-t-[7px] flex items-center justify-between gap-1.5`}>
           <span>{isRecovery ? '🟢 CLEAR / RECOVERY' : '🔴 CRITICAL / TRIGGER'}</span>
+          {(data.frequency || data.thenFrequency) && (
+            <span className="text-[9px] font-black bg-black/30 px-1.5 py-0.5 rounded text-white uppercase tracking-wider">{data.frequency || data.thenFrequency}</span>
+          )}
         </div>
         <div className="p-2.5 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
           {/* INTERACTIVE CLICKABLE NOTIFICATION SELECTOR BUTTON */}
@@ -752,9 +755,11 @@ export default function RulesPage() {
     pickerEventType === initialGeofenceState.eventType;
 
   // State for Image-matching "Select Alarm Notification" Modal
+  // State for Image-matching "Select Alarm Notification" Modal
   const [notificationPickerNode, setNotificationPickerNode] = useState<{ id: string; data: any } | null>(null);
   const [pickerChannel, setPickerChannel] = useState<'SYSTEM' | 'EMAIL' | 'TELEGRAM'>('SYSTEM');
   const [pickerAlarmState, setPickerAlarmState] = useState<'TRIGGER' | 'RECOVERY'>('TRIGGER');
+  const [pickerFrequency, setPickerFrequency] = useState<string>('ALWAYS');
   const [pickerCustomName, setPickerCustomName] = useState<string>('');
   const [pickerMessageTemplate, setPickerMessageTemplate] = useState<string>('');
   const [pickerToEmail, setPickerToEmail] = useState<string>('');
@@ -764,17 +769,19 @@ export default function RulesPage() {
   const [initialNotificationState, setInitialNotificationState] = useState<{
     channel: string;
     alarmState: string;
+    frequency: string;
     customName: string;
     messageTemplate: string;
     toEmail: string;
     subjectTemplate: string;
     chatId: string;
-  }>({ channel: 'SYSTEM', alarmState: 'TRIGGER', customName: '', messageTemplate: '', toEmail: '', subjectTemplate: '', chatId: '' });
+  }>({ channel: 'SYSTEM', alarmState: 'TRIGGER', frequency: 'ALWAYS', customName: '', messageTemplate: '', toEmail: '', subjectTemplate: '', chatId: '' });
 
   const handleOpenNotificationPicker = (nodeId: string, nodeData: any) => {
     setNotificationPickerNode({ id: nodeId, data: nodeData });
     const initChannel: any = nodeData.channel || (nodeData.type === 'action_email' ? 'EMAIL' : nodeData.type === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
     const initAlarmState: any = nodeData.alarmState || 'TRIGGER';
+    const initFrequency = nodeData.frequency || nodeData.thenFrequency || 'ALWAYS';
     const initCustomName = nodeData.customName || '';
     const initMsg = nodeData.messageTemplate || nodeData.bodyTemplate || '';
     const initEmail = nodeData.toEmail || '';
@@ -783,6 +790,7 @@ export default function RulesPage() {
 
     setPickerChannel(initChannel);
     setPickerAlarmState(initAlarmState);
+    setPickerFrequency(initFrequency);
     setPickerCustomName(initCustomName);
     setPickerMessageTemplate(initMsg);
     setPickerToEmail(initEmail);
@@ -792,6 +800,7 @@ export default function RulesPage() {
     setInitialNotificationState({
       channel: initChannel,
       alarmState: initAlarmState,
+      frequency: initFrequency,
       customName: initCustomName,
       messageTemplate: initMsg,
       toEmail: initEmail,
@@ -810,6 +819,8 @@ export default function RulesPage() {
 
     updateNodeData(notificationPickerNode.id, 'channel', pickerChannel);
     updateNodeData(notificationPickerNode.id, 'alarmState', pickerAlarmState);
+    updateNodeData(notificationPickerNode.id, 'frequency', pickerFrequency);
+    updateNodeData(notificationPickerNode.id, 'thenFrequency', pickerFrequency);
     updateNodeData(notificationPickerNode.id, 'label', label);
     updateNodeData(notificationPickerNode.id, 'customName', pickerCustomName);
     updateNodeData(notificationPickerNode.id, 'messageTemplate', pickerMessageTemplate);
@@ -824,6 +835,7 @@ export default function RulesPage() {
   const isNotificationUnchanged =
     pickerChannel === initialNotificationState.channel &&
     pickerAlarmState === initialNotificationState.alarmState &&
+    pickerFrequency === initialNotificationState.frequency &&
     pickerCustomName === initialNotificationState.customName &&
     pickerMessageTemplate === initialNotificationState.messageTemplate &&
     pickerToEmail === initialNotificationState.toEmail &&
@@ -2661,6 +2673,24 @@ export default function RulesPage() {
                       <span className="text-[11px]">🟢 CLEAR / RECOVERY</span>
                     </div>
                   </div>
+                </div>
+
+                {/* NOTIFICATION FREQUENCY SELECTOR */}
+                <div className="space-y-1">
+                  <label className="text-muted-foreground font-semibold block">Notification Frequency</label>
+                  <SearchableSelect
+                    options={[
+                      { label: "ALWAYS (Tanpa Jeda)", value: "ALWAYS" },
+                      { label: "ONCE (Hanya 1x Per Kejadian)", value: "ONCE" },
+                      { label: "ONCE PER MINUTE (Maks 1x / Menit)", value: "ONCE_PER_MINUTE" },
+                      { label: "ONCE PER HOUR (Maks 1x / Jam)", value: "ONCE_PER_HOUR" },
+                      { label: "ONCE PER DAY (Maks 1x / Hari)", value: "ONCE_PER_DAY" },
+                      { label: "ONCE PER WEEK (Maks 1x / Minggu)", value: "ONCE_PER_WEEK" }
+                    ]}
+                    value={pickerFrequency}
+                    onChange={(val) => setPickerFrequency(val)}
+                    placeholder="Select Notification Frequency..."
+                  />
                 </div>
 
                 {/* SYSTEM ALARM FORM */}

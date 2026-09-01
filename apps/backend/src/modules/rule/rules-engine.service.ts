@@ -352,6 +352,21 @@ export class RulesEngineService {
     } else if (nodeType === 'action_notification' || nodeType === 'action_alarm') {
       const channel = currentNode.data?.channel || (nodeType === 'action_email' ? 'EMAIL' : nodeType === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
       const alarmState = currentNode.data?.alarmState || 'TRIGGER';
+      const frequency = currentNode.data?.frequency || currentNode.data?.thenFrequency || 'ALWAYS';
+      const isRecovery = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+
+      if (frequency === 'ONCE' && !isRecovery && payload.assetId) {
+        const nodeStateKey = `flow_node:${currentNode.id}:${payload.assetId}`;
+        const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
+        if (wasNodeTriggered) {
+          logMessages.push(`[ONCE_THROTTLE] Node "${currentNode.data?.label || currentNode.id}" already triggered once for asset ${payload.assetId}. Skipping duplicate action.`);
+          return;
+        }
+        RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
+      } else if (isRecovery && payload.assetId) {
+        const nodeStateKey = `flow_node:${currentNode.id}:${payload.assetId}`;
+        RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
+      }
 
       if (channel === 'EMAIL') {
         await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_email', alarmState } }, graph, payload, logMessages);
