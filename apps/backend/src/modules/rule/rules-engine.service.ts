@@ -438,28 +438,17 @@ export class RulesEngineService {
       }
     } else if (nodeType === 'action_notification' || nodeType === 'action_alarm') {
       const channel = currentNode.data?.channel || (nodeType === 'action_email' ? 'EMAIL' : nodeType === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
-      const alarmState = currentNode.data?.alarmState || 'TRIGGER';
+      const autoRecovery = currentNode.data?.autoRecovery !== undefined ? currentNode.data.autoRecovery : true;
       const frequency = currentNode.data?.frequency || currentNode.data?.thenFrequency || 'ALWAYS';
-      const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
       const isRecoveryPhase = !!payload.isRecoveryPhase;
 
-      const hasExplicitTriggerNodes = graph.nodes.some((n: any) => {
-        const nType = n.data?.type || n.type;
-        const aState = n.data?.alarmState || 'TRIGGER';
-        return (nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram') && (aState === 'TRIGGER');
-      });
-
-      // Phase Guard: RECOVERY nodes only skip during TRIGGER phase if explicit TRIGGER nodes exist!
-      if (isRecoveryNode && !isRecoveryPhase && hasExplicitTriggerNodes) {
-        logMessages.push(`[NODE_SKIP] Skipping recovery node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
-        return;
-      }
-      if (!isRecoveryNode && isRecoveryPhase && hasExplicitTriggerNodes) {
-        logMessages.push(`[NODE_SKIP] Skipping trigger node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
+      // Phase Guard: If in RECOVERY phase, only run if Auto Recovery is enabled on this node
+      if (isRecoveryPhase && !autoRecovery) {
+        logMessages.push(`[NODE_SKIP] Skipping node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase because Auto Recovery is disabled.`);
         return;
       }
 
-      if (frequency === 'ONCE' && !isRecoveryNode && payload.assetId) {
+      if (frequency === 'ONCE' && !isRecoveryPhase && payload.assetId) {
         const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
         const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
         if (wasNodeTriggered) {
@@ -467,18 +456,18 @@ export class RulesEngineService {
           return;
         }
         RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
-      } else if (isRecoveryNode && payload.assetId) {
+      } else if (isRecoveryPhase && payload.assetId) {
         const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
         RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
       }
 
       if (channel === 'EMAIL') {
-        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_email', alarmState } }, graph, payload, logMessages);
+        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_email' } }, graph, payload, logMessages);
       } else if (channel === 'TELEGRAM') {
-        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_telegram', alarmState } }, graph, payload, logMessages);
+        await this.executeNode({ ...currentNode, data: { ...currentNode.data, type: 'action_telegram' } }, graph, payload, logMessages);
       } else {
         try {
-          const isRecovery = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+          const isRecovery = isRecoveryPhase;
           const defaultMsg = isRecovery
             ? `✅ RECOVERED: Asset ${payload.assetName || 'Device'} - ${payload.attributeName || 'Attribute'} kembali normal (Nilai: ${payload.value ?? 'normal'})`
             : `Critical alert: Asset ${payload.assetName || 'Device'} ${payload.geofenceName ? `triggered ${payload.geofenceName}` : (payload.attributeName || 'threshold triggered')}`;
@@ -507,34 +496,23 @@ export class RulesEngineService {
 
           // Broadcast the alert via WebSockets to notify frontend dashboard in real-time!
           this.websocketGateway.sendToTenant(targetTenantId, 'alertNew', createdAlert);
-          logMessages.push(`[ACTION ${alarmState}] Successfully created system ${isRecovery ? 'recovery' : 'alarm'} alert.`);
+          logMessages.push(`[ACTION ${isRecoveryPhase ? 'RECOVERY' : 'TRIGGER'}] Successfully created system ${isRecovery ? 'recovery' : 'alarm'} alert.`);
         } catch (err: any) {
           logMessages.push(`[ACTION_ERROR] Failed to create alarm alert: ${err.message}`);
           throw err;
         }
       }
     } else if (nodeType === 'action_email') {
-      const alarmState = currentNode.data?.alarmState || 'TRIGGER';
+      const autoRecovery = currentNode.data?.autoRecovery !== undefined ? currentNode.data.autoRecovery : true;
       const frequency = currentNode.data?.frequency || currentNode.data?.thenFrequency || 'ALWAYS';
-      const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
       const isRecoveryPhase = !!payload.isRecoveryPhase;
 
-      const hasExplicitTriggerNodes = graph.nodes.some((n: any) => {
-        const nType = n.data?.type || n.type;
-        const aState = n.data?.alarmState || 'TRIGGER';
-        return (nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram') && (aState === 'TRIGGER');
-      });
-
-      if (isRecoveryNode && !isRecoveryPhase && hasExplicitTriggerNodes) {
-        logMessages.push(`[NODE_SKIP] Skipping recovery email node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
-        return;
-      }
-      if (!isRecoveryNode && isRecoveryPhase && hasExplicitTriggerNodes) {
-        logMessages.push(`[NODE_SKIP] Skipping trigger email node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
+      if (isRecoveryPhase && !autoRecovery) {
+        logMessages.push(`[NODE_SKIP] Skipping email node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase because Auto Recovery is disabled.`);
         return;
       }
 
-      if (frequency === 'ONCE' && !isRecoveryNode && payload.assetId) {
+      if (frequency === 'ONCE' && !isRecoveryPhase && payload.assetId) {
         const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
         const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
         if (wasNodeTriggered) {
@@ -542,7 +520,7 @@ export class RulesEngineService {
           return;
         }
         RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
-      } else if (isRecoveryNode && payload.assetId) {
+      } else if (isRecoveryPhase && payload.assetId) {
         const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
         RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
       }
@@ -618,7 +596,7 @@ export class RulesEngineService {
         });
 
         const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
-        const isEmailRecovery = currentNode.data?.alarmState === 'RECOVERY';
+        const isEmailRecovery = isRecoveryPhase;
         const createdAlert = await this.prisma.alert.create({
           data: {
             type: 'email',
@@ -637,27 +615,16 @@ export class RulesEngineService {
         throw err;
       }
     } else if (nodeType === 'action_telegram') {
-      const alarmState = currentNode.data?.alarmState || 'TRIGGER';
+      const autoRecovery = currentNode.data?.autoRecovery !== undefined ? currentNode.data.autoRecovery : true;
       const frequency = currentNode.data?.frequency || currentNode.data?.thenFrequency || 'ALWAYS';
-      const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
       const isRecoveryPhase = !!payload.isRecoveryPhase;
 
-      const hasExplicitTriggerNodes = graph.nodes.some((n: any) => {
-        const nType = n.data?.type || n.type;
-        const aState = n.data?.alarmState || 'TRIGGER';
-        return (nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram') && (aState === 'TRIGGER');
-      });
-
-      if (isRecoveryNode && !isRecoveryPhase && hasExplicitTriggerNodes) {
-        logMessages.push(`[NODE_SKIP] Skipping recovery telegram node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
-        return;
-      }
-      if (!isRecoveryNode && isRecoveryPhase && hasExplicitTriggerNodes) {
-        logMessages.push(`[NODE_SKIP] Skipping trigger telegram node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
+      if (isRecoveryPhase && !autoRecovery) {
+        logMessages.push(`[NODE_SKIP] Skipping telegram node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase because Auto Recovery is disabled.`);
         return;
       }
 
-      if (frequency === 'ONCE' && !isRecoveryNode && payload.assetId) {
+      if (frequency === 'ONCE' && !isRecoveryPhase && payload.assetId) {
         const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
         const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
         if (wasNodeTriggered) {
@@ -665,7 +632,7 @@ export class RulesEngineService {
           return;
         }
         RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
-      } else if (isRecoveryNode && payload.assetId) {
+      } else if (isRecoveryPhase && payload.assetId) {
         const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
         RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
       }
@@ -731,7 +698,7 @@ export class RulesEngineService {
         }
 
         const targetTenantId = payload.tenantId || (await this.getTenantFromAsset(payload.assetId));
-        const isTgRecovery = currentNode.data?.alarmState === 'RECOVERY';
+        const isTgRecovery = isRecoveryPhase;
         const createdAlert = await this.prisma.alert.create({
           data: {
             type: 'telegram',

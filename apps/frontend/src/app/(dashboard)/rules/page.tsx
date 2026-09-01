@@ -400,8 +400,7 @@ const CustomNode = ({ data, id, selected }: any) => {
   // 3.5 UNIFIED ALARM NOTIFICATION NODE
   if (data.type === 'action_notification') {
     const channel = data.channel || 'SYSTEM';
-    const alarmState = data.alarmState || 'TRIGGER';
-    const isRecovery = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+    const autoRecovery = data.autoRecovery !== undefined ? data.autoRecovery : true;
 
     let ActionIcon = BellRing;
     let label = data.label || 'System Alarm';
@@ -419,11 +418,18 @@ const CustomNode = ({ data, id, selected }: any) => {
 
     return (
       <div className={`min-w-[190px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
-        <div className={`${isRecovery ? 'bg-emerald-600' : 'bg-purple-700'} px-3 py-1 text-white font-bold text-[11px] tracking-wide select-none rounded-t-[7px] flex items-center justify-between gap-1.5`}>
-          <span>{isRecovery ? '🟢 CLEAR / RECOVERY' : '🔴 CRITICAL / TRIGGER'}</span>
-          {(data.frequency || data.thenFrequency) && (
-            <span className="text-[9px] font-black bg-black/30 px-1.5 py-0.5 rounded text-white uppercase tracking-wider">{data.frequency || data.thenFrequency}</span>
-          )}
+        <div className={`bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide select-none rounded-t-[7px] flex items-center justify-between gap-1.5`}>
+          <span>🔴 ALARM TRIGGER</span>
+          <div className="flex items-center gap-1.5">
+            {autoRecovery && (
+              <span className="text-[9px] font-black bg-emerald-500/90 text-white px-1 py-0.5 rounded flex items-center gap-0.5" title="Auto Recovery Enabled">
+                <span>🟢</span> REC
+              </span>
+            )}
+            {(data.frequency || data.thenFrequency) && (
+              <span className="text-[9px] font-black bg-black/30 px-1.5 py-0.5 rounded text-white uppercase tracking-wider">{data.frequency || data.thenFrequency}</span>
+            )}
+          </div>
         </div>
         <div className="p-2.5 bg-secondary/10 flex items-center gap-2 rounded-b-[7px]">
           {/* INTERACTIVE CLICKABLE NOTIFICATION SELECTOR BUTTON */}
@@ -437,13 +443,13 @@ const CustomNode = ({ data, id, selected }: any) => {
             }}
             className="flex-1 bg-white dark:bg-zinc-800 hover:bg-amber-50/70 dark:hover:bg-amber-950/40 border border-gray-300 dark:border-zinc-700 hover:border-amber-500 rounded-md p-1.5 flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition-all active:scale-[0.98] text-left group/btn"
           >
-            <div className={`w-5 h-5 rounded-full ${isRecovery ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600'} flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform`}>
+            <div className={`w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shrink-0 group-hover/btn:scale-110 transition-transform`}>
               <ActionIcon className="w-3 h-3" />
             </div>
             <div className="flex flex-col leading-tight overflow-hidden">
               <span className="text-[10px] font-bold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">{label}</span>
               {data.customName ? (
-                <span className={`text-[9px] font-semibold ${isRecovery ? 'text-emerald-600 dark:text-emerald-400' : 'text-purple-600 dark:text-purple-400'} truncate max-w-[100px]`}>{data.customName}</span>
+                <span className={`text-[9px] font-semibold text-purple-600 dark:text-purple-400 truncate max-w-[100px]`}>{data.customName}</span>
               ) : (
                 <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400 truncate max-w-[100px]">{detailText}</span>
               )}
@@ -758,7 +764,7 @@ export default function RulesPage() {
   // State for Image-matching "Select Alarm Notification" Modal
   const [notificationPickerNode, setNotificationPickerNode] = useState<{ id: string; data: any } | null>(null);
   const [pickerChannel, setPickerChannel] = useState<'SYSTEM' | 'EMAIL' | 'TELEGRAM'>('SYSTEM');
-  const [pickerAlarmState, setPickerAlarmState] = useState<'TRIGGER' | 'RECOVERY'>('TRIGGER');
+  const [pickerAutoRecovery, setPickerAutoRecovery] = useState<boolean>(true);
   const [pickerFrequency, setPickerFrequency] = useState<string>('ALWAYS');
   const [pickerCustomName, setPickerCustomName] = useState<string>('');
   const [pickerMessageTemplate, setPickerMessageTemplate] = useState<string>('');
@@ -768,19 +774,19 @@ export default function RulesPage() {
 
   const [initialNotificationState, setInitialNotificationState] = useState<{
     channel: string;
-    alarmState: string;
+    autoRecovery: boolean;
     frequency: string;
     customName: string;
     messageTemplate: string;
     toEmail: string;
     subjectTemplate: string;
     chatId: string;
-  }>({ channel: 'SYSTEM', alarmState: 'TRIGGER', frequency: 'ALWAYS', customName: '', messageTemplate: '', toEmail: '', subjectTemplate: '', chatId: '' });
+  }>({ channel: 'SYSTEM', autoRecovery: true, frequency: 'ALWAYS', customName: '', messageTemplate: '', toEmail: '', subjectTemplate: '', chatId: '' });
 
   const handleOpenNotificationPicker = (nodeId: string, nodeData: any) => {
     setNotificationPickerNode({ id: nodeId, data: nodeData });
     const initChannel: any = nodeData.channel || (nodeData.type === 'action_email' ? 'EMAIL' : nodeData.type === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
-    const initAlarmState: any = nodeData.alarmState || 'TRIGGER';
+    const initAutoRecovery = nodeData.autoRecovery !== undefined ? nodeData.autoRecovery : true;
     const initFrequency = nodeData.frequency || nodeData.thenFrequency || 'ALWAYS';
     const initCustomName = nodeData.customName || '';
     const initMsg = nodeData.messageTemplate || nodeData.bodyTemplate || '';
@@ -789,7 +795,7 @@ export default function RulesPage() {
     const initChat = nodeData.chatId || '';
 
     setPickerChannel(initChannel);
-    setPickerAlarmState(initAlarmState);
+    setPickerAutoRecovery(initAutoRecovery);
     setPickerFrequency(initFrequency);
     setPickerCustomName(initCustomName);
     setPickerMessageTemplate(initMsg);
@@ -799,7 +805,7 @@ export default function RulesPage() {
 
     setInitialNotificationState({
       channel: initChannel,
-      alarmState: initAlarmState,
+      autoRecovery: initAutoRecovery,
       frequency: initFrequency,
       customName: initCustomName,
       messageTemplate: initMsg,
@@ -818,7 +824,7 @@ export default function RulesPage() {
     if (pickerChannel === 'TELEGRAM') label = 'Telegram Bot';
 
     updateNodeData(notificationPickerNode.id, 'channel', pickerChannel);
-    updateNodeData(notificationPickerNode.id, 'alarmState', pickerAlarmState);
+    updateNodeData(notificationPickerNode.id, 'autoRecovery', pickerAutoRecovery);
     updateNodeData(notificationPickerNode.id, 'frequency', pickerFrequency);
     updateNodeData(notificationPickerNode.id, 'thenFrequency', pickerFrequency);
     updateNodeData(notificationPickerNode.id, 'label', label);
@@ -834,7 +840,7 @@ export default function RulesPage() {
 
   const isNotificationUnchanged =
     pickerChannel === initialNotificationState.channel &&
-    pickerAlarmState === initialNotificationState.alarmState &&
+    pickerAutoRecovery === initialNotificationState.autoRecovery &&
     pickerFrequency === initialNotificationState.frequency &&
     pickerCustomName === initialNotificationState.customName &&
     pickerMessageTemplate === initialNotificationState.messageTemplate &&
@@ -2647,28 +2653,24 @@ export default function RulesPage() {
                   />
                 </div>
 
-                {/* ALARM STATE (CRITICAL / RECOVERY) SELECTOR */}
+                {/* AUTO RECOVERY TOGGLE */}
                 <div className="space-y-1">
-                  <label className="text-muted-foreground font-semibold block">Alarm State Mode</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div
-                      onClick={() => setPickerAlarmState('TRIGGER')}
-                      className={`p-2 rounded-lg border cursor-pointer transition-all flex items-center justify-center gap-1.5 ${pickerAlarmState === 'TRIGGER'
-                        ? 'bg-rose-500/10 border-rose-500 font-bold text-rose-600 dark:text-rose-400 shadow-sm'
-                        : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground'
-                        }`}
-                    >
-                      <span className="text-[11px]">🔴 CRITICAL / TRIGGER</span>
-                    </div>
-                    <div
-                      onClick={() => setPickerAlarmState('RECOVERY')}
-                      className={`p-2 rounded-lg border cursor-pointer transition-all flex items-center justify-center gap-1.5 ${pickerAlarmState === 'RECOVERY'
-                        ? 'bg-emerald-500/10 border-emerald-500 font-bold text-emerald-600 dark:text-emerald-400 shadow-sm'
-                        : 'border-border bg-card hover:bg-secondary/60 text-muted-foreground'
-                        }`}
-                    >
-                      <span className="text-[11px]">🟢 CLEAR / RECOVERY</span>
-                    </div>
+                  <div
+                    onClick={() => setPickerAutoRecovery(!pickerAutoRecovery)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer transition-all select-none ${pickerAutoRecovery
+                      ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold shadow-sm'
+                      : 'bg-secondary/40 border-border text-muted-foreground hover:text-foreground'
+                      }`}
+                    title="Kirim notifikasi pemulihan otomatis saat nilai kembali normal"
+                  >
+                    <span className="text-xs font-bold whitespace-nowrap">Auto Recovery</span>
+                    <input
+                      type="checkbox"
+                      checked={pickerAutoRecovery}
+                      onChange={(e) => setPickerAutoRecovery(e.target.checked)}
+                      className="rounded border-gray-300 text-emerald-500 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer"
+                      onClick={(e) => e.stopPropagation()}
+                    />
                   </div>
                 </div>
 
