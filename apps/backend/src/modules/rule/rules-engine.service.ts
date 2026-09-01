@@ -340,7 +340,7 @@ export class RulesEngineService {
           if (recoveryNodes.length > 0) {
             for (const recNode of recoveryNodes) {
               try {
-                await this.executeNode(recNode, graph, payload, logMessages, visitedNodeIds);
+                await this.executeNode(recNode, graph, { ...payload, isRecoveryPhase: true }, logMessages, visitedNodeIds);
               } catch (e: any) {
                 logMessages.push(`[RECOVERY_NODE_ERROR] ${e.message}`);
               }
@@ -419,9 +419,20 @@ export class RulesEngineService {
       const channel = currentNode.data?.channel || (nodeType === 'action_email' ? 'EMAIL' : nodeType === 'action_telegram' ? 'TELEGRAM' : 'SYSTEM');
       const alarmState = currentNode.data?.alarmState || 'TRIGGER';
       const frequency = currentNode.data?.frequency || currentNode.data?.thenFrequency || 'ALWAYS';
-      const isRecovery = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+      const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+      const isRecoveryPhase = !!payload.isRecoveryPhase;
 
-      if (frequency === 'ONCE' && !isRecovery && payload.assetId) {
+      // Phase Guard: RECOVERY nodes must ONLY run during RECOVERY phase, and TRIGGER nodes must ONLY run during TRIGGER phase!
+      if (isRecoveryNode && !isRecoveryPhase) {
+        logMessages.push(`[NODE_SKIP] Skipping recovery node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
+        return;
+      }
+      if (!isRecoveryNode && isRecoveryPhase) {
+        logMessages.push(`[NODE_SKIP] Skipping trigger node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
+        return;
+      }
+
+      if (frequency === 'ONCE' && !isRecoveryNode && payload.assetId) {
         const nodeStateKey = `flow_node:${currentNode.id}:${payload.assetId}`;
         const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
         if (wasNodeTriggered) {
@@ -429,7 +440,7 @@ export class RulesEngineService {
           return;
         }
         RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
-      } else if (isRecovery && payload.assetId) {
+      } else if (isRecoveryNode && payload.assetId) {
         const nodeStateKey = `flow_node:${currentNode.id}:${payload.assetId}`;
         RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
       }
