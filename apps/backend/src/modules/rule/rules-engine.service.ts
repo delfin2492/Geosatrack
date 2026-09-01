@@ -487,6 +487,33 @@ export class RulesEngineService {
         }
       }
     } else if (nodeType === 'action_email') {
+      const alarmState = currentNode.data?.alarmState || 'TRIGGER';
+      const frequency = currentNode.data?.frequency || currentNode.data?.thenFrequency || 'ALWAYS';
+      const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+      const isRecoveryPhase = !!payload.isRecoveryPhase;
+
+      if (isRecoveryNode && !isRecoveryPhase) {
+        logMessages.push(`[NODE_SKIP] Skipping recovery email node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
+        return;
+      }
+      if (!isRecoveryNode && isRecoveryPhase) {
+        logMessages.push(`[NODE_SKIP] Skipping trigger email node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
+        return;
+      }
+
+      if (frequency === 'ONCE' && !isRecoveryNode && payload.assetId) {
+        const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
+        const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
+        if (wasNodeTriggered) {
+          logMessages.push(`[ONCE_THROTTLE] Email node "${currentNode.data?.label || currentNode.id}" already triggered once for asset ${payload.assetId}. Skipping duplicate action.`);
+          return;
+        }
+        RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
+      } else if (isRecoveryNode && payload.assetId) {
+        const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
+        RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
+      }
+
       try {
         const { toEmail, subjectTemplate, bodyTemplate } = currentNode.data;
         if (!toEmail) {
@@ -577,6 +604,32 @@ export class RulesEngineService {
         throw err;
       }
     } else if (nodeType === 'action_telegram') {
+      const alarmState = currentNode.data?.alarmState || 'TRIGGER';
+      const frequency = currentNode.data?.frequency || currentNode.data?.thenFrequency || 'ALWAYS';
+      const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
+      const isRecoveryPhase = !!payload.isRecoveryPhase;
+
+      if (isRecoveryNode && !isRecoveryPhase) {
+        logMessages.push(`[NODE_SKIP] Skipping recovery telegram node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
+        return;
+      }
+      if (!isRecoveryNode && isRecoveryPhase) {
+        logMessages.push(`[NODE_SKIP] Skipping trigger telegram node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
+        return;
+      }
+
+      if (frequency === 'ONCE' && !isRecoveryNode && payload.assetId) {
+        const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
+        const wasNodeTriggered = RulesEngineService.ruleAssetStates.get(nodeStateKey) || false;
+        if (wasNodeTriggered) {
+          logMessages.push(`[ONCE_THROTTLE] Telegram node "${currentNode.data?.label || currentNode.id}" already triggered once for asset ${payload.assetId}. Skipping duplicate action.`);
+          return;
+        }
+        RulesEngineService.ruleAssetStates.set(nodeStateKey, true);
+      } else if (isRecoveryNode && payload.assetId) {
+        const nodeStateKey = `flow_node:${payload.ruleId || 'GLOBAL'}:${currentNode.id}:${payload.assetId}`;
+        RulesEngineService.ruleAssetStates.set(nodeStateKey, false);
+      }
       try {
         const { chatId, messageTemplate } = currentNode.data;
         if (!chatId) {
