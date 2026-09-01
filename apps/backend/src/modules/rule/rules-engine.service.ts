@@ -714,11 +714,10 @@ export class RulesEngineService {
     const effectiveCooldown = Math.max(cooldownMinutes, freqWindowMinutes);
 
     if (thenFrequency === 'ONCE') {
-      const existingLog = await this.prisma.ruleLog.findFirst({
-        where: { ruleId: rule.id, status: 'SUCCESS' },
-      });
-      if (existingLog) {
-        this.logger.log(`[ONCE_THROTTLE] Rule "${rule.name}" (${rule.id}) already executed once. Skipping.`);
+      const stateKey = `${rule.id}:${payload.assetId || 'GLOBAL'}`;
+      const isCurrentlyTriggered = RulesEngineService.ruleAssetStates.get(stateKey) || false;
+      if (isCurrentlyTriggered) {
+        this.logger.log(`[ONCE_THROTTLE] Rule "${rule.name}" (${rule.id}) already triggered once for asset ${payload.assetId || 'GLOBAL'}. Skipping subsequent telemetry.`);
         return;
       }
     } else if (effectiveCooldown > 0) {
