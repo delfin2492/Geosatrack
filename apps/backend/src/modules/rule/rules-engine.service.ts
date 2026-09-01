@@ -443,12 +443,18 @@ export class RulesEngineService {
       const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
       const isRecoveryPhase = !!payload.isRecoveryPhase;
 
-      // Phase Guard: RECOVERY nodes must ONLY run during RECOVERY phase, and TRIGGER nodes must ONLY run during TRIGGER phase!
-      if (isRecoveryNode && !isRecoveryPhase) {
+      const hasExplicitTriggerNodes = graph.nodes.some((n: any) => {
+        const nType = n.data?.type || n.type;
+        const aState = n.data?.alarmState || 'TRIGGER';
+        return (nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram') && (aState === 'TRIGGER');
+      });
+
+      // Phase Guard: RECOVERY nodes only skip during TRIGGER phase if explicit TRIGGER nodes exist!
+      if (isRecoveryNode && !isRecoveryPhase && hasExplicitTriggerNodes) {
         logMessages.push(`[NODE_SKIP] Skipping recovery node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
         return;
       }
-      if (!isRecoveryNode && isRecoveryPhase) {
+      if (!isRecoveryNode && isRecoveryPhase && hasExplicitTriggerNodes) {
         logMessages.push(`[NODE_SKIP] Skipping trigger node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
         return;
       }
@@ -513,11 +519,17 @@ export class RulesEngineService {
       const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
       const isRecoveryPhase = !!payload.isRecoveryPhase;
 
-      if (isRecoveryNode && !isRecoveryPhase) {
+      const hasExplicitTriggerNodes = graph.nodes.some((n: any) => {
+        const nType = n.data?.type || n.type;
+        const aState = n.data?.alarmState || 'TRIGGER';
+        return (nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram') && (aState === 'TRIGGER');
+      });
+
+      if (isRecoveryNode && !isRecoveryPhase && hasExplicitTriggerNodes) {
         logMessages.push(`[NODE_SKIP] Skipping recovery email node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
         return;
       }
-      if (!isRecoveryNode && isRecoveryPhase) {
+      if (!isRecoveryNode && isRecoveryPhase && hasExplicitTriggerNodes) {
         logMessages.push(`[NODE_SKIP] Skipping trigger email node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
         return;
       }
@@ -630,11 +642,17 @@ export class RulesEngineService {
       const isRecoveryNode = alarmState === 'RECOVERY' || alarmState === 'CLEAR';
       const isRecoveryPhase = !!payload.isRecoveryPhase;
 
-      if (isRecoveryNode && !isRecoveryPhase) {
+      const hasExplicitTriggerNodes = graph.nodes.some((n: any) => {
+        const nType = n.data?.type || n.type;
+        const aState = n.data?.alarmState || 'TRIGGER';
+        return (nType === 'action_notification' || nType === 'action_alarm' || nType === 'action_email' || nType === 'action_telegram') && (aState === 'TRIGGER');
+      });
+
+      if (isRecoveryNode && !isRecoveryPhase && hasExplicitTriggerNodes) {
         logMessages.push(`[NODE_SKIP] Skipping recovery telegram node "${currentNode.data?.label || currentNode.id}" during TRIGGER phase.`);
         return;
       }
-      if (!isRecoveryNode && isRecoveryPhase) {
+      if (!isRecoveryNode && isRecoveryPhase && hasExplicitTriggerNodes) {
         logMessages.push(`[NODE_SKIP] Skipping trigger telegram node "${currentNode.data?.label || currentNode.id}" during RECOVERY phase.`);
         return;
       }
