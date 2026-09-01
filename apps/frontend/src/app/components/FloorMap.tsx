@@ -261,18 +261,20 @@ export default function FloorMap({
   const [dbAssetTypes, setDbAssetTypes] = useState<any[]>([]);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchAssetTypes = async () => {
       try {
         const res = await fetch(`${getApiUrl()}/asset-types`);
-        if (res.ok) {
+        if (res.ok && isMounted) {
           const data = await res.json();
           setDbAssetTypes(data);
         }
       } catch (e) {
-        console.error('Failed to fetch asset types in FloorMap:', e);
+        // Ignored during backend restart / temporary network reconnect
       }
     };
     fetchAssetTypes();
+    return () => { isMounted = false; };
   }, []);
 
   const centerLat = -6.168911;
