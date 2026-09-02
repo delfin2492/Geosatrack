@@ -515,36 +515,36 @@ export default function PlannerPage() {
         const anchorLastSeen = (anchor as any).lastSeen || (anchor as any).updatedAt;
         const anchorLastUpdate = anchorLastSeen
           ? (() => {
-              const diff = Date.now() - new Date(anchorLastSeen).getTime();
-              const mins = Math.floor(diff / 60000);
-              const hrs = Math.floor(mins / 60);
-              if (hrs > 0) return hrs + 'h ' + (mins % 60) + 'm ago';
-              if (mins > 0) return mins + 'm ago';
-              return 'Just now';
-            })()
+            const diff = Date.now() - new Date(anchorLastSeen).getTime();
+            const mins = Math.floor(diff / 60000);
+            const hrs = Math.floor(mins / 60);
+            if (hrs > 0) return hrs + 'h ' + (mins % 60) + 'm ago';
+            if (mins > 0) return mins + 'm ago';
+            return 'Just now';
+          })()
           : 'N/A';
 
         const anchorTooltipHtml = [
           '<div style="font-family:sans-serif;padding:6px 8px;min-width:160px;background:#0f172a;border:1px solid #334155;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.5);">',
-            '<div style="font-weight:bold;color:#38bdf8;font-size:11px;margin-bottom:6px;border-bottom:1px solid #1e293b;padding-bottom:4px;">&#9875; ' + anchor.name + '</div>',
-            '<div style="display:flex;flex-direction:column;gap:3px;">',
-              '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
-                '<span style="color:#94a3b8;">Status</span>',
-                '<span style="color:' + anchorStatusColor + ';font-weight:bold;font-size:10px;">' + (anchorIsOnline ? '&#128994; Online' : '&#9898; ' + anchorStatus.charAt(0).toUpperCase() + anchorStatus.slice(1)) + '</span>',
-              '</div>',
-              '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
-                '<span style="color:#94a3b8;">Voltage</span>',
-                '<span style="color:#fbbf24;font-weight:bold;font-family:monospace;font-size:10px;">' + (anchorVoltage !== null && anchorVoltage !== undefined ? anchorVoltage.toFixed(2) + ' V' : 'N/A') + '</span>',
-              '</div>',
-              '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
-                '<span style="color:#94a3b8;">Last Update</span>',
-                '<span style="color:#94a3b8;font-family:monospace;font-size:9px;">' + anchorLastUpdate + '</span>',
-              '</div>',
-              '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;margin-top:2px;border-top:1px solid #1e293b;padding-top:3px;">',
-                '<span style="color:#475569;font-size:9px;">Position</span>',
-                '<span style="color:#475569;font-family:monospace;font-size:9px;">(' + anchor.x + 'm, ' + anchor.y + 'm)</span>',
-              '</div>',
-            '</div>',
+          '<div style="font-weight:bold;color:#38bdf8;font-size:11px;margin-bottom:6px;border-bottom:1px solid #1e293b;padding-bottom:4px;">&#9875; ' + anchor.name + '</div>',
+          '<div style="display:flex;flex-direction:column;gap:3px;">',
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
+          '<span style="color:#94a3b8;">Status</span>',
+          '<span style="color:' + anchorStatusColor + ';font-weight:bold;font-size:10px;">' + (anchorIsOnline ? '&#128994; Online' : '&#9898; ' + anchorStatus.charAt(0).toUpperCase() + anchorStatus.slice(1)) + '</span>',
+          '</div>',
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
+          '<span style="color:#94a3b8;">Voltage</span>',
+          '<span style="color:#fbbf24;font-weight:bold;font-family:monospace;font-size:10px;">' + (anchorVoltage !== null && anchorVoltage !== undefined ? anchorVoltage.toFixed(2) + ' V' : 'N/A') + '</span>',
+          '</div>',
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
+          '<span style="color:#94a3b8;">Last Update</span>',
+          '<span style="color:#94a3b8;font-family:monospace;font-size:9px;">' + anchorLastUpdate + '</span>',
+          '</div>',
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;margin-top:2px;border-top:1px solid #1e293b;padding-top:3px;">',
+          '<span style="color:#475569;font-size:9px;">Position</span>',
+          '<span style="color:#475569;font-family:monospace;font-size:9px;">(' + anchor.x + 'm, ' + anchor.y + 'm)</span>',
+          '</div>',
+          '</div>',
           '</div>',
         ].join('');
 
@@ -706,22 +706,63 @@ export default function PlannerPage() {
         iconAnchor: [0, 0],
       });
 
-      const meshBattery = asset.tag?.battery;
-      const meshTemp = asset.tag?.temperature;
-      const meshHumidity = asset.tag?.humidity;
       const meshLastSeen = asset.tag?.lastSeen;
-      const hasTelemetry = meshBattery !== undefined || meshTemp !== undefined || meshHumidity !== undefined;
       
       const meshLastUpdate = meshLastSeen
         ? (() => {
-            const diff = Date.now() - new Date(meshLastSeen).getTime();
-            const mins = Math.floor(diff / 60000);
-            const hrs = Math.floor(mins / 60);
-            if (hrs > 0) return `${hrs}h ${mins % 60}m`;
-            if (mins > 0) return `${mins}m ago`;
-            return 'Just now';
-          })()
+          const diff = Date.now() - new Date(meshLastSeen).getTime();
+          const mins = Math.floor(diff / 60000);
+          const hrs = Math.floor(mins / 60);
+          if (hrs > 0) return `${hrs}h ${mins % 60}m`;
+          if (mins > 0) return `${mins}m ago`;
+          return 'Just now';
+        })()
         : null;
+
+      let telemetryHtml = '';
+      if (asset.tag) {
+        const excludeKeys = ['id', 'assetId', 'signals', 'lastSeen', 'createdAt', 'updatedAt', 'tenantId', 'name', 'mac', 'type'];
+        const tagKeys = Object.keys(asset.tag).filter(k => !excludeKeys.includes(k) && asset.tag[k] !== null && asset.tag[k] !== undefined);
+        
+        if (tagKeys.length > 0) {
+          const cards = tagKeys.map(key => {
+            const val = asset.tag[key];
+            let label = key.replace(/_/g, ' ').toUpperCase();
+            let displayVal = String(val);
+            let bgColor = '#f8fafc';
+            let borderColor = '#e2e8f0';
+            let iconColor = '#64748b';
+            let svgIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`; // default icon (info)
+
+            if (key === 'battery') {
+              const numVal = Number(val);
+              displayVal = (numVal > 100 ? numVal / 1000 : numVal).toFixed(2) + ' V';
+              bgColor = '#f1f5f9'; borderColor = '#e2e8f0'; iconColor = '#0ea5e9';
+              svgIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"></path><path d="M2 14h20"></path><path d="M6 10v4"></path></svg>`;
+            } else if (key === 'temperature') {
+              label = 'TEMP';
+              displayVal = Number(val).toFixed(1) + ' &deg;C';
+              bgColor = '#fef2f2'; borderColor = '#fee2e2'; iconColor = '#ef4444';
+              svgIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>`;
+            } else if (key === 'humidity') {
+              displayVal = Number(val).toFixed(1) + '%';
+              bgColor = '#f0fdf4'; borderColor = '#dcfce7'; iconColor = '#22c55e';
+              svgIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>`;
+            }
+            
+            return `
+              <div style="background: ${bgColor}; padding: 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; border: 1px solid ${borderColor};">
+                <div style="color: ${iconColor};">${svgIcon}</div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="font-size: 8px; color: #64748b; font-weight: 700; text-transform: uppercase;">${label}</span>
+                  <span style="font-size: 11px; font-weight: 800; color: #0f172a;">${displayVal}</span>
+                </div>
+              </div>`;
+          });
+          
+          telemetryHtml = `<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">${cards.join('')}</div>`;
+        }
+      }
 
       const tooltipHtml = `
         <div style="font-family: 'Inter', sans-serif; min-width: 230px; color: #1e293b; overflow: hidden;">
@@ -729,7 +770,6 @@ export default function PlannerPage() {
           <div style="background: #f8fafc; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: flex-start; justify-content: space-between; border-radius: 8px 8px 0 0;">
             <div style="display: flex; flex-direction: column;">
               <span style="font-weight: 800; font-size: 13px; color: #0f172a;">${asset.name}</span>
-              <span style="font-size: 9px; color: #64748b; font-family: monospace;">MAC: ${asset.macAddress || asset.id.slice(-6)}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 4px; background: ${isOnline ? '#dcfce7' : '#f1f5f9'}; padding: 3px 6px; border-radius: 4px; border: 1px solid ${isOnline ? '#bbf7d0' : '#e2e8f0'};">
               <span style="display: block; width: 6px; height: 6px; border-radius: 50%; background: ${isOnline ? '#22c55e' : '#94a3b8'}; ${isOnline ? 'animation: pulse 2s infinite;' : ''}"></span>
@@ -751,36 +791,7 @@ export default function PlannerPage() {
             </div>
 
             <!-- Telemetry Grid -->
-            ${hasTelemetry ? `
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-              ${meshBattery !== undefined ? `
-              <div style="background: #f1f5f9; padding: 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; border: 1px solid #e2e8f0;">
-                <div style="color: #0ea5e9;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"></path><path d="M2 14h20"></path><path d="M6 10v4"></path></svg></div>
-                <div style="display: flex; flex-direction: column;">
-                  <span style="font-size: 8px; color: #64748b; font-weight: 700; text-transform: uppercase;">Battery</span>
-                  <span style="font-size: 11px; font-weight: 800; color: #0f172a;">${(meshBattery > 100 ? meshBattery/1000 : meshBattery).toFixed(2)} V</span>
-                </div>
-              </div>` : ''}
-              
-              ${meshTemp !== undefined ? `
-              <div style="background: #fef2f2; padding: 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; border: 1px solid #fee2e2;">
-                <div style="color: #ef4444;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg></div>
-                <div style="display: flex; flex-direction: column;">
-                  <span style="font-size: 8px; color: #64748b; font-weight: 700; text-transform: uppercase;">Temp</span>
-                  <span style="font-size: 11px; font-weight: 800; color: #0f172a;">${meshTemp.toFixed(1)} &deg;C</span>
-                </div>
-              </div>` : ''}
-
-              ${meshHumidity !== undefined ? `
-              <div style="background: #f0fdf4; padding: 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; border: 1px solid #dcfce7;">
-                <div style="color: #22c55e;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></div>
-                <div style="display: flex; flex-direction: column;">
-                  <span style="font-size: 8px; color: #64748b; font-weight: 700; text-transform: uppercase;">Humidity</span>
-                  <span style="font-size: 11px; font-weight: 800; color: #0f172a;">${meshHumidity.toFixed(1)}%</span>
-                </div>
-              </div>` : ''}
-            </div>
-            ` : ''}
+            ${telemetryHtml}
 
             <!-- Anchor Signals -->
             ${signalHtml ? `
