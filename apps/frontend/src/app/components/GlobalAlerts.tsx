@@ -38,7 +38,7 @@ export default function GlobalAlerts() {
   if (activeToasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100] flex flex-col-reverse gap-3 pointer-events-none">
+    <div className="fixed bottom-6 right-6 z-[99999] flex flex-col-reverse gap-3 pointer-events-none">
       {activeToasts.map(toast => (
         <div 
           key={toast.id}
