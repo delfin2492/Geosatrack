@@ -169,7 +169,7 @@ export default function NotificationDropdown() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-84 sm:w-96 max-h-[80vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden z-50 animate-in slide-in-from-top-2 fade-in duration-200">
+        <div className="absolute right-0 mt-2 w-84 sm:w-96 max-h-[80vh] bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden z-[9999] animate-in slide-in-from-top-2 fade-in duration-200">
           {/* Header */}
           <div className="p-3.5 border-b border-border flex items-center justify-between bg-secondary/30 shrink-0">
             <div className="flex items-center gap-2">

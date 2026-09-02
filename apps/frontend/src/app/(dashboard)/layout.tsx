@@ -250,7 +250,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* HEADER BAR */}
-        <header className="h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
+        <header className="relative z-50 h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-sm font-bold tracking-wider uppercase text-muted-foreground">
               {navigation.find((item) => item.href === pathname)?.name || 'Console'}
@@ -272,7 +272,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* PAGE CONTENT CONTAINER */}
-        <main className="flex-1 overflow-y-auto p-8 bg-background">
+        <main className="relative z-0 flex-1 overflow-y-auto p-8 bg-background">
           {children}
         </main>
       </div>
