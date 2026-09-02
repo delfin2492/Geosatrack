@@ -635,27 +635,43 @@ export default function PlannerPage() {
       }
 
       // Build RSSI signal tooltip
-      let signalLines = '';
+      let signalHtml = '';
+      let rssiList: { name: string; rssi: number }[] = [];
       try {
         if (asset.description && asset.description.startsWith('{')) {
           const desc = JSON.parse(asset.description);
           const attrs: any[] = desc.attributes || [];
           const rssiAttrs = attrs.filter((a: any) => a.name.startsWith('rssi_') && a.value !== '' && a.value !== null && a.value !== undefined);
           if (rssiAttrs.length > 0) {
-            signalLines = rssiAttrs
-              .sort((a: any, b: any) => Number(b.value) - Number(a.value))
-              .map((a: any) => `• ${a.name.replace('rssi_', '').replace(/_/g, ' ')}: <strong>${a.value} dBm</strong>`)
-              .join('<br/>');
+            rssiList = rssiAttrs.map((a: any) => ({ name: a.name.replace('rssi_', '').replace(/_/g, ' '), rssi: Number(a.value) }));
           }
         }
-        if (!signalLines && asset.tag?.signals) {
+        if (rssiList.length === 0 && asset.tag?.signals) {
           const sigs = JSON.parse(asset.tag.signals);
           if (Array.isArray(sigs) && sigs.length > 0) {
-            signalLines = sigs
-              .sort((a: any, b: any) => Number(b.rssi) - Number(a.rssi))
-              .map((s: any) => `• ${s.anchorName}: <strong>${s.rssi} dBm</strong>`)
-              .join('<br/>');
+            rssiList = sigs.map((s: any) => ({ name: s.anchorName || s.mac, rssi: Number(s.rssi) }));
           }
+        }
+
+        if (rssiList.length > 0) {
+          signalHtml = rssiList
+            .sort((a, b) => b.rssi - a.rssi)
+            .map(s => {
+              const strengthPct = Math.max(0, Math.min(100, 100 - (Math.abs(s.rssi) - 40) * 1.5));
+              let barColor = '#ef4444';
+              if (s.rssi > -70) barColor = '#22c55e';
+              else if (s.rssi > -85) barColor = '#eab308';
+              return `
+                <div style="display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #334155;">
+                  <span style="font-weight: 600; max-width: 90px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${s.name}">${s.name}</span>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-family: monospace; font-size: 9px; color: #64748b;">${s.rssi} dBm</span>
+                    <div style="width: 40px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden;">
+                      <div style="width: ${strengthPct}%; height: 100%; background: ${barColor};"></div>
+                    </div>
+                  </div>
+                </div>`;
+            }).join('');
         }
       } catch (e) { }
 
@@ -668,7 +684,6 @@ export default function PlannerPage() {
       })();
 
       const dotColor = isOnline ? '#22c55e' : '#64748b';
-      const positionMethod = '';
 
       const iconHtml = `
         <div style="position: absolute; transform: translate(-50%, -100%); display:flex;flex-direction:column;align-items:center; pointer-events: auto;">
@@ -695,31 +710,92 @@ export default function PlannerPage() {
       const meshTemp = asset.tag?.temperature;
       const meshHumidity = asset.tag?.humidity;
       const meshLastSeen = asset.tag?.lastSeen;
+      const hasTelemetry = meshBattery !== undefined || meshTemp !== undefined || meshHumidity !== undefined;
+      
       const meshLastUpdate = meshLastSeen
         ? (() => {
             const diff = Date.now() - new Date(meshLastSeen).getTime();
             const mins = Math.floor(diff / 60000);
             const hrs = Math.floor(mins / 60);
-            if (hrs > 0) return `${hrs}h ${mins % 60}m ago`;
+            if (hrs > 0) return `${hrs}h ${mins % 60}m`;
             if (mins > 0) return `${mins}m ago`;
             return 'Just now';
           })()
         : null;
 
-      const sensorLines = [
-        meshBattery !== null && meshBattery !== undefined ? `&#128267; Battery: <strong>${meshBattery.toFixed(0)}%</strong>` : null,
-        meshTemp !== null && meshTemp !== undefined ? `&#127777; Temp: <strong>${meshTemp.toFixed(1)}&deg;C</strong>` : null,
-        meshHumidity !== null && meshHumidity !== undefined ? `&#128167; Humidity: <strong>${meshHumidity.toFixed(1)}%</strong>` : null,
-      ].filter(Boolean).join('<br/>');
-
       const tooltipHtml = `
-        <div style="font-family:sans-serif;padding:3px;min-width:160px">
-          <strong style="color:${dotColor}">${asset.name}</strong><br/>
-          <span style="font-size:10px;color:#64748b">Status: ${isOnline ? '&#128994; Online' : '&#9898; Offline'}</span><br/>
-          <span style="font-size:10px;color:#64748b">Position: (${x}m, ${y}m)</span>
-          ${sensorLines ? `<div style="margin-top:4px;border-top:1px solid #334155;padding-top:4px;font-size:9px;color:#94a3b8;">${sensorLines}</div>` : ''}
-          ${meshLastUpdate ? `<div style="font-size:9px;color:#475569;margin-top:2px;">&#128336; ${meshLastUpdate}</div>` : ''}
-          ${signalLines ? `<div style="margin-top:4px;border-top:1px solid #334155;padding-top:4px;font-size:9px;color:#94a3b8;"><strong>Anchor RSSI:</strong><br/>${signalLines}</div>` : ''}
+        <div style="font-family: 'Inter', sans-serif; min-width: 230px; color: #1e293b; overflow: hidden;">
+          <!-- Header Section -->
+          <div style="background: #f8fafc; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: flex-start; justify-content: space-between; border-radius: 8px 8px 0 0;">
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-weight: 800; font-size: 13px; color: #0f172a;">${asset.name}</span>
+              <span style="font-size: 9px; color: #64748b; font-family: monospace;">MAC: ${asset.macAddress || asset.id.slice(-6)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; background: ${isOnline ? '#dcfce7' : '#f1f5f9'}; padding: 3px 6px; border-radius: 4px; border: 1px solid ${isOnline ? '#bbf7d0' : '#e2e8f0'};">
+              <span style="display: block; width: 6px; height: 6px; border-radius: 50%; background: ${isOnline ? '#22c55e' : '#94a3b8'}; ${isOnline ? 'animation: pulse 2s infinite;' : ''}"></span>
+              <span style="font-size: 8px; font-weight: 700; color: ${isOnline ? '#166534' : '#475569'};">${isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+            </div>
+          </div>
+
+          <div style="padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: white; border-radius: 0 0 8px 8px;">
+            <!-- Location & Time -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+              <div style="display: flex; align-items: center; gap: 4px; font-size: 10px; color: #475569;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                <span style="font-family: monospace; font-weight: 600;">(${x.toFixed(1)}m, ${y.toFixed(1)}m)</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 4px; font-size: 9px; color: #64748b; font-weight: 600;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>${meshLastUpdate || 'Unknown'}</span>
+              </div>
+            </div>
+
+            <!-- Telemetry Grid -->
+            ${hasTelemetry ? `
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+              ${meshBattery !== undefined ? `
+              <div style="background: #f1f5f9; padding: 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; border: 1px solid #e2e8f0;">
+                <div style="color: #0ea5e9;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"></path><path d="M2 14h20"></path><path d="M6 10v4"></path></svg></div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="font-size: 8px; color: #64748b; font-weight: 700; text-transform: uppercase;">Battery</span>
+                  <span style="font-size: 11px; font-weight: 800; color: #0f172a;">${(meshBattery > 100 ? meshBattery/1000 : meshBattery).toFixed(2)} V</span>
+                </div>
+              </div>` : ''}
+              
+              ${meshTemp !== undefined ? `
+              <div style="background: #fef2f2; padding: 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; border: 1px solid #fee2e2;">
+                <div style="color: #ef4444;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg></div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="font-size: 8px; color: #64748b; font-weight: 700; text-transform: uppercase;">Temp</span>
+                  <span style="font-size: 11px; font-weight: 800; color: #0f172a;">${meshTemp.toFixed(1)} &deg;C</span>
+                </div>
+              </div>` : ''}
+
+              ${meshHumidity !== undefined ? `
+              <div style="background: #f0fdf4; padding: 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; border: 1px solid #dcfce7;">
+                <div style="color: #22c55e;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg></div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="font-size: 8px; color: #64748b; font-weight: 700; text-transform: uppercase;">Humidity</span>
+                  <span style="font-size: 11px; font-weight: 800; color: #0f172a;">${meshHumidity.toFixed(1)}%</span>
+                </div>
+              </div>` : ''}
+            </div>
+            ` : ''}
+
+            <!-- Anchor Signals -->
+            ${signalHtml ? `
+            <div style="margin-top: 4px;">
+              <div style="font-size: 9px; font-weight: 800; color: #475569; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 4px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 20h.01"></path><path d="M7 20v-4"></path><path d="M12 20v-8"></path><path d="M17 20V8"></path><path d="M22 4v16"></path></svg>
+                Connected Anchors
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 5px;">
+                ${signalHtml}
+              </div>
+            </div>
+            ` : ''}
+
+          </div>
         </div>`;
 
       const existingMarker = meshMarkersRef.current.get(asset.id);

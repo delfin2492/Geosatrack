@@ -173,15 +173,17 @@ html, body {
 }
 
 
-/* ─── Anchor Info Tooltip ─────────────────────────────────────── */
-.anchor-info-tooltip {
+/* ─── Anchor & Mesh Info Tooltip ─────────────────────────────────────── */
+.anchor-info-tooltip, .mesh-tooltip {
   padding: 0 !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
 }
 .anchor-info-tooltip::before,
-.anchor-info-tooltip .leaflet-tooltip-tip {
+.anchor-info-tooltip .leaflet-tooltip-tip,
+.mesh-tooltip::before,
+.mesh-tooltip .leaflet-tooltip-tip {
   display: none !important;
 }
 
