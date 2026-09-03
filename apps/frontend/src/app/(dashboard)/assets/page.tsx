@@ -1,14 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { getApiUrl, getBackendUrl } from '../../lib/api';
+import { getLucideSvg, getAssetMarkerIcon } from '../../lib/icon-utils';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import TreeAssetPicker from '../../components/TreeAssetPicker';
+import TreeAttributePicker from '../../components/TreeAttributePicker';
 
 import {
   Folder,
@@ -30,6 +33,8 @@ import {
   Target,
   Code,
   Copy,
+  Search,
+  Check,
   Truck, Wrench, Battery, Zap, Plug, Box, Building, DoorClosed, Car, Tv, Navigation, Layers, Wifi, Database, Server, Anchor, Gauge, Compass, Eye, Settings, SlidersHorizontal, Lightbulb, Monitor, Cpu, Radio, Tag
 } from 'lucide-react';
 
@@ -42,193 +47,7 @@ export const setGlobalAssetTypesCache = (types: any[]) => {
   globalDbAssetTypesCache = types;
 };
 
-const getLucideSvg = (iconName: string) => {
-  switch (iconName) {
-    case 'MapPin':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
-    case 'Shield':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>`;
-    case 'Crosshair':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="6"/><line x1="12" x2="12" y1="18" y2="22"/></svg>`;
-    case 'Tag':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r="1.5"/></svg>`;
-    case 'Tv':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="20" height="15" x="2" y="7" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>`;
-    case 'Navigation':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>`;
-    case 'Layers':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`;
-    case 'Wifi':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.85a10 10 0 0 1 14 0"/><path d="M8.5 16.88a5 5 0 0 1 7 0"/></svg>`;
-    case 'Database':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>`;
-    case 'Server':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>`;
-    case 'Gauge':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>`;
-    case 'Compass':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>`;
-    case 'Settings':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
-    case 'Flame':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 3.5z"/></svg>`;
-    case 'Sun':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
-    case 'Wind':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>`;
-    case 'Thermometer':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>`;
-    case 'Clock':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-    case 'Key':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>`;
-    case 'Lock':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
-    case 'Bell':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
-    case 'Inbox':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>`;
-    case 'Maximize2':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>`;
-    case 'DoorClosed':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M18 20V6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14"/><path d="M2 20h20"/><path d="M14 12v.01"/></svg>`;
-    case 'Lightbulb':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>`;
-    case 'Monitor':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>`;
-    case 'Eye':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
-    case 'Anchor':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="5" r="3"/><line x1="12" x2="12" y1="22" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg>`;
-    case 'HardDrive':
-    case 'Tag':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`;
-    case 'Activity':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
-    case 'Boxes':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`;
-    case 'Truck':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="9" height="11" x="1" y="3" rx="1"/><polygon points="10 8 15 8 19 12 19 16 10 16 10 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="16.5" cy="18.5" r="2.5"/></svg>`;
-    case 'Sliders':
-    case 'SlidersHorizontal':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>`;
-    case 'Folder':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`;
-    case 'Globe':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
-    case 'Car':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`;
-    case 'Cpu':
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>`;
-    default:
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`;
-  }
-};
 
-
-const getAssetMarkerIcon = (type: string = '', name: string = '', assetTypesList: any[] = globalDbAssetTypesCache) => {
-  const t = (type || '').toUpperCase();
-  const n = (name || '').toLowerCase();
-  const list = assetTypesList && assetTypesList.length > 0 ? assetTypesList : globalDbAssetTypesCache;
-
-  // 1. Direct code match
-  let matched = list.find((x: any) => x.code.toUpperCase() === t);
-
-  // 2. Fuzzy match by name or type keyword if direct code match failed
-  if (!matched && list.length > 0) {
-    if (t === 'ANCHOR' || n.includes('anchor')) {
-      matched = list.find((x: any) => x.code.toUpperCase() === 'ANCHOR');
-    } else if (t === 'TAG' || n.includes('tag')) {
-      matched = list.find((x: any) => x.code.toUpperCase() === 'TAG');
-    } else if (t === 'MESH_EYE_SENSOR' || n.includes('mesh')) {
-      matched = list.find((x: any) => x.code.toUpperCase() === 'MESH_EYE_SENSOR');
-    } else if (t === 'FORKLIFT' || n.includes('forklift')) {
-      matched = list.find((x: any) => x.code.toUpperCase() === 'FORKLIFT');
-    } else if (t === 'LIGHT' || n.includes('light') || n.includes('lampu')) {
-      matched = list.find((x: any) => x.code.toUpperCase() === 'LIGHT');
-    } else if (t === 'CAR' || n.includes('car') || n.includes('mobil') || n.includes('truck')) {
-      matched = list.find((x: any) => x.code.toUpperCase() === 'CAR');
-    }
-  }
-
-  if (matched) {
-    return {
-      color: matched.color || '#3b82f6',
-      svg: getLucideSvg(matched.icon)
-    };
-  }
-  const combined = `${type} ${name}`.toLowerCase();
-
-  // 1. ANCHOR -> MapPin (Rose Red)
-  if (t === 'ANCHOR' || n.startsWith('anchor_') || (n.includes('anchor') && !n.includes('tag'))) {
-    return {
-      color: '#f43f5e',
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
-    };
-  }
-
-  // 2. TAG -> HardDrive (Sky Blue)
-  if (t === 'TAG' || n.includes('tag') || n.includes('teltonika tag')) {
-    return {
-      color: '#3b82f6',
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`
-    };
-  }
-
-  // 3. MESH_EYE_SENSOR -> Activity (Emerald Green)
-  if (t === 'MESH_EYE_SENSOR' || n.startsWith('mesh_') || combined.includes('mesh')) {
-    return {
-      color: '#10b981',
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`
-    };
-  }
-
-  // 4. FORKLIFT / THINGS -> Boxes (Amber Cargo)
-  if (t === 'FORKLIFT' || t === 'THINGS' || combined.includes('forklift') || combined.includes('pallet') || combined.includes('container') || combined.includes('cargo') || combined.includes('kargo')) {
-    return {
-      color: '#d97706',
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>`
-    };
-  }
-
-  // 5. LIGHT / MACHINE -> Sliders (Yellow)
-  if (t === 'LIGHT' || t === 'MACHINE' || combined.includes('light') || combined.includes('lampu') || combined.includes('machine')) {
-    return {
-      color: '#eab308',
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>`
-    };
-  }
-
-  // 6. BUILDING / DOOR / ROOM / RACK -> Folder (Purple)
-  if (t === 'BUILDING' || t === 'DOOR' || t === 'ROOM' || t === 'RACK' || combined.includes('building') || combined.includes('gedung') || combined.includes('door') || combined.includes('pintu') || combined.includes('room') || combined.includes('rack')) {
-    return {
-      color: '#8b5cf6',
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L8.6 3.3A2 2 0 0 0 6.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>`
-    };
-  }
-
-  // 7. CITY / WEATHER / SHIP -> Globe (Cyan)
-  if (t === 'CITY' || t === 'WEATHER' || t === 'SHIP' || combined.includes('city') || combined.includes('weather') || combined.includes('ship')) {
-    return {
-      color: '#06b6d4',
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
-    };
-  }
-
-  // 8. VEHICLE / CAR -> Car (Sky Blue)
-  if (combined.includes('car') || combined.includes('vehicle') || combined.includes('mobil') || combined.includes('truk') || combined.includes('truck')) {
-    return {
-      color: '#0284c7',
-      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
-    };
-  }
-
-  // Default: HardDrive / Tag Card Icon (Indigo)
-  return {
-    color: '#6366f1',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`
-  };
-};
 
 const defaultTeltonikaDecodeCode = `//====================================================
 // Teltonika EYE Sensor Mesh Decoder
@@ -512,14 +331,36 @@ const getTypeIcon = (type: string) => {
 
 const getTypeColor = (type: string) => {
   const t = (type || '').toUpperCase();
-  const matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === t);
+  let matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === t);
+
+  if (!matched && globalDbAssetTypesCache.length > 0) {
+    const combined = (type || '').toLowerCase();
+    if (combined.includes('anchor')) {
+      matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === 'ANCHOR');
+    } else if (combined.includes('tag')) {
+      matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === 'TAG');
+    } else if (combined.includes('mesh')) {
+      matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === 'MESH_EYE_SENSOR');
+    } else if (combined.includes('forklift') || combined.includes('pallet')) {
+      matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === 'FORKLIFT');
+    } else if (combined.includes('light')) {
+      matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === 'LIGHT');
+    }
+  }
+
   if (matched && matched.color) {
     return matched.color;
   }
   // Hardcoded defaults to match icon-utils.ts
   if (t === 'ANCHOR') return '#f43f5e';
   if (t === 'TAG') return '#3b82f6';
-  return undefined; // return undefined if no custom color, allowing tailwind classes to apply
+  if (t === 'MESH_EYE_SENSOR') return '#10b981';
+  if (t === 'FORKLIFT') return '#d97706';
+  if (t === 'LIGHT') return '#eab308';
+  if (t === 'CAR') return '#0284c7';
+  if (t === 'BUILDING' || t === 'ROOM' || t === 'RACK' || t === 'DOOR') return '#8b5cf6';
+  if (t === 'CITY' || t === 'WEATHER' || t === 'SHIP') return '#06b6d4';
+  return undefined;
 };
 
 interface AssetAttribute {
@@ -585,6 +426,170 @@ interface TenantQuota {
   assetRemaining: number;
   isAssetLimitReached: boolean;
 }
+
+interface CustomSelectOption {
+  value: string;
+  label: string;
+  icon?: React.ElementType;
+}
+
+interface CustomSelectProps {
+  options: CustomSelectOption[];
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+  disabled?: boolean;
+}
+
+const CustomSelect: React.FC<CustomSelectProps> = ({
+  options,
+  value,
+  onChange,
+  placeholder = "Select option...",
+  className = "",
+  disabled = false
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const updatePosition = useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setCoords({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width
+      });
+    }
+  }, []);
+
+  const handleToggle = () => {
+    if (!disabled) {
+      if (!open) {
+        updatePosition();
+      }
+      setOpen(!open);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      updatePosition();
+      const handleScrollOrResize = () => {
+        updatePosition();
+      };
+      window.addEventListener("scroll", handleScrollOrResize, true);
+      window.addEventListener("resize", handleScrollOrResize);
+      return () => {
+        window.removeEventListener("scroll", handleScrollOrResize, true);
+        window.removeEventListener("resize", handleScrollOrResize);
+      };
+    }
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as globalThis.Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as globalThis.Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find((o) => o.value === value);
+  const SelectedIcon = selectedOption?.icon;
+
+  const showSearch = options.length > 5;
+  const filteredOptions = showSearch
+    ? options.filter((o) => (o.label || '').toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  return (
+    <div className={`relative ${className}`}>
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        onClick={handleToggle}
+        className={`w-full min-h-[36px] bg-secondary/35 border border-border px-3 py-2 rounded-lg text-xs font-semibold text-foreground flex justify-between items-center transition-all hover:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/40 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+      >
+        <div className="flex items-center truncate">
+          {SelectedIcon && <SelectedIcon className="w-3.5 h-3.5 mr-2 text-primary shrink-0" />}
+          <span className="truncate pr-2">{selectedOption ? selectedOption.label : placeholder}</span>
+        </div>
+        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && !disabled && (
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: `${coords.top}px`,
+            left: `${coords.left}px`,
+            width: `${Math.max(coords.width, 180)}px`,
+            zIndex: 99999
+          }}
+          className="bg-card border border-border/80 rounded-xl shadow-2xl overflow-hidden backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+        >
+          {showSearch && (
+            <div className="p-2 border-b border-border bg-secondary/20 flex items-center gap-2">
+              <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-transparent border-none outline-none text-xs font-medium text-foreground placeholder:text-muted-foreground"
+                autoFocus
+              />
+            </div>
+          )}
+          <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
+            {filteredOptions.length === 0 ? (
+              <div className="p-3 text-xs text-muted-foreground text-center font-medium">No options available</div>
+            ) : (
+              filteredOptions.map((o) => {
+                const isItemChosen = o.value === value;
+                const Icon = o.icon;
+                return (
+                  <div
+                    key={o.value}
+                    className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition-all ${isItemChosen
+                      ? 'bg-primary/10 text-primary font-bold border border-primary/20'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60 font-medium'
+                      }`}
+                    onClick={() => {
+                      onChange(o.value);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                  >
+                    <div className="flex items-center truncate">
+                      {Icon && <Icon className="w-3.5 h-3.5 mr-2 text-muted-foreground shrink-0" />}
+                      <span className="truncate">{o.label}</span>
+                    </div>
+                    {isItemChosen && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function AssetsPage() {
   const { tenantId, token, isAdmin } = useAuth();
@@ -669,6 +674,67 @@ export default function AssetsPage() {
   const [expandedAttributeIndex, setExpandedAttributeIndex] = useState<number | null>(null);
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
+  // Attribute Popup Modal states
+  const [attributeModalOpen, setAttributeModalOpen] = useState(false);
+  const [editingAttributeIndex, setEditingAttributeIndex] = useState<number | null>(null);
+  const [attrModalName, setAttrModalName] = useState('');
+  const [attrModalDataType, setAttrModalDataType] = useState('Number');
+  const [attrModalUnit, setAttrModalUnit] = useState('');
+  const [attrModalValue, setAttrModalValue] = useState<any>('');
+  const [attrModalMqttAgentId, setAttrModalMqttAgentId] = useState('');
+  const [attrModalMqttTopic, setAttrModalMqttTopic] = useState('');
+  const [attrModalMqttValuePath, setAttrModalMqttValuePath] = useState('');
+  const [attrModalMqttDecodeFunctionCode, setAttrModalMqttDecodeFunctionCode] = useState('');
+
+  const handleOpenAddAttributeModal = () => {
+    setEditingAttributeIndex(null);
+    setAttrModalName('');
+    setAttrModalDataType('Number');
+    setAttrModalUnit('');
+    setAttrModalValue('');
+    setAttrModalMqttAgentId('');
+    setAttrModalMqttTopic('');
+    setAttrModalMqttValuePath('');
+    setAttrModalMqttDecodeFunctionCode('');
+    setAttributeModalOpen(true);
+  };
+
+  const handleOpenEditAttributeModal = (idx: number) => {
+    const attr = attributes[idx];
+    if (!attr) return;
+    setEditingAttributeIndex(idx);
+    setAttrModalName(attr.name || '');
+    setAttrModalDataType(attr.dataType || 'Number');
+    setAttrModalUnit(attr.unit || '');
+    setAttrModalValue(attr.value ?? '');
+    setAttrModalMqttAgentId(attr.mqttAgentId || '');
+    setAttrModalMqttTopic(attr.mqttTopic || '');
+    setAttrModalMqttValuePath(attr.mqttValuePath || '');
+    setAttrModalMqttDecodeFunctionCode(attr.mqttDecodeFunctionCode || '');
+    setAttributeModalOpen(true);
+  };
+
+  const handleSaveAttributeModal = () => {
+    const attrName = attrModalName.trim() || 'new_attribute';
+    const newAttrObj: AssetAttribute = {
+      name: attrName,
+      dataType: attrModalDataType,
+      unit: attrModalUnit,
+      value: attrModalValue,
+      mqttAgentId: attrModalMqttAgentId || undefined,
+      mqttTopic: attrModalMqttTopic || undefined,
+      mqttValuePath: attrModalMqttValuePath || undefined,
+      mqttDecodeFunctionCode: attrModalMqttDecodeFunctionCode || undefined
+    };
+
+    if (editingAttributeIndex !== null) {
+      setAttributes(prev => prev.map((a, i) => i === editingAttributeIndex ? newAttrObj : a));
+    } else {
+      setAttributes(prev => [...prev, newAttrObj]);
+    }
+    setAttributeModalOpen(false);
+  };
+
   // Map Picker Modal state
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [mapPickerTargetIndex, setMapPickerTargetIndex] = useState<number | null>(null);
@@ -714,19 +780,19 @@ export default function AssetsPage() {
         // ignore
       }
     }
-    
+
     // Inject RTLS Virtual Attributes
     if (selectedAsset && selectedAsset.type === 'MESH_EYE_SENSOR') {
       const planX = selectedAsset.planX ?? 0;
       const planY = selectedAsset.planY ?? 0;
-      
+
       const pxIndex = attrs.findIndex((a: any) => a.name === 'position_x');
       if (pxIndex >= 0) {
         attrs[pxIndex].value = planX;
         attrs[pxIndex].lastUpdated = selectedAsset.updatedAt;
       }
       else attrs.push({ name: 'position_x', dataType: 'float', unit: 'm', value: planX, lastUpdated: selectedAsset.updatedAt });
-      
+
       const pyIndex = attrs.findIndex((a: any) => a.name === 'position_y');
       if (pyIndex >= 0) {
         attrs[pyIndex].value = planY;
@@ -734,7 +800,7 @@ export default function AssetsPage() {
       }
       else attrs.push({ name: 'position_y', dataType: 'float', unit: 'm', value: planY, lastUpdated: selectedAsset.updatedAt });
     }
-    
+
     return attrs;
   })();
 
@@ -959,7 +1025,8 @@ export default function AssetsPage() {
     setMqttTopic('');
     setMqttPublishTopic('');
     setMqttDecodeFunctionCode('');
-    setAddModalSelectedType('AGENT_MQTT_TELTONIKA');
+    const firstAgent = dynamicAgentTypes[0]?.key || 'AGENT_MQTT_TELTONIKA';
+    setAddModalSelectedType(firstAgent);
     setAddModalTab('AGENT');
     setShowAddModal(true);
   };
@@ -1219,7 +1286,7 @@ export default function AssetsPage() {
       if (mapPickerInstanceRef.current) {
         try {
           mapPickerInstanceRef.current.remove();
-        } catch (e) {}
+        } catch (e) { }
         mapPickerInstanceRef.current = null;
       }
     };
@@ -1291,33 +1358,57 @@ export default function AssetsPage() {
     a.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Group list of agents vs assets in the popup modal
-  const agentTypes = [
-    { key: 'AGENT_MQTT_TELTONIKA', label: 'Teltonika Mesh Gateway', icon: Sliders },
-    { key: 'AGENT_MQTT_GENERIC', label: 'Generic MQTT Agent', icon: HardDrive },
-    { key: 'AGENT_HTTP', label: 'HTTP Gateway', icon: Globe },
-    { key: 'AGENT_BLE', label: 'Bluetooth Gateway', icon: Activity }
-  ];
+  // Group list of agents vs assets in the popup modal dynamically from dbAssetTypes
+  const dynamicAgentTypes = useMemo(() => {
+    if (dbAssetTypes && dbAssetTypes.length > 0) {
+      const agents = dbAssetTypes.filter((x: any) => (x.code || '').toUpperCase().startsWith('AGENT_'));
+      if (agents.length > 0) {
+        return agents.map((x: any) => ({
+          key: x.code.toUpperCase(),
+          label: x.name,
+          icon: getTypeIcon(x.code)
+        }));
+      }
+    }
+    return [
+      { key: 'AGENT_MQTT_TELTONIKA', label: 'Teltonika Mesh Gateway', icon: Sliders },
+      { key: 'AGENT_MQTT_GENERIC', label: 'Generic MQTT Agent', icon: HardDrive },
+      { key: 'AGENT_HTTP', label: 'HTTP Gateway', icon: Globe },
+      { key: 'AGENT_BLE', label: 'Bluetooth Gateway', icon: Activity }
+    ];
+  }, [dbAssetTypes]);
 
-  const assetTypes = [
-    { key: 'CITY', label: 'City', icon: Globe },
-    { key: 'BUILDING', label: 'Building', icon: Folder },
-    { key: 'LIGHT', label: 'Light', icon: Sliders },
-    { key: 'ENVIRONMENT', label: 'Environment', icon: Activity },
-    { key: 'WEATHER', label: 'Weather Station', icon: Globe },
-    { key: 'ANCHOR', label: 'Anchor', icon: MapPin },
-    { key: 'THINGS', label: 'Things Assets', icon: Boxes },
-    { key: 'FORKLIFT', label: 'Forklift', icon: Boxes },
-    { key: 'RACK', label: 'Rack', icon: Folder },
-    { key: 'SHIP', label: 'Ship', icon: Globe },
-    { key: 'DOOR', label: 'Door', icon: Folder },
-    { key: 'ROOM', label: 'Room Asset', icon: Folder },
-    { key: 'TAG', label: 'Tag Card', icon: HardDrive },
-    { key: 'MACHINE', label: 'Machine', icon: Sliders },
-    { key: 'MESH_EYE_SENSOR', label: 'Mesh Eye Sensor', icon: Activity }
-  ];
+  const dynamicAssetTypes = useMemo(() => {
+    if (dbAssetTypes && dbAssetTypes.length > 0) {
+      const nonAgents = dbAssetTypes.filter((x: any) => !(x.code || '').toUpperCase().startsWith('AGENT_'));
+      if (nonAgents.length > 0) {
+        return nonAgents.map((x: any) => ({
+          key: x.code.toUpperCase(),
+          label: x.name,
+          icon: getTypeIcon(x.code)
+        }));
+      }
+    }
+    return [
+      { key: 'CITY', label: 'City', icon: Globe },
+      { key: 'BUILDING', label: 'Building', icon: Folder },
+      { key: 'LIGHT', label: 'Light', icon: Sliders },
+      { key: 'ENVIRONMENT', label: 'Environment', icon: Activity },
+      { key: 'WEATHER', label: 'Weather Station', icon: Globe },
+      { key: 'ANCHOR', label: 'Anchor', icon: MapPin },
+      { key: 'THINGS', label: 'Things Assets', icon: Boxes },
+      { key: 'FORKLIFT', label: 'Forklift', icon: Boxes },
+      { key: 'RACK', label: 'Rack', icon: Folder },
+      { key: 'SHIP', label: 'Ship', icon: Globe },
+      { key: 'DOOR', label: 'Door', icon: Folder },
+      { key: 'ROOM', label: 'Room Asset', icon: Folder },
+      { key: 'TAG', label: 'Tag Card', icon: HardDrive },
+      { key: 'MACHINE', label: 'Machine', icon: Sliders },
+      { key: 'MESH_EYE_SENSOR', label: 'Mesh Eye Sensor', icon: Activity }
+    ];
+  }, [dbAssetTypes]);
 
-  const currentAddModalTypes = addModalTab === 'AGENT' ? agentTypes : assetTypes;
+  const currentAddModalTypes = addModalTab === 'AGENT' ? dynamicAgentTypes : dynamicAssetTypes;
   const currentFieldsConfig = agentConnectionFieldsLookup[addModalSelectedType] || [];
   const currentEditFieldsConfig = agentConnectionFieldsLookup[type] || [];
 
@@ -1342,7 +1433,7 @@ export default function AssetsPage() {
             <button
               type="button"
               onClick={(e) => toggleExpandAsset(node.id, e)}
-              className="p-0.5 hover:bg-secondary/80 rounded text-muted-foreground hover:text-foreground shrink-0 transition-transform"
+              className="w-5 h-5 flex items-center justify-center hover:bg-secondary/80 rounded text-muted-foreground hover:text-foreground shrink-0 transition-transform cursor-pointer"
               title={isCollapsed ? "Expand" : "Collapse"}
             >
               {isCollapsed ? (
@@ -1352,7 +1443,7 @@ export default function AssetsPage() {
               )}
             </button>
           ) : (
-            <span className="w-3.5 h-3.5 shrink-0" />
+            <span className="w-5 h-5 shrink-0" />
           )}
           <TypeIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" style={{ color: getTypeColor(node.type) }} />
           <span className="truncate text-xs flex-1">{node.name}</span>
@@ -1531,21 +1622,13 @@ export default function AssetsPage() {
 
                 <div className="space-y-1.5">
                   <label className="text-muted-foreground">Parent Asset</label>
-                  <select
+                  <TreeAssetPicker
+                    assets={assets}
                     value={parentId}
-                    onChange={(e) => setParentId(e.target.value)}
-                    className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                  >
-                    <option value="">(None / Root Asset)</option>
-                    {assets
-                      .filter((a) => a.id !== selectedAssetId)
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} ({a.type})
-                        </option>
-                      ))
-                    }
-                  </select>
+                    onChange={(val) => setParentId(val)}
+                    disabledAssetId={selectedAssetId || undefined}
+                    placeholder="(None / Root Asset)"
+                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -1568,18 +1651,15 @@ export default function AssetsPage() {
                       <div key={field.key} className="space-y-1.5">
                         <label className="text-muted-foreground">{field.label}</label>
                         {field.type === 'select' ? (
-                          <select
+                          <CustomSelect
                             value={customFields[field.key] || ''}
-                            onChange={(e) => handleCustomFieldChange(field.key, e.target.value)}
-                            className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                          >
-                            <option value="">Select option...</option>
-                            {field.options?.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(val) => handleCustomFieldChange(field.key, val)}
+                            placeholder="Select option..."
+                            options={[
+                              { value: '', label: 'Select option...' },
+                              ...(field.options?.map((opt) => ({ value: opt, label: opt })) || [])
+                            ]}
+                          />
                         ) : (
                           <Input
                             type={field.type || 'text'}
@@ -1602,10 +1682,9 @@ export default function AssetsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div className="space-y-1">
                       <label className="text-muted-foreground">MQTT Agent Link</label>
-                      <select
+                      <CustomSelect
                         value={mqttAgentId}
-                        onChange={(e) => {
-                          const val = e.target.value;
+                        onChange={(val) => {
                           setMqttAgentId(val);
                           const linked = assets.find(a => a.id === val);
                           if (linked?.type === 'AGENT_MQTT_TELTONIKA') {
@@ -1616,18 +1695,17 @@ export default function AssetsPage() {
                             setMqttDecodeFunctionCode('');
                           }
                         }}
-                        className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                      >
-                        <option value="">(None / Static Asset)</option>
-                        {assets
-                          .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
-                          .map(a => (
-                            <option key={a.id} value={a.id}>
-                              {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
-                            </option>
-                          ))
-                        }
-                      </select>
+                        placeholder="(None / Static Asset)"
+                        options={[
+                          { value: '', label: '(None / Static Asset)' },
+                          ...assets
+                            .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
+                            .map(a => ({
+                              value: a.id,
+                              label: `${a.name} (${a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})`
+                            }))
+                        ]}
+                      />
                     </div>
 
                     {mqttAgentId && (
@@ -1688,16 +1766,11 @@ export default function AssetsPage() {
                     <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Dynamic Asset Attributes</span>
                     <Button
                       type="button"
-                      onClick={() => {
-                        setAttributes(prev => [
-                          ...prev,
-                          { name: 'new_attribute', dataType: 'Number', unit: '', value: '' }
-                        ]);
-                      }}
+                      onClick={handleOpenAddAttributeModal}
                       variant="outline"
-                      className="h-7 text-[10px] uppercase font-bold px-2 flex items-center gap-1.5"
+                      className="h-7 text-[10px] uppercase font-bold px-2 flex items-center gap-1.5 cursor-pointer hover:bg-primary/10 hover:text-primary"
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="h-3 w-3 text-primary" />
                       Add Attribute
                     </Button>
                   </div>
@@ -1705,276 +1778,55 @@ export default function AssetsPage() {
                   {attributes.length === 0 ? (
                     <p className="text-muted-foreground text-center py-4 font-semibold text-xs italic">No attributes configured.</p>
                   ) : (
-                    <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
                       {attributes.map((attr, idx) => {
-                        const isExpanded = expandedAttributeIndex === idx;
+                        const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
                         return (
-                          <div key={idx} className={`border rounded-xl transition-all ${isExpanded ? 'bg-secondary/15 border-primary/40 shadow-sm' : 'bg-secondary/5 border-border hover:bg-secondary/10'}`}>
-                            {/* Accordion Header (Summary) */}
-                            <div 
-                              className="flex items-center justify-between p-3 cursor-pointer select-none"
-                              onClick={() => setExpandedAttributeIndex(isExpanded ? null : idx)}
-                            >
-                              <div className="flex items-center gap-3">
-                                <button
-                                  type="button"
-                                  className={`p-1 rounded-md transition-colors ${isExpanded ? 'bg-primary/20 text-primary' : 'bg-secondary/50 text-muted-foreground'}`}
-                                >
-                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                </button>
+                          <div key={idx} className="p-3 bg-secondary/15 border border-border/60 hover:border-primary/40 rounded-xl flex items-center justify-between transition-all">
+                            <div className="flex items-center gap-3 truncate">
+                              <Tag className="h-4 w-4 text-primary shrink-0" />
+                              <div className="space-y-0.5 truncate">
                                 <div className="flex items-center gap-2">
-                                  <span className={`font-bold text-sm ${isExpanded ? 'text-primary' : 'text-foreground'}`}>
-                                    {attr.name || <span className="text-muted-foreground italic font-normal">Unnamed Attribute</span>}
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-background border border-border text-muted-foreground">
+                                  <span className="font-bold text-xs text-foreground truncate">{attr.name || 'Unnamed Attribute'}</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-background border border-border text-muted-foreground shrink-0">
                                     {attr.dataType}
                                   </span>
+                                  {attr.unit && (
+                                    <span className="text-[10px] text-muted-foreground font-mono shrink-0">({attr.unit})</span>
+                                  )}
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                {attr.mqttAgentId && (
-                                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[9px] uppercase font-bold tracking-wide" title="Linked to IoT Agent">
-                                    <Activity className="h-3 w-3" />
-                                    <span className="hidden sm:inline">Linked</span>
-                                  </div>
+                                {attr.value !== undefined && attr.value !== '' && (
+                                  <p className="text-[10px] text-muted-foreground truncate max-w-xs font-mono">
+                                    Value: {typeof attr.value === 'object' ? JSON.stringify(attr.value) : String(attr.value)}
+                                  </p>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setAttributes(prev => prev.filter((_, i) => i !== idx));
-                                    if (expandedAttributeIndex === idx) setExpandedAttributeIndex(null);
-                                  }}
-                                  className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-md transition-colors"
-                                  title="Remove Attribute"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
                               </div>
                             </div>
 
-                            {/* Accordion Body (Expanded Form) */}
-                            {isExpanded && (
-                              <div className="p-4 pt-1 border-t border-border/50 space-y-3.5">
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                  <div className="space-y-1">
-                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Attribute Name</label>
-                                    <Input
-                                      type="text"
-                                      value={attr.name}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, name: val } : a));
-                                      }}
-                                      placeholder="e.g. temperature"
-                                    />
-                                  </div>
-
-                                  <div className="space-y-1">
-                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Data Type</label>
-                                    <select
-                                      value={attr.dataType}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, dataType: val } : a));
-                                      }}
-                                      className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                                    >
-                                      <option value="Number">Number</option>
-                                      <option value="String">String</option>
-                                      <option value="GeoPoint">GeoPoint (GPS)</option>
-                                      <option value="JSON">JSON</option>
-                                      <option value="Text">Text</option>
-                                      <option value="Integer">Integer</option>
-                                      <option value="Boolean">Boolean</option>
-                                    </select>
-                                  </div>
-
-                                  <div className="space-y-1">
-                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Unit</label>
-                                    <Input
-                                      type="text"
-                                      value={attr.unit}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, unit: val } : a));
-                                      }}
-                                      placeholder="e.g. °C"
-                                    />
-                                  </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {linkedAgent && (
+                                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[9px] uppercase font-bold tracking-wide" title="Linked to IoT Agent">
+                                  <Activity className="h-3 w-3" />
+                                  <span className="hidden sm:inline">Linked</span>
                                 </div>
-
-                                {/* Value / GPS Coordinates Picker Input */}
-                                <div className="pt-2 border-t border-border/30">
-                                  {attr.dataType === 'GeoPoint' || attr.name === 'location' || attr.name === 'coordinates' || attr.name === 'maps' ? (
-                                    <div className="space-y-2 bg-primary/5 border border-primary/20 p-3 rounded-lg">
-                                      <div className="flex items-center justify-between">
-                                        <label className="text-primary text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
-                                          <MapPin className="h-3.5 w-3.5" />
-                                          <span>GPS Coordinates (WGS84)</span>
-                                        </label>
-                                        <span className="text-[10px] text-muted-foreground italic font-normal">Format: Latitude, Longitude</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <Input
-                                          type="text"
-                                          value={typeof attr.value === 'object' && attr.value !== null ? `${attr.value.lat ?? ''}, ${attr.value.lng ?? ''}` : (attr.value ?? '')}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, value: val } : a));
-                                          }}
-                                          placeholder="e.g. -6.168911, 106.899709"
-                                          className="font-mono text-xs bg-background/80"
-                                        />
-                                        <Button
-                                          type="button"
-                                          onClick={() => {
-                                            setMapPickerTargetIndex(idx);
-                                            let initialLat = -6.168911;
-                                            let initialLng = 106.899709;
-                                            const rawVal = typeof attr.value === 'object' && attr.value !== null 
-                                              ? `${attr.value.lat ?? ''}, ${attr.value.lng ?? ''}` 
-                                              : (attr.value ?? '');
-                                            if (rawVal && typeof rawVal === 'string' && rawVal.includes(',')) {
-                                              const parts = rawVal.split(',').map((s: string) => parseFloat(s.trim()));
-                                              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                                                initialLat = parts[0];
-                                                initialLng = parts[1];
-                                              }
-                                            }
-                                            setMapPickerCoords({ lat: initialLat, lng: initialLng });
-                                            setMapPickerOpen(true);
-                                          }}
-                                          className="shrink-0 h-9 px-3.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 flex items-center gap-1.5 shadow-sm cursor-pointer"
-                                        >
-                                          <MapPin className="h-4 w-4" />
-                                          Pilih di Peta
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="space-y-1">
-                                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Initial / Fallback Value</label>
-                                      <Input
-                                        type="text"
-                                        value={attr.value ?? ''}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, value: val } : a));
-                                        }}
-                                        placeholder="Initial or fallback value"
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Agent Link selection */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/30">
-                                  <div className="space-y-1">
-                                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Agent Link</label>
-                                    <select
-                                      value={attr.mqttAgentId || ''}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setAttributes(prev => prev.map((a, i) => {
-                                          if (i === idx) {
-                                            const agent = assets.find(as => as.id === val);
-                                            const defaultCode = agent?.type === 'AGENT_MQTT_TELTONIKA' ? defaultTeltonikaDecodeCode : defaultGenericAttributeCode;
-                                            return {
-                                              ...a,
-                                              mqttAgentId: val || undefined,
-                                              mqttTopic: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? 'json-gw-event/received_data/#' : '') : '',
-                                              mqttValuePath: val ? (agent?.type === 'AGENT_MQTT_TELTONIKA' ? `$.${a.name}` : '') : '',
-                                              mqttDecodeFunctionCode: val ? defaultCode : undefined
-                                            };
-                                          }
-                                          return a;
-                                        }));
-                                      }}
-                                      className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                                    >
-                                      <option value="">(None / Static Attribute)</option>
-                                      {assets
-                                        .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
-                                        .map(a => (
-                                          <option key={a.id} value={a.id}>
-                                            {a.name} ({a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})
-                                          </option>
-                                        ))
-                                      }
-                                    </select>
-                                  </div>
-
-                                  {attr.mqttAgentId && (
-                                    <div className="space-y-1">
-                                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Subscribe Topic</label>
-                                      <Input
-                                        type="text"
-                                        value={attr.mqttTopic || ''}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttTopic: val } : a));
-                                        }}
-                                        placeholder="e.g. factory/temp/1 or json-gw-event/received_data/#"
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                                {/* Sub-parameters for Agent Ingestions */}
-                                {attr.mqttAgentId && (
-                                  <div className="space-y-3.5 pt-2">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                                      <div className="space-y-1">
-                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Publish Topic</label>
-                                        <Input
-                                          type="text"
-                                          value={attr.mqttPublishTopic || ''}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttPublishTopic: val } : a));
-                                          }}
-                                          placeholder="e.g. cmd/temp/1"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Value Path</label>
-                                        <Input
-                                          type="text"
-                                          value={attr.mqttValuePath || ''}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttValuePath: val } : a));
-                                          }}
-                                          placeholder="e.g. $.temperature"
-                                        />
-                                      </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
-                                        <Code className="h-3 w-3" /> Attribute JS Ingestion Decoder Function
-                                      </label>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        Function ini akan dipanggil untuk memproses payload raw MQTT. Extract nilai spesifik untuk atribut ini dan kembalikan (return). <br />
-                                        Tersedia variabel <code>payload</code> (raw buffer / JSON) dan <code>topic</code>.
-                                      </p>
-                                      <div className="rounded-lg overflow-hidden border border-border">
-                                        <textarea
-                                          rows={8}
-                                          value={attr.mqttDecodeFunctionCode || defaultGenericAttributeCode}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setAttributes(prev => prev.map((a, i) => i === idx ? { ...a, mqttDecodeFunctionCode: val } : a));
-                                          }}
-                                          className="w-full font-mono text-[10.5px] p-2.5 bg-black/75 text-emerald-400 border border-border/85 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed"
-                                          placeholder="// Custom attribute JS code..."
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditAttributeModal(idx)}
+                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Attribute"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAttributes(prev => prev.filter((_, i) => i !== idx))}
+                                className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
+                                title="Remove Attribute"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
                         );
                       })}
@@ -2279,9 +2131,9 @@ export default function AssetsPage() {
                         {selectedAsset.latitude && selectedAsset.longitude ? (
                           <div className="space-y-1">
                             {/* Map Container with Floating Target Coordinates Badge */}
-                            <div className="relative w-full h-48 bg-secondary/15 border-b border-border overflow-hidden">
+                            <div className="relative w-full h-48 bg-secondary/15 border-b border-border overflow-hidden isolate z-0">
                               {/* Floating Coordinates Badge on top-left of Map */}
-                              <div className="absolute top-2.5 left-2.5 z-[1000] flex items-center gap-1.5 bg-background/90 text-foreground border border-border/80 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold shadow-md backdrop-blur-md">
+                              <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-background/90 text-foreground border border-border/80 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold shadow-md backdrop-blur-md">
                                 <Target className="h-3.5 w-3.5 text-primary shrink-0" />
                                 <span>{selectedAsset.latitude}, {selectedAsset.longitude}</span>
                               </div>
@@ -2306,43 +2158,42 @@ export default function AssetsPage() {
                     {/* HISTORY Card */}
                     {!selectedAsset.type.startsWith('AGENT_') && selectedAsset.type !== 'CITY' && selectedAsset.type !== 'BUILDING' && (
                       <Card className="border border-border/80">
-                        <CardHeader className="py-3 px-4 bg-secondary/20 border-b border-border/50 flex flex-col items-start gap-3 w-full overflow-hidden">
+                        <CardHeader className="py-3 px-4 bg-secondary/20 border-b border-border/50 flex flex-col items-start gap-3 w-full">
                           <CardTitle className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground w-full">
                             History
                           </CardTitle>
                           <div className="flex flex-wrap items-end gap-2 w-full">
                             <div className="flex flex-col gap-1.5 flex-1 min-w-[130px]">
                               <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Attribute</label>
-                              <select
+                              <CustomSelect
                                 value={selectedHistoryAttr}
-                                onChange={(e) => setSelectedHistoryAttr(e.target.value)}
-                                className="bg-secondary/20 text-foreground border border-border/40 px-3 py-2 rounded-md text-sm font-semibold focus:outline-none capitalize w-full"
-                              >
-                                {activeAttributes.map((a: any) => (
-                                  <option key={a.name} value={a.name}>{a.name} {a.unit ? `(${a.unit})` : ''}</option>
-                                ))}
-                              </select>
+                                onChange={(val) => setSelectedHistoryAttr(val)}
+                                options={activeAttributes.map((a: any) => ({
+                                  value: a.name,
+                                  label: `${a.name} ${a.unit ? `(${a.unit})` : ''}`
+                                }))}
+                              />
                             </div>
-                            
+
                             <div className="flex flex-col gap-1.5 flex-1 min-w-[90px]">
                               <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Timeframe</label>
-                              <select
+                              <CustomSelect
                                 value={selectedHistoryTimeframe}
-                                onChange={(e) => setSelectedHistoryTimeframe(e.target.value)}
-                                className="bg-secondary/20 text-foreground border border-border/40 px-3 py-2 rounded-md text-sm font-semibold focus:outline-none w-full"
-                              >
-                                <option value="1h">Hour</option>
-                                <option value="1d">Day</option>
-                                <option value="1w">Week</option>
-                                <option value="1m">Month</option>
-                              </select>
+                                onChange={(val) => setSelectedHistoryTimeframe(val)}
+                                options={[
+                                  { value: '1h', label: 'Hour' },
+                                  { value: '1d', label: 'Day' },
+                                  { value: '1w', label: 'Week' },
+                                  { value: '1m', label: 'Month' }
+                                ]}
+                              />
                             </div>
-                            
+
                             <div className="flex flex-col gap-1.5 w-full mt-1">
                               <label className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Ending</label>
                               <div className="flex items-center gap-1 bg-secondary/20 border border-border/40 rounded-md px-2 py-0.5 focus-within:ring-1 focus-within:ring-primary/50 w-full overflow-hidden">
-                                <Input 
-                                  type="datetime-local" 
+                                <Input
+                                  type="datetime-local"
                                   value={selectedHistoryEndDate}
                                   onChange={(e) => setSelectedHistoryEndDate(e.target.value)}
                                   className="bg-transparent border-0 focus-visible:ring-0 text-sm font-semibold h-8 p-0 flex-1 min-w-0"
@@ -2350,25 +2201,25 @@ export default function AssetsPage() {
                                 <div className="flex items-center ml-1 border border-border/50 rounded bg-background overflow-hidden h-7 shrink-0">
                                   <button onClick={() => {
                                     const d = new Date(selectedHistoryEndDate);
-                                    if(selectedHistoryTimeframe === '1h') d.setHours(d.getHours() - 1);
-                                    else if(selectedHistoryTimeframe === '1d') d.setDate(d.getDate() - 1);
-                                    else if(selectedHistoryTimeframe === '1w') d.setDate(d.getDate() - 7);
-                                    else if(selectedHistoryTimeframe === '1m') d.setMonth(d.getMonth() - 1);
-                                    d.setMinutes(0,0,0);
+                                    if (selectedHistoryTimeframe === '1h') d.setHours(d.getHours() - 1);
+                                    else if (selectedHistoryTimeframe === '1d') d.setDate(d.getDate() - 1);
+                                    else if (selectedHistoryTimeframe === '1w') d.setDate(d.getDate() - 7);
+                                    else if (selectedHistoryTimeframe === '1m') d.setMonth(d.getMonth() - 1);
+                                    d.setMinutes(0, 0, 0);
                                     setSelectedHistoryEndDate(d.toISOString().slice(0, 16));
                                   }} className="px-2 hover:bg-secondary/50 text-muted-foreground font-bold text-xs h-full border-r border-border/50 flex items-center justify-center">&lt;</button>
                                   <button onClick={() => {
                                     const d = new Date(selectedHistoryEndDate);
-                                    if(selectedHistoryTimeframe === '1h') d.setHours(d.getHours() + 1);
-                                    else if(selectedHistoryTimeframe === '1d') d.setDate(d.getDate() + 1);
-                                    else if(selectedHistoryTimeframe === '1w') d.setDate(d.getDate() + 7);
-                                    else if(selectedHistoryTimeframe === '1m') d.setMonth(d.getMonth() + 1);
-                                    d.setMinutes(0,0,0);
+                                    if (selectedHistoryTimeframe === '1h') d.setHours(d.getHours() + 1);
+                                    else if (selectedHistoryTimeframe === '1d') d.setDate(d.getDate() + 1);
+                                    else if (selectedHistoryTimeframe === '1w') d.setDate(d.getDate() + 7);
+                                    else if (selectedHistoryTimeframe === '1m') d.setMonth(d.getMonth() + 1);
+                                    d.setMinutes(0, 0, 0);
                                     setSelectedHistoryEndDate(d.toISOString().slice(0, 16));
                                   }} className="px-2 hover:bg-secondary/50 text-muted-foreground font-bold text-xs h-full border-r border-border/50 flex items-center justify-center">&gt;</button>
                                   <button onClick={() => {
                                     const d = new Date();
-                                    d.setMinutes(0,0,0);
+                                    d.setMinutes(0, 0, 0);
                                     setSelectedHistoryEndDate(d.toISOString().slice(0, 16));
                                   }} className="px-2 hover:bg-secondary/50 text-muted-foreground font-bold text-xs h-full flex items-center justify-center">&gt;&gt;</button>
                                 </div>
@@ -2389,30 +2240,30 @@ export default function AssetsPage() {
                           ) : (
                             <div className="h-[250px] w-full mt-4 -ml-4 pr-4">
                               <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={historyData.map(d => ({ 
-                                  time: new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
+                                <AreaChart data={historyData.map(d => ({
+                                  time: new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                                   fullTime: new Date(d.timestamp).toLocaleString(),
-                                  value: d.value 
+                                  value: d.value
                                 }))} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                                   <defs>
                                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor="#eab308" stopOpacity={0.8}/>
-                                      <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
+                                      <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.8} />
+                                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                                     </linearGradient>
                                   </defs>
-                                  <XAxis 
-                                    dataKey="time" 
-                                    tickLine={false} 
+                                  <XAxis
+                                    dataKey="time"
+                                    tickLine={false}
                                     axisLine={{ stroke: '#e5e7eb' }}
-                                    tick={{ fontSize: 10, fill: '#6b7280' }} 
+                                    tick={{ fontSize: 10, fill: '#6b7280' }}
                                     minTickGap={30}
                                   />
-                                  <YAxis 
-                                    tickLine={false} 
+                                  <YAxis
+                                    tickLine={false}
                                     axisLine={{ stroke: '#e5e7eb' }}
                                     tick={{ fontSize: 10, fill: '#6b7280' }}
                                   />
-                                  <RechartsTooltip 
+                                  <RechartsTooltip
                                     content={({ active, payload }) => {
                                       if (active && payload && payload.length) {
                                         return (
@@ -2425,15 +2276,15 @@ export default function AssetsPage() {
                                       return null;
                                     }}
                                   />
-                                  <Area 
-                                    type="monotone" 
-                                    dataKey="value" 
-                                    stroke="#eab308" 
+                                  <Area
+                                    type="monotone"
+                                    dataKey="value"
+                                    stroke="var(--primary)"
                                     strokeWidth={2}
-                                    fillOpacity={1} 
-                                    fill="url(#colorValue)" 
-                                    dot={{ r: 3, fill: "#eab308", strokeWidth: 0 }}
-                                    activeDot={{ r: 5, fill: "#eab308", stroke: "#fff", strokeWidth: 2 }}
+                                    fillOpacity={1}
+                                    fill="url(#colorValue)"
+                                    dot={{ r: 3, fill: "var(--primary)", strokeWidth: 0 }}
+                                    activeDot={{ r: 5, fill: "var(--primary)", stroke: "#fff", strokeWidth: 2 }}
                                   />
                                 </AreaChart>
                               </ResponsiveContainer>
@@ -2460,7 +2311,7 @@ export default function AssetsPage() {
 
       {/* ==================== ADD ASSET & AGENT POPUP MODAL ==================== */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/35 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4 backdrop-blur-xs">
           <Card className="w-full max-w-3xl h-[550px] flex flex-col overflow-hidden border border-border shadow-2xl">
 
             {/* Modal Title bar */}
@@ -2490,7 +2341,8 @@ export default function AssetsPage() {
                     type="button"
                     onClick={() => {
                       setAddModalTab('AGENT');
-                      setAddModalSelectedType('AGENT_MQTT_TELTONIKA');
+                      const firstKey = dynamicAgentTypes[0]?.key || 'AGENT_MQTT_TELTONIKA';
+                      setAddModalSelectedType(firstKey);
                       setCustomFields({});
                     }}
                     className={`py-1.5 text-[10px] uppercase tracking-wider font-bold rounded border transition-all cursor-pointer ${addModalTab === 'AGENT'
@@ -2504,7 +2356,8 @@ export default function AssetsPage() {
                     type="button"
                     onClick={() => {
                       setAddModalTab('ASSET');
-                      setAddModalSelectedType('CITY');
+                      const firstKey = dynamicAssetTypes[0]?.key || 'CITY';
+                      setAddModalSelectedType(firstKey);
                       setCustomFields({});
                     }}
                     className={`py-1.5 text-[10px] uppercase tracking-wider font-bold rounded border transition-all cursor-pointer ${addModalTab === 'ASSET'
@@ -2521,6 +2374,7 @@ export default function AssetsPage() {
                   {currentAddModalTypes.map((item) => {
                     const isSelected = addModalSelectedType === item.key;
                     const Icon = item.icon;
+                    const customColor = getTypeColor(item.key);
                     return (
                       <button
                         type="button"
@@ -2534,7 +2388,7 @@ export default function AssetsPage() {
                           : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40'
                           }`}
                       >
-                        <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <Icon className="h-4 w-4 shrink-0 transition-colors" style={{ color: customColor || 'currentColor' }} />
                         <span className="truncate">{item.label}</span>
                       </button>
                     );
@@ -2577,18 +2431,12 @@ export default function AssetsPage() {
 
                     <div className="space-y-1.5">
                       <label className="text-muted-foreground">Parent Asset</label>
-                      <select
+                      <TreeAssetPicker
+                        assets={assets}
                         value={parentId}
-                        onChange={(e) => setParentId(e.target.value)}
-                        className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                      >
-                        <option value="">(None / Root Asset)</option>
-                        {assets.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name} ({a.type})
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(val) => setParentId(val)}
+                        placeholder="(None / Root Asset)"
+                      />
                     </div>
                   </div>
 
@@ -2615,18 +2463,15 @@ export default function AssetsPage() {
                           <div key={field.key} className="space-y-1">
                             <label className="text-muted-foreground">{field.label}</label>
                             {field.type === 'select' ? (
-                              <select
+                              <CustomSelect
                                 value={customFields[field.key] || ''}
-                                onChange={(e) => handleCustomFieldChange(field.key, e.target.value)}
-                                className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary text-xs font-semibold"
-                              >
-                                <option value="">Select option...</option>
-                                {field.options?.map((opt) => (
-                                  <option key={opt} value={opt}>
-                                    {opt}
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={(val) => handleCustomFieldChange(field.key, val)}
+                                placeholder="Select option..."
+                                options={[
+                                  { value: '', label: 'Select option...' },
+                                  ...(field.options?.map((opt) => ({ value: opt, label: opt })) || [])
+                                ]}
+                              />
                             ) : (
                               <Input
                                 type={field.type || 'text'}
@@ -2694,6 +2539,242 @@ export default function AssetsPage() {
           </div>
         ))}
       </div>
+
+      {/* ATTRIBUTE ADD / EDIT POPUP MODAL */}
+      {attributeModalOpen && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-card border border-border/80 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150">
+            {/* Header Bar */}
+            <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between shadow-sm shrink-0">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Tag className="h-4.5 w-4.5" />
+                <span>{editingAttributeIndex !== null ? "Edit Attribute" : "Add New Attribute"}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAttributeModalOpen(false)}
+                className="p-1 hover:bg-black/20 rounded-lg transition-colors text-primary-foreground/80 hover:text-primary-foreground cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body Form */}
+            <div className="p-4 overflow-y-auto space-y-4 flex-1 scrollbar-thin">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Attribute Name *</label>
+                  <Input
+                    type="text"
+                    value={attrModalName}
+                    onChange={(e) => setAttrModalName(e.target.value)}
+                    placeholder="e.g. temperature"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Data Type</label>
+                  <CustomSelect
+                    value={attrModalDataType}
+                    onChange={(val) => setAttrModalDataType(val)}
+                    options={[
+                      { value: 'Number', label: 'Number' },
+                      { value: 'String', label: 'String' },
+                      { value: 'GeoPoint', label: 'GeoPoint (GPS)' },
+                      { value: 'JSON', label: 'JSON' },
+                      { value: 'Text', label: 'Text' },
+                      { value: 'Integer', label: 'Integer' },
+                      { value: 'Boolean', label: 'Boolean' }
+                    ]}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Unit (Optional)</label>
+                  <Input
+                    type="text"
+                    value={attrModalUnit}
+                    onChange={(e) => setAttrModalUnit(e.target.value)}
+                    placeholder="e.g. °C, %, V"
+                  />
+                </div>
+              </div>
+
+              {/* Value / GPS Coordinates Picker Input */}
+              <div className="pt-2 border-t border-border/30">
+                {attrModalDataType === 'GeoPoint' || attrModalName === 'location' || attrModalName === 'coordinates' || attrModalName === 'maps' ? (
+                  <div className="space-y-2 bg-primary/5 border border-primary/20 p-3 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <label className="text-primary text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5" />
+                        <span>GPS Coordinates (WGS84)</span>
+                      </label>
+                      <span className="text-[10px] text-muted-foreground italic font-normal">Format: Latitude, Longitude</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="text"
+                        value={typeof attrModalValue === 'object' && attrModalValue !== null ? `${attrModalValue.lat ?? ''}, ${attrModalValue.lng ?? ''}` : (attrModalValue ?? '')}
+                        onChange={(e) => setAttrModalValue(e.target.value)}
+                        placeholder="e.g. -6.168911, 106.899709"
+                        className="font-mono text-xs bg-background/80"
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          let initialLat = -6.168911;
+                          let initialLng = 106.899709;
+                          const rawVal = typeof attrModalValue === 'object' && attrModalValue !== null
+                            ? `${attrModalValue.lat ?? ''}, ${attrModalValue.lng ?? ''}`
+                            : (attrModalValue ?? '');
+                          if (rawVal && typeof rawVal === 'string' && rawVal.includes(',')) {
+                            const parts = rawVal.split(',').map((s: string) => parseFloat(s.trim()));
+                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                              initialLat = parts[0];
+                              initialLng = parts[1];
+                            }
+                          }
+                          setMapPickerCoords({ lat: initialLat, lng: initialLng });
+                          setMapPickerOpen(true);
+                        }}
+                        className="shrink-0 h-9 px-3.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                      >
+                        <MapPin className="h-4 w-4" />
+                        Pilih di Peta
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Initial / Fallback Value</label>
+                    <Input
+                      type="text"
+                      value={attrModalValue ?? ''}
+                      onChange={(e) => setAttrModalValue(e.target.value)}
+                      placeholder="Initial or fallback value"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Agent Link selection */}
+              <div className="space-y-3 pt-3 border-t border-border/30">
+                <span className="text-[10px] text-primary uppercase font-bold tracking-wider">IoT Ingestion & Decoder Link (Optional)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Agent Link</label>
+                    <CustomSelect
+                      value={attrModalMqttAgentId}
+                      onChange={(val) => {
+                        setAttrModalMqttAgentId(val);
+                        const agent = assets.find(as => as.id === val);
+                        const defaultCode = agent?.type === 'AGENT_MQTT_TELTONIKA' ? defaultTeltonikaDecodeCode : defaultGenericAttributeCode;
+                        if (val) {
+                          if (agent?.type === 'AGENT_MQTT_TELTONIKA') {
+                            setAttrModalMqttTopic('json-gw-event/received_data/#');
+                            setAttrModalMqttValuePath(`$.${attrModalName || 'data'}`);
+                          }
+                          if (!attrModalMqttDecodeFunctionCode) {
+                            setAttrModalMqttDecodeFunctionCode(defaultCode);
+                          }
+                        } else {
+                          setAttrModalMqttTopic('');
+                          setAttrModalMqttValuePath('');
+                          setAttrModalMqttDecodeFunctionCode('');
+                        }
+                      }}
+                      placeholder="(None / Static Attribute)"
+                      options={[
+                        { value: '', label: '(None / Static Attribute)' },
+                        ...assets
+                          .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
+                          .map(a => ({
+                            value: a.id,
+                            label: `${a.name} (${a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})`
+                          }))
+                      ]}
+                    />
+                  </div>
+
+                  {attrModalMqttAgentId && (
+                    <div className="space-y-1">
+                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Subscribe Topic</label>
+                      <Input
+                        type="text"
+                        value={attrModalMqttTopic}
+                        onChange={(e) => setAttrModalMqttTopic(e.target.value)}
+                        placeholder="e.g. telemetry/#"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {attrModalMqttAgentId && (
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-1">
+                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">JSON Value Path (Optional)</label>
+                      <Input
+                        type="text"
+                        value={attrModalMqttValuePath}
+                        onChange={(e) => setAttrModalMqttValuePath(e.target.value)}
+                        placeholder={`$.${attrModalName || 'temperature'}`}
+                        className="font-mono text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider flex items-center gap-1">
+                          <Code className="h-3.5 w-3.5 text-primary" />
+                          <span>Payload JS Decoder Function</span>
+                        </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            const agent = assets.find(as => as.id === attrModalMqttAgentId);
+                            const defaultCode = agent?.type === 'AGENT_MQTT_TELTONIKA' ? defaultTeltonikaDecodeCode : defaultGenericAttributeCode;
+                            setAttrModalMqttDecodeFunctionCode(defaultCode);
+                          }}
+                          className="h-6 text-[9px] uppercase font-bold px-2 text-primary hover:bg-primary/10"
+                        >
+                          Reset Template
+                        </Button>
+                      </div>
+                      <textarea
+                        rows={5}
+                        value={attrModalMqttDecodeFunctionCode}
+                        onChange={(e) => setAttrModalMqttDecodeFunctionCode(e.target.value)}
+                        placeholder="// return parsed payload"
+                        className="w-full font-mono text-[11px] p-3 bg-black/80 text-emerald-400 border border-border/80 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="p-3 bg-secondary/20 border-t border-border flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setAttributeModalOpen(false)}
+                className="px-4 py-1.5 text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-lg transition-colors cursor-pointer uppercase tracking-wider"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAttributeModal}
+                className="px-5 py-1.5 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg shadow-sm transition-colors cursor-pointer uppercase tracking-wider"
+              >
+                SAVE ATTRIBUTE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DELETE CONFIRMATION DIALOG MODAL */}
       {showDeleteConfirm && (
@@ -2772,8 +2853,10 @@ export default function AssetsPage() {
               <Button
                 type="button"
                 onClick={() => {
-                  if (mapPickerTargetIndex !== null) {
-                    const coordString = `${mapPickerCoords.lat.toFixed(6)}, ${mapPickerCoords.lng.toFixed(6)}`;
+                  const coordString = `${mapPickerCoords.lat.toFixed(6)}, ${mapPickerCoords.lng.toFixed(6)}`;
+                  if (attributeModalOpen) {
+                    setAttrModalValue(coordString);
+                  } else if (mapPickerTargetIndex !== null) {
                     setAttributes((prev) =>
                       prev.map((a, i) => (i === mapPickerTargetIndex ? { ...a, value: coordString } : a))
                     );
@@ -2782,7 +2865,7 @@ export default function AssetsPage() {
                   }
                   setMapPickerOpen(false);
                 }}
-                className="h-8.5 text-xs font-bold gap-1.5"
+                className="h-8.5 text-xs font-bold text-white bg-primary hover:bg-primary/90"
               >
                 <MapPin className="h-3.5 w-3.5" />
                 Gunakan Titik Koordinat Ini

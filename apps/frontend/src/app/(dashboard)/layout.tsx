@@ -336,7 +336,7 @@ function getContrastColor(hexColor: string): string {
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* HEADER BAR */}
-        <header className="relative z-20 h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
+        <header className="relative z-30 h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-sm font-bold tracking-wider uppercase text-muted-foreground">
               {navigation.find((item) => item.href === pathname)?.name || 'Console'}
@@ -365,7 +365,7 @@ function getContrastColor(hexColor: string): string {
 
       {/* TENANT SELECTION POPUP MODAL (Superadmin workspace selection) */}
       {showTenantPopup && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[99999] bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-xl p-5 w-full max-w-sm shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b pb-2.5">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">

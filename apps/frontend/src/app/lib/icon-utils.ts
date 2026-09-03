@@ -125,6 +125,14 @@ export const getAssetMarkerIcon = (type: string = '', name: string = '', assetTy
       svg: getLucideSvg(matched.icon || 'HardDrive')
     };
   }
+  // 0. AGENT / GATEWAY / TELTONIKA / MQTT -> Radio (Wireless Signal)
+  if (t.startsWith('AGENT_') || combined.includes('agent') || combined.includes('gateway') || combined.includes('teltonika') || combined.includes('mqtt') || combined.includes('wirepas') || combined.includes('ble') || combined.includes('http')) {
+    return {
+      color: '#f43f5e', // Rose Red
+      svg: getLucideSvg('Radio')
+    };
+  }
+
   // 1. ANCHOR -> MapPin (Rose Red)
   if (t === 'ANCHOR' || n.startsWith('anchor_') || (n.includes('anchor') && !n.includes('tag'))) {
     return {

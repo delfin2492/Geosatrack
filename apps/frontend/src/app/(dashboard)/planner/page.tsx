@@ -33,6 +33,8 @@ import {
   Box,
   Activity,
   Wifi,
+  Anchor,
+  Eye,
 } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 
@@ -78,6 +80,19 @@ interface SiteData {
   name: string;
 }
 
+interface BuildingFloor {
+  zoneId: string;
+  floorName: string;
+  floorOrder: number;
+}
+
+interface BuildingGroup {
+  id: string;
+  name: string;
+  description?: string;
+  floors: BuildingFloor[];
+}
+
 // ─── Planner Page ─────────────────────────────────────────────────────
 export default function PlannerPage() {
   const { tenantId, token, isAdmin, user } = useAuth();
@@ -111,12 +126,25 @@ export default function PlannerPage() {
     confirmText?: string;
   } | null>(null);
 
+  // Building Groups State (Gedung Bertingkat)
+  const [buildingGroups, setBuildingGroups] = useState<BuildingGroup[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'single_2d' | 'split_grid'>('single_2d');
+
+  // Building Group Manager Modal States
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [groupModalName, setGroupModalName] = useState('');
+  const [groupModalDesc, setGroupModalDesc] = useState('');
+  const [groupModalFloors, setGroupModalFloors] = useState<BuildingFloor[]>([]);
+
   // New Zone Form state
   const [showNewZoneForm, setShowNewZoneForm] = useState(false);
   const [newZoneName, setNewZoneName] = useState('');
   const [newZoneSiteId, setNewZoneSiteId] = useState('');
   const [newZoneWidth, setNewZoneWidth] = useState(50);
   const [newZoneHeight, setNewZoneHeight] = useState(30);
+  const [newZoneGroupId, setNewZoneGroupId] = useState('');
 
   // Edit Zone Form state
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
@@ -161,11 +189,56 @@ export default function PlannerPage() {
           const data = await res.json();
           setDbAssetTypes(data);
         }
-      } catch (e) {}
+      } catch (e) { }
     };
     fetchDbAssetTypes();
     return () => { isMounted = false; };
   }, [token, tenantId]);
+
+  // Load Building Groups from localStorage & auto-sync default group if empty
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storageKey = `geomesh_building_groups_${tenantId || 'default'}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const parsed: BuildingGroup[] = JSON.parse(saved);
+          setBuildingGroups(parsed);
+          if (parsed.length > 0 && !selectedGroupId) {
+            setSelectedGroupId(parsed[0].id);
+          }
+        } catch (e) { }
+      }
+    }
+  }, [tenantId]);
+
+  // Generate default Building Group if zones exist but no groups saved
+  useEffect(() => {
+    if (zones.length > 0 && buildingGroups.length === 0) {
+      const defaultGroup: BuildingGroup = {
+        id: 'bg-default-1',
+        name: 'Gedung Utama (Multi-Floor)',
+        description: 'Gedung bertingkat otomatis dari denah zona',
+        floors: zones.map((z, idx) => ({
+          zoneId: z.id,
+          floorName: z.name,
+          floorOrder: idx + 1
+        }))
+      };
+      setBuildingGroups([defaultGroup]);
+      setSelectedGroupId(defaultGroup.id);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`geomesh_building_groups_${tenantId || 'default'}`, JSON.stringify([defaultGroup]));
+      }
+    }
+  }, [zones, buildingGroups.length, tenantId]);
+
+  const saveBuildingGroupsState = (groups: BuildingGroup[]) => {
+    setBuildingGroups(groups);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`geomesh_building_groups_${tenantId || 'default'}`, JSON.stringify(groups));
+    }
+  };
 
   // Map refs
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -367,6 +440,10 @@ export default function PlannerPage() {
 
   useEffect(() => {
     if (selectedZoneId) {
+      const localMatch = zones.find((z) => z.id === selectedZoneId);
+      if (localMatch) {
+        setSelectedZone((prev) => (prev?.id === selectedZoneId ? prev : localMatch));
+      }
       fetchZoneDetails(selectedZoneId);
     } else {
       setSelectedZone(null);
@@ -375,7 +452,7 @@ export default function PlannerPage() {
       if (meshMarkersRef.current) meshMarkersRef.current.clear();
       if (meshLinesRef.current) meshLinesRef.current.clear();
     }
-  }, [selectedZoneId, fetchZoneDetails]);
+  }, [selectedZoneId, zones, fetchZoneDetails]);
 
   // Synchronize layer visibility with map
   useEffect(() => {
@@ -400,6 +477,20 @@ export default function PlannerPage() {
     }
   }, [layerVisibility, selectedZoneId]); // Trigger also on zone load
 
+  // Trigger map resize when switching back to single_2d view
+  useEffect(() => {
+    if (viewMode === 'single_2d' && mapRef.current) {
+      setTimeout(() => {
+        mapRef.current?.invalidateSize();
+        if (selectedZone) {
+          const w = selectedZone.width || 100;
+          const h = selectedZone.height || 100;
+          mapRef.current?.fitBounds([[0, 0], [h, w]]);
+        }
+      }, 50);
+    }
+  }, [viewMode, selectedZone]);
+
   //  Initialize Leaflet Map ────────────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -414,11 +505,12 @@ export default function PlannerPage() {
       crs: L.CRS.Simple,
       minZoom: -4,
       maxZoom: 10,
-      zoomControl: true,
+      zoomControl: false,
       scrollWheelZoom: true,
       doubleClickZoom: true,
       dragging: true,
     });
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
     mapRef.current = map;
 
     // Initialize overlay layers
@@ -466,6 +558,7 @@ export default function PlannerPage() {
       map.removeLayer(imageOverlayRef.current);
       imageOverlayRef.current = null;
     }
+    zoneLayerRef.current?.clearLayers();
     geofenceLayerRef.current?.clearLayers();
     markerLayerRef.current?.clearLayers();
     meshLineLayerRef.current?.clearLayers();
@@ -476,7 +569,10 @@ export default function PlannerPage() {
     const h = selectedZone.height || 100;
     const bounds: [[number, number], [number, number]] = [[0, 0], [h, w]];
 
-    // Render floor plan image if available
+    // 1. Clear zone layer (no blue overlay covering the floor plan)
+    zoneLayerRef.current?.clearLayers();
+
+    // 2. Render floor plan image if available
     if (selectedZone.floorPlanUrl) {
       const imageUrl = `${getBackendUrl()}${selectedZone.floorPlanUrl}`;
       imageOverlayRef.current = L.imageOverlay(imageUrl, bounds, {
@@ -485,14 +581,19 @@ export default function PlannerPage() {
       }).addTo(map);
     }
 
+    // 3. Recalculate Leaflet size & bounds
+    map.invalidateSize();
     map.fitBounds(bounds);
     map.setMaxBounds(bounds);
+
     setTimeout(() => {
       if (mapRef.current) {
+        mapRef.current.invalidateSize();
         const minZ = mapRef.current.getBoundsZoom(bounds, false);
         mapRef.current.setMinZoom(minZ);
+        mapRef.current.fitBounds(bounds);
       }
-    }, 50);
+    }, 100);
 
     // Draw existing geofence polygons
     if (selectedZone.geofences) {
@@ -985,6 +1086,8 @@ export default function PlannerPage() {
     }
   }, [assets, selectedZoneId]);
 
+
+
   // ─── Create New Zone ──────────────────────────────────────────────
   const handleCreateZone = async () => {
     const targetSiteId = newZoneSiteId || sites[0]?.id;
@@ -1004,6 +1107,23 @@ export default function PlannerPage() {
         const created = await res.json();
         setNewZoneName('');
         setShowNewZoneForm(false);
+
+        // Auto assign to building group if selected
+        if (newZoneGroupId) {
+          const targetGroup = buildingGroups.find((g) => g.id === newZoneGroupId);
+          if (targetGroup) {
+            const newFloors = [
+              ...targetGroup.floors,
+              { zoneId: created.id, floorName: created.name, floorOrder: targetGroup.floors.length + 1 }
+            ];
+            const updatedGroups = buildingGroups.map((g) =>
+              g.id === newZoneGroupId ? { ...g, floors: newFloors } : g
+            );
+            saveBuildingGroupsState(updatedGroups);
+            setSelectedGroupId(newZoneGroupId);
+          }
+        }
+
         fetchSitesAndZones();
         setSelectedZoneId(created.id);
       }
@@ -1524,30 +1644,47 @@ export default function PlannerPage() {
     <div className="flex h-full gap-4">
       {/* ─── LEFT SIDEBAR PANEL ───────────────────────────────────── */}
       <div className="w-80 flex-shrink-0 flex flex-col gap-3 overflow-y-auto">
-        {/* Zone Selector */}
-        <Card className="rounded-2xl border-border shadow-md">
+        {/* Unified Zones & Building Groups Tree Card */}
+        <Card className="rounded-2xl border-border shadow-md bg-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-bold flex items-center justify-between text-foreground">
-              <span className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-primary" />
-                Zones / Floor Plans
+              <span className="flex items-center gap-1.5">
+                <Building2 className="h-4 w-4 text-primary" />
+                Zones & Building Groups
               </span>
               {isAdmin && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 text-[10px] px-2.5 cursor-pointer border-primary/50 text-primary hover:bg-primary/10 font-bold"
-                  onClick={() => setShowNewZoneForm(!showNewZoneForm)}
-                >
-                  <Plus className="h-3 w-3 mr-1" /> Add Zones
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[10px] px-2 cursor-pointer border-primary/50 text-primary hover:bg-primary/10 font-bold"
+                    onClick={() => {
+                      setEditingGroupId(null);
+                      setGroupModalName('');
+                      setGroupModalDesc('');
+                      setGroupModalFloors(zones.map((z, i) => ({ zoneId: z.id, floorName: z.name, floorOrder: i + 1 })));
+                      setShowGroupModal(true);
+                    }}
+                  >
+                    <Plus className="h-3 w-3 mr-0.5" /> + Group
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[10px] px-2 cursor-pointer border-primary/50 text-primary hover:bg-primary/10 font-bold"
+                    onClick={() => setShowNewZoneForm(!showNewZoneForm)}
+                  >
+                    <Plus className="h-3 w-3 mr-0.5" /> + Zone
+                  </Button>
+                </div>
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
+            {/* Form to Add New Zone */}
             {showNewZoneForm && (
               <div className="p-3 rounded-xl bg-secondary/50 border border-border space-y-2 mb-2">
-                <div className="text-[11px] font-bold text-foreground">Tambah Zone Baru</div>
+                <div className="text-[11px] font-bold text-foreground">Tambah Zone / Denah Baru</div>
                 <div>
                   <label className="text-[9px] text-muted-foreground uppercase font-bold">Nama Zone</label>
                   <input
@@ -1557,6 +1694,19 @@ export default function PlannerPage() {
                     value={newZoneName}
                     onChange={(e) => setNewZoneName(e.target.value)}
                   />
+                </div>
+                <div>
+                  <label className="text-[9px] text-muted-foreground uppercase font-bold">Building Group (Parent)</label>
+                  <select
+                    className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                    value={newZoneGroupId}
+                    onChange={(e) => setNewZoneGroupId(e.target.value)}
+                  >
+                    <option value="">-- Standalone (Tanpa Group) --</option>
+                    {buildingGroups.map((g) => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -1589,137 +1739,338 @@ export default function PlannerPage() {
               </div>
             )}
 
-            {zones.length === 0 && (
+            {/* Parent-Child Tree View of Building Groups & Zones */}
+            {buildingGroups.length === 0 && zones.length === 0 ? (
               <p className="text-[11px] text-muted-foreground italic">
-                No zones found. Create a zone to begin.
+                Belum ada data gedung atau zona denah.
               </p>
-            )}
-            {zones.map((z) => (
-              <div key={z.id} className="space-y-1">
-                {editingZoneId === z.id ? (
-                  <div className="p-3 rounded-xl bg-primary/10 border border-primary/40 space-y-2">
-                    <div className="text-[11px] font-bold text-foreground flex justify-between items-center">
-                      <span>Edit Zone & Denah</span>
-                      <button onClick={() => setEditingZoneId(null)} className="text-muted-foreground hover:text-foreground">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-muted-foreground uppercase font-bold">Nama Zone</label>
-                      <input
-                        type="text"
-                        className="w-full mt-0.5 px-2.5 py-1 rounded bg-background border border-border text-xs text-foreground"
-                        value={editZoneName}
-                        onChange={(e) => setEditZoneName(e.target.value)}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[9px] text-muted-foreground uppercase font-bold">Lebar (m)</label>
-                        <input
-                          type="number"
-                          className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
-                          value={editZoneWidth}
-                          onChange={(e) => setEditZoneWidth(Number(e.target.value))}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-muted-foreground uppercase font-bold">Tinggi (m)</label>
-                        <input
-                          type="number"
-                          className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
-                          value={editZoneHeight}
-                          onChange={(e) => setEditZoneHeight(Number(e.target.value))}
-                        />
-                      </div>
-                    </div>
-                    {/* Offset position inputs */}
-                    <div className="border-t border-border/60 pt-2">
-                      <label className="text-[9px] text-muted-foreground uppercase font-bold flex items-center gap-1">
-                        📍 Posisi pada Denah
-                      </label>
-                      <div className="grid grid-cols-2 gap-2 mt-1">
-                        <div>
-                          <label className="text-[8px] text-muted-foreground">Offset X (m)</label>
-                          <input
-                            type="number"
-                            step="0.5"
-                            className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
-                            value={editZoneOffsetX}
-                            onChange={(e) => setEditZoneOffsetX(Number(e.target.value))}
-                          />
+            ) : (
+              <div className="space-y-3">
+                {/* 1. Building Groups (Parents) */}
+                {buildingGroups.map((bg) => {
+                  const isGroupSelected = selectedGroupId === bg.id;
+                  const groupMeshCount = allTenantMesh.filter((m) =>
+                    bg.floors.some((fl) => m.zoneId === fl.zoneId || m.zone?.id === fl.zoneId)
+                  ).length;
+
+                  return (
+                    <div key={bg.id} className="space-y-1.5">
+                      {/* Parent Group Header */}
+                      <div
+                        onClick={() => setSelectedGroupId(bg.id)}
+                        className={`p-2 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between ${isGroupSelected
+                          ? 'bg-primary/10 border-primary/50 shadow-sm'
+                          : 'bg-secondary/40 border-border hover:bg-secondary'
+                          }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <Building2 className={`h-4 w-4 shrink-0 ${isGroupSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                          <div className="truncate">
+                            <span className="font-bold text-foreground block truncate">{bg.name}</span>
+                            <span className="text-[9px] text-muted-foreground font-mono">
+                              {bg.floors.length} Lantai · {groupMeshCount} Active Mesh
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <label className="text-[8px] text-muted-foreground">Offset Y (m)</label>
-                          <input
-                            type="number"
-                            step="0.5"
-                            className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
-                            value={editZoneOffsetY}
-                            onChange={(e) => setEditZoneOffsetY(Number(e.target.value))}
-                          />
+                        {isAdmin && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingGroupId(bg.id);
+                                setGroupModalName(bg.name);
+                                setGroupModalDesc(bg.description || '');
+                                setGroupModalFloors([...bg.floors]);
+                                setShowGroupModal(true);
+                              }}
+                              className="p-1 text-muted-foreground hover:text-primary rounded hover:bg-primary/10"
+                              title="Edit Building Group"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const filtered = buildingGroups.filter((g) => g.id !== bg.id);
+                                saveBuildingGroupsState(filtered);
+                                if (selectedGroupId === bg.id) {
+                                  setSelectedGroupId(filtered.length > 0 ? filtered[0].id : null);
+                                }
+                              }}
+                              className="p-1 text-muted-foreground hover:text-red-400 rounded hover:bg-red-400/10"
+                              title="Hapus Building Group"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Child Floor Plans / Zones (Indented Tree) */}
+                      {bg.floors.length > 0 && (
+                        <div className="ml-3 pl-2.5 border-l-2 border-primary/30 space-y-1">
+                          {bg.floors
+                            .sort((a, b) => b.floorOrder - a.floorOrder)
+                            .map((fl) => {
+                              const z = zones.find((item) => item.id === fl.zoneId);
+                              const isThisZoneActive = selectedZoneId === fl.zoneId;
+                              const floorMeshCount = allTenantMesh.filter((m) => m.zoneId === fl.zoneId || m.zone?.id === fl.zoneId).length;
+
+                              if (!z) {
+                                return (
+                                  <div key={fl.zoneId} className="p-1.5 rounded-lg border border-border bg-background text-[11px] flex items-center justify-between text-muted-foreground">
+                                    <span>↳ {fl.floorName}</span>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div key={z.id} className="space-y-1">
+                                  {editingZoneId === z.id ? (
+                                    <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/40 space-y-2">
+                                      <div className="text-[10px] font-bold text-foreground flex justify-between items-center">
+                                        <span>Edit Zone & Denah</span>
+                                        <button onClick={() => setEditingZoneId(null)} className="text-muted-foreground hover:text-foreground">
+                                          <X className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                      <div>
+                                        <label className="text-[8px] text-muted-foreground uppercase font-bold">Nama Zone</label>
+                                        <input
+                                          type="text"
+                                          className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                                          value={editZoneName}
+                                          onChange={(e) => setEditZoneName(e.target.value)}
+                                        />
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                          <label className="text-[8px] text-muted-foreground uppercase font-bold">Lebar (m)</label>
+                                          <input
+                                            type="number"
+                                            className="w-full mt-0.5 px-2 py-0.5 rounded bg-background border border-border text-xs text-foreground"
+                                            value={editZoneWidth}
+                                            onChange={(e) => setEditZoneWidth(Number(e.target.value))}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-[8px] text-muted-foreground uppercase font-bold">Tinggi (m)</label>
+                                          <input
+                                            type="number"
+                                            className="w-full mt-0.5 px-2 py-0.5 rounded bg-background border border-border text-xs text-foreground"
+                                            value={editZoneHeight}
+                                            onChange={(e) => setEditZoneHeight(Number(e.target.value))}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="flex gap-2 pt-1">
+                                        <Button size="sm" className="flex-1 h-6 text-[10px] cursor-pointer" onClick={handleUpdateZone}>
+                                          Save
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setEditingZoneId(null)}>
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      onClick={() => {
+                                        setSelectedGroupId(bg.id);
+                                        setSelectedZoneId(z.id);
+                                      }}
+                                      className={`p-1.5 rounded-lg border text-[11px] cursor-pointer transition-all flex items-center justify-between ${isThisZoneActive
+                                        ? 'bg-primary/10 border-primary text-foreground font-bold shadow-xs'
+                                        : 'bg-background border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                                        }`}
+                                    >
+                                      <div className="flex items-center gap-1.5 truncate">
+                                        <span className="text-muted-foreground font-mono text-[10px]">↳</span>
+                                        <div className="truncate">
+                                          <span className="block truncate font-semibold text-foreground">{z.name}</span>
+                                          <span className="text-[8.5px] text-muted-foreground font-mono">
+                                            {z.width}m × {z.height}m
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {floorMeshCount > 0 && (
+                                          <span className="px-1.5 py-0.2 rounded-full text-[8px] bg-emerald-500 text-white font-bold">
+                                            {floorMeshCount} Mesh
+                                          </span>
+                                        )}
+                                        {isAdmin && (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                startEditZone(z);
+                                              }}
+                                              className="p-1 text-muted-foreground hover:text-primary rounded hover:bg-primary/10"
+                                              title="Edit Zone"
+                                            >
+                                              <Pencil className="h-3 w-3" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteZone(z.id, z.name);
+                                              }}
+                                              className="p-1 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10"
+                                              title="Delete Zone"
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                         </div>
-                      </div>
-                      <p className="text-[8px] text-muted-foreground mt-1 italic">
-                        💡 Atau drag label zona pada peta untuk memindahkan posisinya
-                      </p>
+                      )}
                     </div>
-                    <div className="flex gap-2 pt-1">
-                      <Button size="sm" className="flex-1 h-6 text-[10px] cursor-pointer" onClick={handleUpdateZone}>
-                        Update Zone
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setEditingZoneId(null)}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    onClick={() => setSelectedZoneId(z.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all border cursor-pointer ${selectedZoneId === z.id
-                      ? 'bg-primary/10 border-primary text-primary font-bold'
-                      : 'bg-secondary/50 border-border text-muted-foreground hover:bg-secondary'
-                      }`}
-                  >
-                    <div className="truncate mr-2">
-                      <div className="font-bold truncate">{z.name}</div>
-                      <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                        {z.width}×{z.height}m
-                        {(z.offsetX || z.offsetY) ? ` · ↔${z.offsetX ?? 0}m ↕${z.offsetY ?? 0}m` : ''}
+                  );
+                })}
+
+                {/* 2. Standalone / Unassigned Zones (Zones not in any group) */}
+                {(() => {
+                  const assignedZoneIds = new Set(
+                    buildingGroups.flatMap((g) => g.floors.map((f) => f.zoneId))
+                  );
+                  const standaloneZones = zones.filter((z) => !assignedZoneIds.has(z.id));
+
+                  if (standaloneZones.length === 0) return null;
+
+                  return (
+                    <div className="pt-2 border-t border-border/50 space-y-1.5">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1">
+                        Denah Standalone ({standaloneZones.length})
+                      </div>
+                      <div className="space-y-1">
+                        {standaloneZones.map((z) => {
+                          const isThisZoneActive = selectedZoneId === z.id;
+                          const meshCount = allTenantMesh.filter((m) => m.zoneId === z.id || m.zone?.id === z.id).length;
+
+                          return (
+                            <div key={z.id} className="space-y-1">
+                              {editingZoneId === z.id ? (
+                                <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/40 space-y-2">
+                                  <div className="text-[10px] font-bold text-foreground flex justify-between items-center">
+                                    <span>Edit Zone & Denah</span>
+                                    <button onClick={() => setEditingZoneId(null)} className="text-muted-foreground hover:text-foreground">
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                  <div>
+                                    <label className="text-[8px] text-muted-foreground uppercase font-bold">Nama Zone</label>
+                                    <input
+                                      type="text"
+                                      className="w-full mt-0.5 px-2 py-1 rounded bg-background border border-border text-xs text-foreground"
+                                      value={editZoneName}
+                                      onChange={(e) => setEditZoneName(e.target.value)}
+                                    />
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="text-[8px] text-muted-foreground uppercase font-bold">Lebar (m)</label>
+                                      <input
+                                        type="number"
+                                        className="w-full mt-0.5 px-2 py-0.5 rounded bg-background border border-border text-xs text-foreground"
+                                        value={editZoneWidth}
+                                        onChange={(e) => setEditZoneWidth(Number(e.target.value))}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[8px] text-muted-foreground uppercase font-bold">Tinggi (m)</label>
+                                      <input
+                                        type="number"
+                                        className="w-full mt-0.5 px-2 py-0.5 rounded bg-background border border-border text-xs text-foreground"
+                                        value={editZoneHeight}
+                                        onChange={(e) => setEditZoneHeight(Number(e.target.value))}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 pt-1">
+                                    <Button size="sm" className="flex-1 h-6 text-[10px] cursor-pointer" onClick={handleUpdateZone}>
+                                      Save
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-6 text-[10px] cursor-pointer" onClick={() => setEditingZoneId(null)}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  onClick={() => {
+                                    setSelectedGroupId(null);
+                                    setSelectedZoneId(z.id);
+                                  }}
+                                  className={`p-1.5 rounded-lg border text-[11px] cursor-pointer transition-all flex items-center justify-between ${isThisZoneActive
+                                    ? 'bg-primary/10 border-primary text-foreground font-bold shadow-xs'
+                                    : 'bg-background border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                                    }`}
+                                >
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
+                                    <div className="truncate">
+                                      <span className="block truncate font-semibold text-foreground">{z.name}</span>
+                                      <span className="text-[8.5px] text-muted-foreground font-mono">
+                                        {z.width}m × {z.height}m
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {meshCount > 0 && (
+                                      <span className="px-1.5 py-0.2 rounded-full text-[8px] bg-emerald-500 text-white font-bold">
+                                        {meshCount} Mesh
+                                      </span>
+                                    )}
+                                    {isAdmin && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startEditZone(z);
+                                          }}
+                                          className="p-1 text-muted-foreground hover:text-primary rounded hover:bg-primary/10"
+                                          title="Edit Zone"
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteZone(z.id, z.name);
+                                          }}
+                                          className="p-1 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10"
+                                          title="Delete Zone"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    {isAdmin && (
-                      <div className="flex items-center gap-0.5 flex-shrink-0">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0 hover:bg-primary/20 text-muted-foreground hover:text-primary cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEditZone(z);
-                          }}
-                          title="Edit Nama & Ukuran Denah"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0 hover:bg-destructive/20 text-muted-foreground hover:text-destructive cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteZone(z.id, z.name);
-                          }}
-                          title="Delete Floor Plan"
-                        >
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  );
+                })()}
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
 
@@ -1760,7 +2111,7 @@ export default function PlannerPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold flex items-center justify-between text-foreground">
                 <span className="flex items-center gap-2">
-                  <Radio className="h-4 w-4 text-cyan-400" />
+                  <Anchor className="h-4 w-4 text-cyan-400" />
                   Anchor Placement
                 </span>
                 <div className="flex items-center gap-1.5">
@@ -1838,16 +2189,16 @@ export default function PlannerPage() {
                     return (
                       <div
                         key={an.id}
-                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${isPlacedOnCurrent
-                          ? 'bg-cyan-950/20 border-cyan-500/30 text-cyan-300'
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs transition-all ${isPlacedOnCurrent
+                          ? 'bg-cyan-500/10 border-cyan-500/30 shadow-xs'
                           : 'bg-secondary/40 border-border text-foreground'
                           }`}
                       >
                         <div className="flex items-center gap-2 truncate mr-2">
-                          <Radio className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-cyan-400' : 'text-muted-foreground'}`} />
+                          <Anchor className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-cyan-500' : 'text-muted-foreground'}`} />
                           <div className="truncate">
-                            <div className="font-bold text-[11px] truncate">{an.name}</div>
-                            <div className="text-[9px] text-muted-foreground font-mono">
+                            <div className="font-bold text-[11px] truncate text-foreground">{an.name}</div>
+                            <div className="text-[9px] font-mono text-muted-foreground">
                               {isPlacedOnCurrent ? `Pos: (${an.x}m, ${an.y}m)` : 'Unplaced'}
                             </div>
                           </div>
@@ -1901,7 +2252,7 @@ export default function PlannerPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold flex items-center justify-between text-foreground">
                 <span className="flex items-center gap-2">
-                  <Radio className="h-4 w-4 text-emerald-400" />
+                  <Eye className="h-4 w-4 text-emerald-400" />
                   Mesh / Asset Placement
                 </span>
                 <Badge variant="secondary" className="text-[10px]">
@@ -1931,58 +2282,40 @@ export default function PlannerPage() {
                     return (
                       <div
                         key={ms.id}
-                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs ${isPlacedOnCurrent
-                          ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs transition-all ${isPlacedOnCurrent
+                          ? 'bg-emerald-500/10 border-emerald-500/30 shadow-xs'
                           : 'bg-secondary/40 border-border text-foreground'
                           }`}
                       >
                         <div className="flex items-center gap-2 truncate mr-2">
-                          <Tag className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-emerald-400' : 'text-muted-foreground'}`} />
+                          <Eye className={`h-3.5 w-3.5 flex-shrink-0 ${isPlacedOnCurrent ? 'text-emerald-500' : 'text-muted-foreground'}`} />
                           <div className="truncate">
-                            <div className="font-bold text-[11px] truncate">{ms.name}</div>
-                            <div className="text-[9px] text-muted-foreground font-mono">
+                            <div className="font-bold text-[11px] truncate text-foreground">{ms.name}</div>
+                            <div className="text-[9px] font-mono text-muted-foreground">
                               {isPlacedOnCurrent
                                 ? `Pos: (${ms.planX?.toFixed(1) ?? '?'}m, ${ms.planY?.toFixed(1) ?? '?'}m)`
                                 : ms.type || 'MESH'}
                             </div>
                             {isPlacedOnCurrent && (ms.tag?.battery !== null && ms.tag?.battery !== undefined || ms.tag?.temperature !== null && ms.tag?.temperature !== undefined || ms.tag?.humidity !== null && ms.tag?.humidity !== undefined) && (
-                              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] bg-slate-900/50 p-1 rounded border border-slate-700/50">
+                              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] bg-background/80 p-1 rounded border border-border">
                                 {ms.tag?.battery !== null && ms.tag?.battery !== undefined && (
-                                  <span className="flex items-center gap-0.5 text-yellow-400">
+                                  <span className="flex items-center gap-0.5 text-amber-600 dark:text-yellow-400 font-medium">
                                     {'\U0001f50b'} <span className="font-bold">{ms.tag.battery.toFixed(0)}%</span>
                                   </span>
                                 )}
                                 {ms.tag?.temperature !== null && ms.tag?.temperature !== undefined && (
-                                  <span className="flex items-center gap-0.5 text-orange-400">
+                                  <span className="flex items-center gap-0.5 text-orange-600 dark:text-orange-400 font-medium">
                                     {'\U0001f321\ufe0f'} <span className="font-bold">{ms.tag.temperature.toFixed(1)}°C</span>
                                   </span>
                                 )}
                                 {ms.tag?.humidity !== null && ms.tag?.humidity !== undefined && (
-                                  <span className="flex items-center gap-0.5 text-sky-400">
+                                  <span className="flex items-center gap-0.5 text-sky-600 dark:text-sky-400 font-medium">
                                     {'\U0001f4a7'} <span className="font-bold">{ms.tag.humidity.toFixed(1)}%</span>
                                   </span>
                                 )}
                               </div>
                             )}
-                            {isPlacedOnCurrent && ms.tag?.signals && (() => {
-                              try {
-                                const sigs = JSON.parse(ms.tag.signals);
-                                if (Array.isArray(sigs) && sigs.length > 0) {
-                                  return (
-                                    <div className="mt-1 space-y-0.5 text-[8px] bg-emerald-950/40 p-1 rounded border border-emerald-500/20 text-left">
-                                      <span className="font-bold text-[8px] text-emerald-400">Anchor Signals:</span>
-                                      {sigs.map((s: any) => (
-                                        <div key={s.anchorId} className="flex justify-between gap-1 text-[8px]">
-                                          <span className="truncate max-w-[80px]">{s.anchorName}</span>
-                                          <span className="font-bold text-emerald-300">{s.rssi} dBm</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  );
-                                }
-                              } catch (e) { }
-                              return null;
-                            })()}
+
                           </div>
                         </div>
 
@@ -2344,6 +2677,34 @@ export default function PlannerPage() {
           </span>
           <div className="flex-1" />
           <div className="flex items-center gap-1.5">
+            {/* View Mode Switchers */}
+            <div className="flex items-center p-0.5 bg-secondary/60 border border-border rounded-xl">
+              <button
+                type="button"
+                onClick={() => setViewMode('single_2d')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${viewMode === 'single_2d'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                title="Single Floor 2D Canvas"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">2D Canvas</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('split_grid')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${viewMode === 'split_grid'
+                  ? 'bg-emerald-500 text-white shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                title="Split Grid Multi-Floor View"
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Split Grid (2D)</span>
+              </button>
+            </div>
+
             <button
               onClick={() => {
                 setDrawMode('pointer');
@@ -2407,10 +2768,150 @@ export default function PlannerPage() {
           </div>
         </div>
 
-        {/* Map Canvas */}
-        <div className="flex-1 rounded-2xl overflow-hidden border border-border shadow-2xl bg-card relative min-h-[500px]">
-          {!selectedZoneId && (
-            <div className="absolute inset-0 z-[2000] flex flex-col items-center justify-center p-6 bg-card/95 backdrop-blur-md overflow-y-auto">
+        {/* Map Canvas & Multi-Floor Views */}
+        <div className="flex-1 rounded-2xl overflow-hidden border border-border shadow-2xl bg-card relative min-h-[500px] isolate">
+
+
+          {/* VIEW MODE: SPLIT GRID MULTI-FLOOR VIEW */}
+          {viewMode === 'split_grid' && (
+            <div className="absolute inset-0 z-[1000] bg-background p-4 overflow-y-auto animate-in fade-in duration-200">
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-emerald-500" />
+                  <h3 className="text-sm font-bold text-foreground">
+                    Split Screen Floor Grid — {buildingGroups.find(g => g.id === selectedGroupId)?.name || 'Building Floors'}
+                  </h3>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setViewMode('single_2d')}
+                >
+                  <X className="h-3.5 w-3.5 mr-1" /> Close Grid
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(() => {
+                  const currentGroup = buildingGroups.find(g => g.id === selectedGroupId) || buildingGroups[0];
+                  if (!currentGroup || currentGroup.floors.length === 0) {
+                    return (
+                      <div className="col-span-2 text-center py-12 text-muted-foreground text-xs italic">
+                        Belum ada lantai di dalam grup gedung ini.
+                      </div>
+                    );
+                  }
+
+                  return currentGroup.floors.map((fl) => {
+                    const zone = zones.find(z => z.id === fl.zoneId);
+                    const floorMesh = allTenantMesh.filter(m => m.zoneId === fl.zoneId || m.zone?.id === fl.zoneId);
+
+                    return (
+                      <div
+                        key={fl.zoneId}
+                        onClick={() => {
+                          setSelectedZoneId(fl.zoneId);
+                          setViewMode('single_2d');
+                        }}
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer ${selectedZoneId === fl.zoneId
+                          ? 'bg-primary/5 border-primary shadow-md'
+                          : 'bg-card border-border hover:bg-secondary/40'
+                          }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="font-mono text-xs">
+                              Lantai {fl.floorOrder}
+                            </Badge>
+                            <span className="font-bold text-xs text-foreground">{fl.floorName}</span>
+                          </div>
+                          <Badge className="bg-emerald-500 text-white text-[10px]">
+                            {floorMesh.length} Mesh Active
+                          </Badge>
+                        </div>
+
+                        <div className="w-full h-56 bg-secondary/30 rounded-xl border border-border relative overflow-hidden flex items-center justify-center">
+                          {zone?.floorPlanUrl ? (
+                            <img
+                              src={`${getBackendUrl()}${zone.floorPlanUrl}`}
+                              alt={fl.floorName}
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground font-mono">No floorplan image</span>
+                          )}
+
+                          {floorMesh.map((m) => {
+                            const posX = zone?.width ? Math.min(95, Math.max(5, ((m.planX || zone.width / 2) / zone.width) * 100)) : 50;
+                            const posY = zone?.height ? Math.min(95, Math.max(5, ((m.planY || zone.height / 2) / zone.height) * 100)) : 50;
+                            return (
+                              <div
+                                key={m.id}
+                                className="absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 bg-background/90 p-1 rounded border border-border shadow-sm text-[9px] font-bold"
+                                style={{ left: `${posX}%`, top: `${posY}%` }}
+                              >
+                                <Tag className="h-3 w-3 text-emerald-500" />
+                                <span>{m.name}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* ELEVATOR SWITCHER WIDGET (Left floating bar in Single 2D Canvas) */}
+          {selectedGroupId && viewMode === 'single_2d' && (() => {
+            const currentGroup = buildingGroups.find(g => g.id === selectedGroupId);
+            if (!currentGroup || currentGroup.floors.length <= 1) return null;
+
+            // Only show elevator widget if the currently selected zone belongs to this building group
+            const isSelectedZoneInThisGroup = currentGroup.floors.some(f => f.zoneId === selectedZoneId);
+            if (!isSelectedZoneInThisGroup) return null;
+
+            const sortedFloors = [...currentGroup.floors].sort((a, b) => b.floorOrder - a.floorOrder);
+
+            return (
+              <div className="absolute top-4 left-4 z-[800] bg-card/90 backdrop-blur-md border border-border rounded-xl p-1.5 shadow-xl flex flex-col gap-1 space-y-0.5">
+                <div className="text-[9px] font-bold uppercase text-muted-foreground text-center px-1 border-b border-border/50 pb-1 mb-0.5">
+                  Elevator
+                </div>
+                {sortedFloors.map((fl) => {
+                  const isActive = selectedZoneId === fl.zoneId;
+                  const count = allTenantMesh.filter(m => m.zoneId === fl.zoneId || m.zone?.id === fl.zoneId).length;
+
+                  return (
+                    <button
+                      key={fl.zoneId}
+                      type="button"
+                      onClick={() => setSelectedZoneId(fl.zoneId)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-between gap-2 border ${isActive
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                        : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:bg-secondary'
+                        }`}
+                      title={`Switch to ${fl.floorName}`}
+                    >
+                      <span className="font-mono">L{fl.floorOrder}</span>
+                      <span className="text-[10px] truncate max-w-[70px] font-normal">{fl.floorName}</span>
+                      {count > 0 && (
+                        <span className={`px-1 py-0.2 rounded-full text-[8px] font-bold ${isActive ? 'bg-primary-foreground text-primary' : 'bg-emerald-500 text-white'}`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {!selectedZoneId && viewMode === 'single_2d' && (
+            <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center p-6 bg-card/95 backdrop-blur-md overflow-y-auto">
               <div className="max-w-2xl w-full text-center space-y-6">
                 <div className="flex flex-col items-center">
                   <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mb-3">
@@ -2436,7 +2937,11 @@ export default function PlannerPage() {
                       return (
                         <div
                           key={z.id}
-                          onClick={() => setSelectedZoneId(z.id)}
+                          onClick={() => {
+                            const parentGroup = buildingGroups.find(g => g.floors.some(f => f.zoneId === z.id));
+                            setSelectedGroupId(parentGroup ? parentGroup.id : null);
+                            setSelectedZoneId(z.id);
+                          }}
                           className="group relative p-4 rounded-2xl bg-secondary/40 hover:bg-secondary border border-border hover:border-primary/50 transition-all cursor-pointer shadow-md flex flex-col justify-between"
                         >
                           <div className="flex items-start justify-between">
@@ -2451,7 +2956,7 @@ export default function PlannerPage() {
 
                           <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between">
                             <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                              <MapPin className="h-3.5 w-3.5 text-sky-400" />
+                              <MapPin className="h-3.5 w-3.5 text-primary" />
                               {anchorCount} Anchor · {geofenceCount} Geofence · {meshCount} Mesh
                             </span>
                             <span className="text-xs font-bold text-primary flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
@@ -2485,7 +2990,7 @@ export default function PlannerPage() {
           <div ref={mapContainerRef} className="w-full h-full min-h-[500px]" />
 
           {selectedZone && (
-            <div className="absolute top-4 right-4 z-[1000]">
+            <div className="absolute top-4 right-4 z-[800]">
               {showLegend ? (
                 <Card className="w-64 shadow-xl border-slate-200">
                   <CardHeader className="p-3 border-b border-slate-100 flex flex-row items-center justify-between bg-slate-50/50 space-y-0">
@@ -2502,7 +3007,7 @@ export default function PlannerPage() {
                         checked={layerVisibility.geofence}
                         onChange={(e) => setLayerVisibility(prev => ({ ...prev, geofence: e.target.checked }))}
                       />
-                      <Hexagon className="w-4 h-4 text-sky-500" /> Geofences
+                      <Hexagon className="w-4 h-4 text-primary" /> Geofences
                     </label>
                     <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded transition-colors">
                       <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -2548,6 +3053,164 @@ export default function PlannerPage() {
         onConfirm={() => plannerConfirm?.onConfirm()}
         onCancel={() => setPlannerConfirm(null)}
       />
+
+      {/* BUILDING GROUP MANAGER MODAL */}
+      {showGroupModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between shadow-sm shrink-0">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Building2 className="h-4.5 w-4.5" />
+                <span>{editingGroupId ? 'Edit Building Group' : 'Tambah Building Group Baru'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGroupModal(false)}
+                className="p-1 hover:bg-black/20 rounded-lg text-primary-foreground/80 hover:text-primary-foreground cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4 overflow-y-auto space-y-4 flex-1">
+              <div className="space-y-1">
+                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Nama Gedung *</label>
+                <input
+                  type="text"
+                  value={groupModalName}
+                  onChange={(e) => setGroupModalName(e.target.value)}
+                  placeholder="e.g. Gedung Utama Tower A"
+                  className="w-full px-3 py-1.5 bg-background border border-border rounded-xl text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Deskripsi (Opsional)</label>
+                <input
+                  type="text"
+                  value={groupModalDesc}
+                  onChange={(e) => setGroupModalDesc(e.target.value)}
+                  placeholder="e.g. Gedung administrasi & operasional 4 lantai"
+                  className="w-full px-3 py-1.5 bg-background border border-border rounded-xl text-xs font-medium text-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Lantai / Floor Plans ({groupModalFloors.length})</span>
+                </div>
+
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {zones.map((z) => {
+                    const isAdded = groupModalFloors.some((f) => f.zoneId === z.id);
+                    const currentFloorObj = groupModalFloors.find((f) => f.zoneId === z.id);
+
+                    return (
+                      <div
+                        key={z.id}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition-all ${isAdded ? 'bg-primary/10 border-primary/40' : 'bg-secondary/20 border-border opacity-75'
+                          }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <input
+                            type="checkbox"
+                            checked={isAdded}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setGroupModalFloors((prev) => [
+                                  ...prev,
+                                  { zoneId: z.id, floorName: z.name, floorOrder: prev.length + 1 }
+                                ]);
+                              } else {
+                                setGroupModalFloors((prev) => prev.filter((f) => f.zoneId !== z.id));
+                              }
+                            }}
+                            className="rounded border-border text-primary focus:ring-primary cursor-pointer"
+                          />
+                          <span className="font-bold text-foreground truncate">{z.name}</span>
+                        </div>
+
+                        {isAdded && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <input
+                              type="text"
+                              value={currentFloorObj?.floorName || z.name}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setGroupModalFloors((prev) =>
+                                  prev.map((f) => (f.zoneId === z.id ? { ...f, floorName: val } : f))
+                                );
+                              }}
+                              placeholder="Nama Lantai"
+                              className="w-24 px-2 py-0.5 bg-background border border-border rounded text-[10px] font-medium"
+                            />
+                            <div className="flex items-center gap-1 text-[10px]">
+                              <span className="text-muted-foreground font-mono">Order:</span>
+                              <input
+                                type="number"
+                                value={currentFloorObj?.floorOrder || 1}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setGroupModalFloors((prev) =>
+                                    prev.map((f) => (f.zoneId === z.id ? { ...f, floorOrder: val } : f))
+                                  );
+                                }}
+                                className="w-12 px-1.5 py-0.5 bg-background border border-border rounded text-[10px] font-mono text-center"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-secondary/20 border-t border-border flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowGroupModal(false)}
+                className="px-4 py-1.5 text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/80 rounded-lg transition-colors cursor-pointer uppercase tracking-wider"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const nameTrim = groupModalName.trim() || 'Gedung Tanpa Nama';
+                  if (editingGroupId) {
+                    const updated = buildingGroups.map((g) =>
+                      g.id === editingGroupId
+                        ? { ...g, name: nameTrim, description: groupModalDesc, floors: groupModalFloors }
+                        : g
+                    );
+                    saveBuildingGroupsState(updated);
+                  } else {
+                    const newGroup: BuildingGroup = {
+                      id: `bg-${Date.now()}`,
+                      name: nameTrim,
+                      description: groupModalDesc,
+                      floors: groupModalFloors
+                    };
+                    const updated = [...buildingGroups, newGroup];
+                    saveBuildingGroupsState(updated);
+                    setSelectedGroupId(newGroup.id);
+                  }
+                  setShowGroupModal(false);
+                }}
+                className="px-5 py-1.5 text-xs font-bold text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg shadow-sm transition-colors cursor-pointer uppercase tracking-wider"
+              >
+                SAVE BUILDING GROUP
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
