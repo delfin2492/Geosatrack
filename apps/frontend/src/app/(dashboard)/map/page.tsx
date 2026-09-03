@@ -5,6 +5,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import { getApiUrl } from '../../lib/api';
 import FloorMap, { MapAsset } from '../../components/FloorMap';
+import { getAssetMarkerIcon } from '../../lib/icon-utils';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -116,7 +117,11 @@ export default function MapPage() {
     let isMounted = true;
     const fetchAssetTypes = async () => {
       try {
-        const res = await fetch(`${getApiUrl()}/asset-types`);
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+
+        const res = await fetch(`${getApiUrl()}/asset-types`, { headers });
         if (res.ok && isMounted) {
           const data = await res.json();
           setDbAssetTypes(data);
@@ -127,7 +132,7 @@ export default function MapPage() {
     };
     fetchAssetTypes();
     return () => { isMounted = false; };
-  }, []);
+  }, [token, tenantId]);
 
   const getSelectedAssetIconComp = (type: string = '', name: string = '') => {
     const t = (type || '').toUpperCase();
@@ -699,13 +704,12 @@ export default function MapPage() {
           {selectedAsset && (
             <Card className="absolute top-4 right-4 z-20 w-80 flex flex-col overflow-hidden rounded-xl border border-border shadow-2xl bg-card/95 backdrop-blur-md max-h-[500px]">
               {/* Header */}
-              <div className={`p-3 text-white flex items-center justify-between font-sans ${
-                selectedAsset.status === 'tilt_warning' || selectedAsset.status === 'fall_detected'
-                  ? 'bg-gradient-to-r from-orange-500 to-red-600'
-                  : selectedAsset.status === 'moving'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600'
-                  : 'bg-gradient-to-r from-slate-700 to-slate-900'
-              }`}>
+              <div 
+                className="p-3 text-white flex items-center justify-between font-sans"
+                style={{
+                  background: `linear-gradient(to bottom right, ${getAssetMarkerIcon(selectedAsset.type, selectedAsset.name, dbAssetTypes).color}ee, ${getAssetMarkerIcon(selectedAsset.type, selectedAsset.name, dbAssetTypes).color}99)`
+                }}
+              >
                 <div className="flex items-center gap-1.5 min-w-0">
                   {React.createElement(getSelectedAssetIconComp(selectedAsset.type, selectedAsset.name), {
                     className: 'h-4 w-4 shrink-0 animate-pulse'

@@ -45,7 +45,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isImpersonating, 
     switchTenantContext,
     exitImpersonation, 
-    logout 
+    logout,
+    updateSession
   } = useAuth();
   const tenantLogoUrl = user?.tenantLogoUrl;
   const { theme, toggleTheme } = useTheme();
@@ -55,11 +56,92 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [tenantList, setTenantList] = useState<any[]>([]);
   const [loadingTenants, setLoadingTenants] = useState(false);
 
+  // System Branding States
+  const [platformLogo, setPlatformLogo] = useState<string | null>(null);
+  const [platformFavicon, setPlatformFavicon] = useState<string | null>(null);
+
+  // Active Branding Selection (Tenant White-Label vs System Global)
+  const isWhiteLabelTenant = !isSuperAdmin && Boolean(user?.isWhiteLabel);
+  const activeLogoUrl = (isWhiteLabelTenant && user?.tenantLogoUrl) ? user.tenantLogoUrl : platformLogo;
+  const activeFaviconUrl = (isWhiteLabelTenant && user?.tenantFaviconUrl) ? user.tenantFaviconUrl : platformFavicon;
+  const activeThemeColor = (isWhiteLabelTenant && user?.tenantThemeColor) ? user.tenantThemeColor : null;
+
   useEffect(() => {
     if (initialized && !authenticated) {
       router.replace('/login');
     }
   }, [initialized, authenticated, router]);
+
+  useEffect(() => {
+    // Fetch system settings & live tenant branding
+    const fetchBranding = async () => {
+      if (!authenticated) return;
+      try {
+        const res = await fetch(`${getApiUrl()}/system-settings`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.platform_logo_url) setPlatformLogo(data.platform_logo_url);
+          if (data.platform_favicon_url) setPlatformFavicon(data.platform_favicon_url);
+        }
+      } catch (e) {}
+
+      if (user?.tenantId) {
+        try {
+          const tenantRes = await fetch(`${getApiUrl()}/tenants/${user.tenantId}`);
+          if (tenantRes.ok) {
+            const tenantData = await tenantRes.json();
+            updateSession({
+              tenantLogoUrl: tenantData.logoUrl || undefined,
+              tenantFaviconUrl: tenantData.faviconUrl || undefined,
+              isWhiteLabel: tenantData.isWhiteLabel,
+              tenantThemeColor: tenantData.themeColor || undefined,
+            });
+          }
+        } catch (e) {}
+      }
+    };
+    fetchBranding();
+  }, [authenticated, user?.tenantId]);
+
+  useEffect(() => {
+    if (activeFaviconUrl) {
+      const faviconHref = `${getBackendUrl()}${activeFaviconUrl}?v=${Date.now()}`;
+      
+      // Remove any existing favicon tags to force browser tab re-render
+      const existingIcons = document.querySelectorAll("link[rel*='icon']");
+      existingIcons.forEach((el) => el.remove());
+
+      // Create new link elements
+      const linkShortcut = document.createElement('link');
+      linkShortcut.rel = 'shortcut icon';
+      linkShortcut.href = faviconHref;
+      document.head.appendChild(linkShortcut);
+
+      const linkIcon = document.createElement('link');
+      linkIcon.rel = 'icon';
+      linkIcon.type = 'image/png';
+      linkIcon.href = faviconHref;
+      document.head.appendChild(linkIcon);
+    }
+  }, [activeFaviconUrl]);
+
+function getContrastColor(hexColor: string): string {
+  const hex = hexColor.replace('#', '');
+  if (hex.length !== 6) return '#ffffff';
+  const r = parseInt(hex.substring(0, 2), 16) || 0;
+  const g = parseInt(hex.substring(2, 4), 16) || 0;
+  const b = parseInt(hex.substring(4, 6), 16) || 0;
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 150 ? '#09090b' : '#ffffff';
+}
+
+  useEffect(() => {
+    if (activeThemeColor) {
+      document.documentElement.style.setProperty('--primary', activeThemeColor);
+      document.documentElement.style.setProperty('--ring', activeThemeColor);
+      document.documentElement.style.setProperty('--primary-foreground', getContrastColor(activeThemeColor));
+    }
+  }, [activeThemeColor]);
 
   useEffect(() => {
     if (showTenantPopup) {
@@ -94,8 +176,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: 'Automation Rules', href: '/rules', icon: ShieldAlert },
     { name: 'Live Logs', href: '/logs', icon: Terminal },
     { name: 'Insights', href: '/insights', icon: Activity },
-    // Settings hanya untuk Admin
-    ...(isAdmin ? [{ name: 'Settings', href: '/settings', icon: Settings }] : []),
+    { name: 'Settings', href: '/settings', icon: Settings },
   ];
 
   // Dynamic Navigation based on Superadmin status and Impersonation status
@@ -128,18 +209,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className="w-64 bg-card border-r border-border flex flex-col justify-between shrink-0">
         <div>
           {/* Logo Brand */}
-          <div className="h-16 flex items-center gap-3 px-6 border-b border-border">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/30">
-              <Boxes className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-                Geomesh
-              </h2>
-              <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
-                Manager Console
-              </p>
-            </div>
+          <div className="h-16 flex items-center px-6 border-b border-border">
+            {activeLogoUrl ? (
+              <img src={`${getBackendUrl()}${activeLogoUrl}`} alt="Platform Logo" className="object-contain h-8 w-auto max-w-full" />
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/30">
+                  <Boxes className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
+                    Geomesh
+                  </h2>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
+                    Manager Console
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Navigation Links */}
@@ -213,12 +300,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* User Account */}
             <div className="flex items-center gap-3 px-2 py-1.5 bg-secondary/35 rounded-lg border border-border/50">
               <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0 relative overflow-hidden">
-                {tenantLogoUrl ? (
+                {user?.avatarUrl ? (
                   <img
-                    src={`${getBackendUrl()}${tenantLogoUrl}`}
-                    alt="Tenant Logo"
+                    src={`${getBackendUrl()}${user.avatarUrl}`}
+                    alt="User Avatar"
                     className="w-full h-full object-cover rounded-full"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                   />
                 ) : (
                   username?.charAt(0).toUpperCase() || 'U'
@@ -250,7 +336,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* HEADER BAR */}
-        <header className="relative z-50 h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
+        <header className="relative z-20 h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-sm font-bold tracking-wider uppercase text-muted-foreground">
               {navigation.find((item) => item.href === pathname)?.name || 'Console'}
@@ -272,7 +358,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* PAGE CONTENT CONTAINER */}
-        <main className="relative z-0 flex-1 overflow-y-auto p-8 bg-background">
+        <main className="flex-1 overflow-y-auto p-8 bg-background">
           {children}
         </main>
       </div>

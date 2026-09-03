@@ -71,11 +71,28 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Monitor
 };
 
-const getAssetIconAndColor = (asset: any, fallbackName = '') => {
+let globalDbAssetTypesCache: any[] = [];
+
+const getAssetIconAndColor = (asset: any, fallbackName = '', dbAssetTypesList: any[] = []) => {
   let IconComp = Zap;
   let color = '#3b82f6';
+  const list = dbAssetTypesList.length > 0 ? dbAssetTypesList : globalDbAssetTypesCache;
 
   if (asset) {
+    const t = String(asset.type || asset.code || '').toUpperCase();
+    const matched = list.find((x: any) => x.code.toUpperCase() === t);
+    if (matched) {
+      let iconName = matched.icon;
+      if (!iconName || !ICON_MAP[iconName]) {
+        if (t === 'ANCHOR') iconName = 'Anchor';
+        else if (t === 'TAG' || t.includes('BLE')) iconName = 'HardDrive';
+        else if (t === 'MESH_EYE_SENSOR' || t.includes('SENSOR')) iconName = 'Activity';
+        else iconName = 'Boxes';
+      }
+      const comp = ICON_MAP[iconName] || Boxes;
+      return { IconComp: comp, color: matched.color || '#3b82f6' };
+    }
+
     if (asset.color) color = asset.color;
 
     // 1. Check direct asset.icon string (from AssetType DB)
@@ -84,7 +101,6 @@ const getAssetIconAndColor = (asset: any, fallbackName = '') => {
     }
 
     // 2. Check asset.type or asset.code
-    const t = String(asset.type || asset.code || '').toUpperCase();
     if (t === 'ANCHOR') return { IconComp: MapPin, color: color || '#f43f5e' };
     if (t === 'TAG' || t.includes('BLE')) return { IconComp: HardDrive, color: color || '#3b82f6' };
     if (t === 'MESH_EYE_SENSOR' || t.includes('SENSOR')) return { IconComp: Activity, color: color || '#10b981' };
@@ -419,7 +435,7 @@ const CustomNode = ({ data, id, selected }: any) => {
     return (
       <div className={`min-w-[190px] bg-card border shadow-xl rounded-lg relative transition-all ${selectionRingClass}`}>
         <div className={`bg-purple-700 px-3 py-1 text-white font-bold text-[11px] tracking-wide select-none rounded-t-[7px] flex items-center justify-between gap-1.5`}>
-          <span>🔴 ALARM TRIGGER</span>
+          <span>Alarm Notification</span>
           <div className="flex items-center gap-1.5">
             {autoRecovery && (
               <span className="text-[9px] font-black bg-emerald-500/90 text-white px-1 py-0.5 rounded flex items-center gap-0.5" title="Auto Recovery Enabled">
@@ -661,6 +677,27 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
 export default function RulesPage() {
   const { tenantId, token, isAdmin } = useAuth();
 
+  const [dbAssetTypes, setDbAssetTypes] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDbAssetTypes = async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+
+        const res = await fetch(`${getApiUrl()}/asset-types`, { headers });
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          setDbAssetTypes(data);
+          globalDbAssetTypesCache = data;
+        }
+      } catch (e) {}
+    };
+    fetchDbAssetTypes();
+    return () => { isMounted = false; };
+  }, [token, tenantId]);
 
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(false);

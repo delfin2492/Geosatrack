@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, OnModuleInit, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export const DEFAULT_ASSET_TYPES = [
@@ -39,23 +39,45 @@ export class AssetTypeService implements OnModuleInit {
 
   async seedDefaultTypes() {
     for (const item of DEFAULT_ASSET_TYPES) {
-      await this.prisma.assetType.upsert({
-        where: { code: item.code },
-        update: {},
-        create: item,
+      const existing = await this.prisma.assetType.findFirst({
+        where: { code: item.code, tenantId: null },
       });
+      if (!existing) {
+        await this.prisma.assetType.create({
+          data: { ...item, tenantId: null },
+        });
+      }
     }
   }
 
-  async findAll() {
-    const types = await this.prisma.assetType.findMany({
+  async findAll(tenantId?: string) {
+    let globalTypes = await this.prisma.assetType.findMany({
+      where: { tenantId: null },
       orderBy: { name: 'asc' },
     });
-    if (types.length === 0) {
+
+    if (globalTypes.length === 0) {
       await this.seedDefaultTypes();
-      return this.prisma.assetType.findMany({ orderBy: { name: 'asc' } });
+      globalTypes = await this.prisma.assetType.findMany({
+        where: { tenantId: null },
+        orderBy: { name: 'asc' },
+      });
     }
-    return types;
+
+    if (!tenantId) {
+      return globalTypes;
+    }
+
+    const tenantTypes = await this.prisma.assetType.findMany({
+      where: { tenantId },
+      orderBy: { name: 'asc' },
+    });
+
+    const typeMap = new Map<string, any>();
+    globalTypes.forEach((gt) => typeMap.set(gt.code, gt));
+    tenantTypes.forEach((tt) => typeMap.set(tt.code, tt));
+
+    return Array.from(typeMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async findOne(id: string) {
@@ -64,11 +86,14 @@ export class AssetTypeService implements OnModuleInit {
     return item;
   }
 
-  async create(data: CreateAssetTypeDto) {
+  async create(data: CreateAssetTypeDto, tenantId?: string) {
     const codeUpper = data.code.toUpperCase().trim();
-    const existing = await this.prisma.assetType.findUnique({
-      where: { code: codeUpper },
+    const effectiveTenantId = tenantId || null;
+
+    const existing = await this.prisma.assetType.findFirst({
+      where: { code: codeUpper, tenantId: effectiveTenantId },
     });
+
     if (existing) {
       throw new BadRequestException(`Asset type code '${codeUpper}' already exists.`);
     }
@@ -81,13 +106,44 @@ export class AssetTypeService implements OnModuleInit {
         color: data.color || '#3b82f6',
         description: data.description || null,
         isSystem: false,
+        tenantId: effectiveTenantId,
       },
     });
   }
 
-  async update(id: string, data: UpdateAssetTypeDto) {
+  async update(id: string, data: UpdateAssetTypeDto, tenantId?: string) {
     const existing = await this.prisma.assetType.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Asset type not found.');
+
+    if (existing.tenantId === null && tenantId) {
+      const existingTenantCopy = await this.prisma.assetType.findFirst({
+        where: { code: existing.code, tenantId },
+      });
+
+      if (existingTenantCopy) {
+        return this.prisma.assetType.update({
+          where: { id: existingTenantCopy.id },
+          data: {
+            name: data.name ?? existingTenantCopy.name,
+            icon: data.icon ?? existingTenantCopy.icon,
+            color: data.color ?? existingTenantCopy.color,
+            description: data.description ?? existingTenantCopy.description,
+          },
+        });
+      }
+
+      return this.prisma.assetType.create({
+        data: {
+          code: existing.code,
+          name: data.name ?? existing.name,
+          icon: data.icon ?? existing.icon,
+          color: data.color ?? existing.color,
+          description: data.description ?? existing.description,
+          isSystem: existing.isSystem,
+          tenantId: tenantId,
+        },
+      });
+    }
 
     return this.prisma.assetType.update({
       where: { id },
@@ -100,12 +156,16 @@ export class AssetTypeService implements OnModuleInit {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, tenantId?: string) {
     const existing = await this.prisma.assetType.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Asset type not found.');
 
     if (existing.isSystem) {
       throw new BadRequestException('Sistem default asset type tidak dapat dihapus.');
+    }
+
+    if (existing.tenantId && tenantId && existing.tenantId !== tenantId) {
+      throw new ForbiddenException('Akses ditolak.');
     }
 
     return this.prisma.assetType.delete({ where: { id } });

@@ -1,8 +1,8 @@
 import {
   Controller, Get, Post, Body, Param, Patch, Delete,
-  UseInterceptors, UploadedFile, Headers, BadRequestException,
+  UseInterceptors, UploadedFile, UploadedFiles, Headers, BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { TenantService } from './tenant.service';
 import { ApiTags, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { RegisterTenantDto } from './dto/tenant-register.dto';
@@ -18,8 +18,9 @@ export class TenantController {
     @Body('status') status?: string,
     @Body('agentLimit') agentLimit?: number,
     @Body('assetLimit') assetLimit?: number,
+    @Body('isWhiteLabel') isWhiteLabel?: boolean,
   ) {
-    return this.tenantService.create(name, status, agentLimit, assetLimit);
+    return this.tenantService.create(name, status, agentLimit, assetLimit, isWhiteLabel);
   }
 
   @Post('register')
@@ -31,26 +32,41 @@ export class TenantController {
 
   // ─── Profile Settings ───────────────────────────────────────────────
   @Patch('profile')
-  @UseInterceptors(FileInterceptor('logo'))
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string' },
-        adminEmail: { type: 'string' },
-        logo: { type: 'string', format: 'binary' },
-      },
-    },
-  })
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'logo', maxCount: 1 },
+      { name: 'favicon', maxCount: 1 },
+      { name: 'avatar', maxCount: 1 },
+    ]),
+  )
   updateProfile(
     @Headers('x-tenant-id') tenantId: string,
+    @Headers('x-user-id') userId: string,
     @Body('name') name?: string,
     @Body('adminEmail') adminEmail?: string,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFiles()
+    files?: { logo?: Express.Multer.File[]; favicon?: Express.Multer.File[]; avatar?: Express.Multer.File[] },
   ) {
     if (!tenantId) throw new BadRequestException('x-tenant-id header is required.');
-    return this.tenantService.updateProfile(tenantId, { name, adminEmail }, file);
+    return this.tenantService.updateProfile(tenantId, { name, adminEmail }, files, userId);
+  }
+
+  // ─── White-Label Settings ───────────────────────────────────────────
+  @Patch('whitelabel')
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'logo', maxCount: 1 },
+      { name: 'favicon', maxCount: 1 },
+    ]),
+  )
+  updateWhiteLabel(
+    @Headers('x-tenant-id') tenantId: string,
+    @Body() body: any,
+    @UploadedFiles()
+    files?: { logo?: Express.Multer.File[]; favicon?: Express.Multer.File[] },
+  ) {
+    if (!tenantId) throw new BadRequestException('x-tenant-id header is required.');
+    return this.tenantService.updateWhiteLabelSettings(tenantId, body, files);
   }
 
   // ─── User Management ────────────────────────────────────────────────
@@ -102,7 +118,7 @@ export class TenantController {
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Body() dto: { name?: string; status?: string; agentLimit?: number; assetLimit?: number },
+    @Body() dto: { name?: string; status?: string; agentLimit?: number; assetLimit?: number; isWhiteLabel?: boolean },
   ) {
     return this.tenantService.update(id, dto);
   }

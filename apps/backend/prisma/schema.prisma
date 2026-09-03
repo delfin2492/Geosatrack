@@ -17,6 +17,16 @@ model Tenant {
   status           String             @default("active")
   adminEmail       String?
   logoUrl          String?
+  faviconUrl       String?
+  isWhiteLabel     Boolean            @default(false)
+  themeColor       String?
+  smtpHost         String?
+  smtpPort         Int?
+  smtpUser         String?
+  smtpPass         String?
+  smtpFrom         String?
+  telegramBotToken String?
+  telegramChatId   String?
   alerts           Alert[]
   anchors          Anchor[]
   assets           Asset[]
@@ -25,6 +35,7 @@ model Tenant {
   rules            RuleFlow[]
   sites            Site[]
   users            User[]
+  assetTypes       AssetType[]
 }
 
 model User {
@@ -34,6 +45,7 @@ model User {
   name       String?
   role       String   @default("operator")
   isVerified Boolean  @default(true)
+  avatarUrl  String?
   tenantId   String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -94,14 +106,18 @@ model Anchor {
 
 model AssetType {
   id          String   @id @default(cuid())
-  code        String   @unique
+  code        String
   name        String
   icon        String   @default("HardDrive")
   color       String   @default("#3b82f6")
   description String?
   isSystem    Boolean  @default(false)
+  tenantId    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([code, tenantId])
 }
 
 model Asset {

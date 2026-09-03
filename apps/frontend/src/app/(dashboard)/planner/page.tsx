@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { getApiUrl, getBackendUrl } from '../../lib/api';
+import { getAssetMarkerIcon } from '../../lib/icon-utils';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -30,6 +31,8 @@ import {
   ZoomOut,
   Maximize2,
   Box,
+  Activity,
+  Wifi,
 } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 
@@ -77,13 +80,14 @@ interface SiteData {
 
 // ─── Planner Page ─────────────────────────────────────────────────────
 export default function PlannerPage() {
-  const { tenantId, token, isAdmin } = useAuth();
+  const { tenantId, token, isAdmin, user } = useAuth();
   const { assets } = useSocket();
 
   const [zones, setZones] = useState<ZoneData[]>([]);
   const [sites, setSites] = useState<SiteData[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [selectedZone, setSelectedZone] = useState<ZoneData | null>(null);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [allTenantAnchors, setAllTenantAnchors] = useState<AnchorData[]>([]);
   const [allTenantMesh, setAllTenantMesh] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,6 +100,8 @@ export default function PlannerPage() {
     anchor: true,
     mesh: true,
     threads: true,
+    showTelemetry: true,
+    showSignals: false,
   });
   const [plannerConfirm, setPlannerConfirm] = useState<{
     title: string;
@@ -140,6 +146,26 @@ export default function PlannerPage() {
   // Edit Geofence POINTS state (vertex drag editing on canvas)
   const [editingGeofencePointsId, setEditingGeofencePointsId] = useState<string | null>(null);
   const [editingGeofencePoints, setEditingGeofencePoints] = useState<{ x: number; y: number }[]>([]);
+  const [dbAssetTypes, setDbAssetTypes] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDbAssetTypes = async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+
+        const res = await fetch(`${getApiUrl()}/asset-types`, { headers });
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          setDbAssetTypes(data);
+        }
+      } catch (e) {}
+    };
+    fetchDbAssetTypes();
+    return () => { isMounted = false; };
+  }, [token, tenantId]);
 
   // Map refs
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -493,56 +519,85 @@ export default function PlannerPage() {
     // Draw anchor markers (interactive drag & update)
     if (selectedZone.anchors) {
       selectedZone.anchors.forEach((anchor: AnchorData) => {
+        const markerIconInfo = getAssetMarkerIcon('ANCHOR', anchor.name, dbAssetTypes);
+        const anchorStatus = anchor.status || 'offline';
+        const anchorIsOnline = anchorStatus === 'online' || anchorStatus === 'active';
+        const anchorStatusColor = anchorIsOnline ? '#10b981' : '#ef4444';
+        const pinColor = markerIconInfo.color;
+
         const icon = L.divIcon({
           className: 'custom-anchor-icon',
           html: `
-            <div style="position: absolute; transform: translate(-50%, -100%); display:flex;flex-direction:column;align-items:center; pointer-events: auto;">
-              <div style="background:#0f172a;color:#38bdf8;border:1px solid #334155;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 4px rgba(0,0,0,0.5);">
-                ⚓ ${anchor.name}
+            <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px; pointer-events: auto;">
+              <div class="bg-white text-slate-800 border-slate-200/80 border px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10 transition-all">
+                ${anchor.name}
               </div>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#38bdf8" width="28" height="28" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" stroke="#ffffff" stroke-width="1"/>
-              </svg>
-              </div>`,
-          iconSize: [0, 0],
-          iconAnchor: [0, 0],
+              <div style="position: relative; width: 34px; height: 34px;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.5"/>
+                </svg>
+                <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
+                  ${markerIconInfo.svg}
+                </div>
+                <div style="position: absolute; top: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; background-color: ${anchorStatusColor}; border: 1.5px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 10;">
+                  ${anchorIsOnline ? `<div class="absolute inset-0 rounded-full animate-ping bg-emerald-400 opacity-60"></div>` : ''}
+                </div>
+              </div>
+              <div style="width: 18px; height: 5px; background: rgba(0,0,0,0.25); border-radius: 50%; filter: blur(2px); margin-top: 1px;"></div>
+            </div>`,
+          iconSize: [60, 60],
+          iconAnchor: [30, 48],
         });
 
-        const anchorStatus = anchor.status || 'offline';
-        const anchorIsOnline = anchorStatus === 'online' || anchorStatus === 'active';
-        const anchorStatusColor = anchorIsOnline ? '#22c55e' : '#64748b';
-        const anchorVoltage = (anchor as any).voltage;
+        let rawVoltage = (anchor as any).voltage;
+        if (rawVoltage === undefined || rawVoltage === null) {
+          const anyAnchor = anchor as any;
+          if (anyAnchor.tag && anyAnchor.tag.battery !== undefined && anyAnchor.tag.battery !== null) {
+            rawVoltage = anyAnchor.tag.battery;
+          } else {
+            try {
+              if (anyAnchor.description) {
+                const desc = JSON.parse(anyAnchor.description);
+                const attrs: any[] = desc.attributes || [];
+                const voltAttr = attrs.find((a) =>
+                  a.name && (a.name.toLowerCase() === 'voltage' || a.name.toLowerCase() === 'battery')
+                );
+                if (voltAttr && voltAttr.value !== undefined && voltAttr.value !== '') {
+                  const parsed = Number(voltAttr.value);
+                  if (!isNaN(parsed)) rawVoltage = parsed;
+                }
+              }
+            } catch (e) { }
+          }
+        }
+
+        const anchorVoltage = rawVoltage !== null && rawVoltage !== undefined
+          ? (rawVoltage > 100 ? rawVoltage / 1000 : rawVoltage)
+          : null;
         const anchorLastSeen = (anchor as any).lastSeen || (anchor as any).updatedAt;
         const anchorLastUpdate = anchorLastSeen
-          ? (() => {
-            const diff = Date.now() - new Date(anchorLastSeen).getTime();
-            const mins = Math.floor(diff / 60000);
-            const hrs = Math.floor(mins / 60);
-            if (hrs > 0) return hrs + 'h ' + (mins % 60) + 'm ago';
-            if (mins > 0) return mins + 'm ago';
-            return 'Just now';
-          })()
+          ? new Date(anchorLastSeen).toLocaleString('id-ID', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          })
           : 'N/A';
 
         const anchorTooltipHtml = [
-          '<div style="font-family:sans-serif;padding:6px 8px;min-width:160px;background:#0f172a;border:1px solid #334155;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.5);">',
+          '<div style="font-family:sans-serif;padding:8px 10px;min-width:220px;background:#0f172a;border:1px solid #334155;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.5);">',
           '<div style="font-weight:bold;color:#38bdf8;font-size:11px;margin-bottom:6px;border-bottom:1px solid #1e293b;padding-bottom:4px;">&#9875; ' + anchor.name + '</div>',
-          '<div style="display:flex;flex-direction:column;gap:3px;">',
-          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
-          '<span style="color:#94a3b8;">Status</span>',
-          '<span style="color:' + anchorStatusColor + ';font-weight:bold;font-size:10px;">' + (anchorIsOnline ? '&#128994; Online' : '&#9898; ' + anchorStatus.charAt(0).toUpperCase() + anchorStatus.slice(1)) + '</span>',
+          '<div style="display:flex;flex-direction:column;gap:4px;">',
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;gap:12px;">',
+          '<span style="color:#94a3b8;">Position</span>',
+          '<span style="color:#94a3b8;font-family:monospace;font-size:9px;">(' + anchor.x + 'm, ' + anchor.y + 'm)</span>',
           '</div>',
-          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;gap:12px;">',
           '<span style="color:#94a3b8;">Voltage</span>',
           '<span style="color:#fbbf24;font-weight:bold;font-family:monospace;font-size:10px;">' + (anchorVoltage !== null && anchorVoltage !== undefined ? anchorVoltage.toFixed(2) + ' V' : 'N/A') + '</span>',
           '</div>',
-          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">',
+          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;gap:12px;">',
           '<span style="color:#94a3b8;">Last Update</span>',
           '<span style="color:#94a3b8;font-family:monospace;font-size:9px;">' + anchorLastUpdate + '</span>',
           '</div>',
-          '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;margin-top:2px;border-top:1px solid #1e293b;padding-top:3px;">',
-          '<span style="color:#475569;font-size:9px;">Position</span>',
-          '<span style="color:#475569;font-family:monospace;font-size:9px;">(' + anchor.x + 'm, ' + anchor.y + 'm)</span>',
           '</div>',
           '</div>',
           '</div>',
@@ -574,7 +629,7 @@ export default function PlannerPage() {
 
     // NOTE: Mesh/asset markers are rendered by a SEPARATE real-time useEffect below
     // so that RSSI position updates don't trigger a full layer clear/re-render.
-  }, [selectedZone, apiHeaders, fetchAllAnchors, fetchZoneDetails, selectedZoneId]);
+  }, [selectedZone, apiHeaders, fetchAllAnchors, fetchZoneDetails, selectedZoneId, dbAssetTypes]);
 
   // ─── Real-Time Mesh Marker Rendering (RSSI-based positioning) ────────
   // This effect runs whenever `assets` changes (via WebSocket assetUpdate events)
@@ -683,47 +738,53 @@ export default function PlannerPage() {
         return asset.status === 'moving' || asset.status === 'static';
       })();
 
-      const dotColor = isOnline ? '#22c55e' : '#64748b';
+      const statusColor = isOnline ? '#10b981' : '#ef4444';
+      const markerIconInfo = getAssetMarkerIcon(asset.type || 'MESH_EYE_SENSOR', asset.name, dbAssetTypes);
+      let pinColor = markerIconInfo.color;
+
+      const isSelected = selectedAssetId === asset.id;
+      const highlightColor = user?.tenantThemeColor || '#f59e0b'; // Primary Accent or fallback
 
       const iconHtml = `
-        <div style="position: absolute; transform: translate(-50%, -100%); display:flex;flex-direction:column;align-items:center; pointer-events: auto;">
-          <div style="background:#0f172a;color:${dotColor};border:1px solid #334155;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:bold;white-space:nowrap;margin-bottom:2px;box-shadow:0 2px 6px rgba(0,0,0,0.5);display:flex;align-items:center;gap:3px;">
-            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${dotColor};${isOnline ? 'animation:pulse 1.5s infinite;box-shadow:0 0 0 0 ' + dotColor + '66;' : ''}"></span>
+        <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px; pointer-events: auto;">
+          <div class="${isSelected ? `text-slate-950 font-black scale-110 shadow-lg` : 'bg-white text-slate-800 border-slate-200/80'} border px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10 transition-all" style="${isSelected ? `background-color: ${highlightColor}; border-color: ${highlightColor};` : ''}">
             ${asset.name}
           </div>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${dotColor}" width="26" height="26" style="filter:drop-shadow(0 2px 5px rgba(0,0,0,0.5));">
-            <path d="M17.707 3.293a1 1 0 0 0-1.414 0L12 7.586 7.707 3.293a1 1 0 0 0-1.414 1.414L10.586 9l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 10.414l4.293 4.293a1 1 0 0 0 1.414-1.414L13.414 9l4.293-4.293a1 1 0 0 0 0-1.414z" style="display:none"/>
-            <circle cx="12" cy="12" r="5" stroke="white" stroke-width="1.5"/>
-            <path d="M8.5 5.5 Q12 2 15.5 5.5" stroke="${dotColor}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-            <path d="M6 3.5 Q12 -1 18 3.5" stroke="${dotColor}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.6"/>
-          </svg>
-          </div>`;
+          <div style="position: relative; width: 34px; height: 34px;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="${isSelected ? highlightColor : '#ffffff'}" stroke-width="${isSelected ? '2.5' : '1.5'}"/>
+            </svg>
+            <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
+              ${markerIconInfo.svg}
+            </div>
+            <div style="position: absolute; top: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; background-color: ${statusColor}; border: 1.5px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 10;">
+              ${isOnline ? `<div class="absolute inset-0 rounded-full animate-ping bg-emerald-400 opacity-60"></div>` : ''}
+            </div>
+          </div>
+          <div style="width: 18px; height: 5px; background: rgba(0,0,0,0.25); border-radius: 50%; filter: blur(2px); margin-top: 1px;"></div>
+        </div>`;
 
       const icon = L.divIcon({
         className: 'custom-mesh-icon',
         html: iconHtml,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
+        iconSize: [60, 60],
+        iconAnchor: [30, 48],
       });
 
       const meshLastSeen = asset.tag?.lastSeen;
-      
+
       const meshLastUpdate = meshLastSeen
-        ? (() => {
-          const diff = Date.now() - new Date(meshLastSeen).getTime();
-          const mins = Math.floor(diff / 60000);
-          const hrs = Math.floor(mins / 60);
-          if (hrs > 0) return `${hrs}h ${mins % 60}m`;
-          if (mins > 0) return `${mins}m ago`;
-          return 'Just now';
-        })()
+        ? new Date(meshLastSeen).toLocaleString('id-ID', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        })
         : null;
 
       let telemetryHtml = '';
       if (asset.tag) {
-        const excludeKeys = ['id', 'assetId', 'signals', 'lastSeen', 'createdAt', 'updatedAt', 'tenantId', 'name', 'mac', 'type'];
-        const tagKeys = Object.keys(asset.tag).filter(k => !excludeKeys.includes(k) && asset.tag[k] !== null && asset.tag[k] !== undefined);
-        
+        const allowedKeys = ['battery', 'temperature', 'humidity'];
+        const tagKeys = Object.keys(asset.tag).filter(k => allowedKeys.includes(k) && asset.tag[k] !== null && asset.tag[k] !== undefined);
+
         if (tagKeys.length > 0) {
           const cards = tagKeys.map(key => {
             const val = asset.tag[key];
@@ -749,7 +810,7 @@ export default function PlannerPage() {
               bgColor = '#f0fdf4'; borderColor = '#dcfce7'; iconColor = '#22c55e';
               svgIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>`;
             }
-            
+
             return `
               <div style="background: ${bgColor}; padding: 6px; border-radius: 6px; display: flex; align-items: center; gap: 6px; border: 1px solid ${borderColor};">
                 <div style="color: ${iconColor};">${svgIcon}</div>
@@ -759,7 +820,7 @@ export default function PlannerPage() {
                 </div>
               </div>`;
           });
-          
+
           telemetryHtml = `<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">${cards.join('')}</div>`;
         }
       }
@@ -818,6 +879,9 @@ export default function PlannerPage() {
       } else {
         const marker = L.marker([y, x], { icon, draggable: isOnline ? false : true }).addTo(meshLayerRef.current);
         marker.bindTooltip(tooltipHtml, { sticky: true, className: 'mesh-tooltip' });
+        marker.on('click', () => {
+          setSelectedAssetId(asset.id);
+        });
         marker.on('dragend', async function (e: any) {
           const pos = e.target.getLatLng();
           const newPlanX = Number(pos.lng.toFixed(2));
@@ -887,7 +951,7 @@ export default function PlannerPage() {
 
       meshLinesRef.current.set(asset.id, newLines);
     });
-  }, [assets, selectedZone, apiHeaders]);
+  }, [assets, selectedZone, apiHeaders, layerVisibility, selectedAssetId, dbAssetTypes]);
 
   // ─── Sync selectedZone.assets list when socket updates bring zone changes ─
   // This only updates the zone's asset list (for mesh layer), NOT the Leaflet markers directly.
@@ -2445,14 +2509,14 @@ export default function PlannerPage() {
                         checked={layerVisibility.anchor}
                         onChange={(e) => setLayerVisibility(prev => ({ ...prev, anchor: e.target.checked }))}
                       />
-                      <MapPin className="w-4 h-4 text-blue-700" /> Anchors
+                      <div dangerouslySetInnerHTML={{ __html: getAssetMarkerIcon('ANCHOR', '', dbAssetTypes).svg }} style={{ color: getAssetMarkerIcon('ANCHOR', '', dbAssetTypes).color }} className="w-4 h-4 flex items-center justify-center" /> Anchors
                     </label>
                     <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded transition-colors">
                       <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                         checked={layerVisibility.mesh}
                         onChange={(e) => setLayerVisibility(prev => ({ ...prev, mesh: e.target.checked }))}
                       />
-                      <Radio className="w-4 h-4 text-slate-700" /> Mesh
+                      <div dangerouslySetInnerHTML={{ __html: getAssetMarkerIcon('MESH_EYE_SENSOR', '', dbAssetTypes).svg }} style={{ color: getAssetMarkerIcon('MESH_EYE_SENSOR', '', dbAssetTypes).color }} className="w-4 h-4 flex items-center justify-center" /> Mesh
                     </label>
                     <label className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded transition-colors">
                       <input type="checkbox" className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"

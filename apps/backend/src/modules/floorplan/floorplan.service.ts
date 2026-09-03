@@ -6,6 +6,21 @@ import * as path from 'path';
 
 import { WebsocketGateway } from '../websocket/websocket.gateway';
 
+function extractVoltageFromDescription(description: string | null): number | null {
+  if (!description) return null;
+  try {
+    const desc = JSON.parse(description);
+    const attr = (desc.attributes || []).find((at: any) => 
+      at.name && (at.name.toLowerCase() === 'voltage' || at.name.toLowerCase() === 'battery')
+    );
+    if (attr && attr.value !== undefined && attr.value !== '') {
+      const parsed = Number(attr.value);
+      if (!isNaN(parsed)) return parsed;
+    }
+  } catch(e) {}
+  return null;
+}
+
 @Injectable()
 export class FloorplanService {
   constructor(
@@ -111,7 +126,7 @@ export class FloorplanService {
         zone: a.zone,
         isAsset: true,
         updatedAt: a.updatedAt,
-        voltage: a.tag?.battery ?? null,
+        voltage: a.tag?.battery ?? extractVoltageFromDescription(a.description),
         lastSeen: a.tag?.lastSeen ?? null,
       };
     });
@@ -163,7 +178,7 @@ export class FloorplanService {
       zone: a.zone,
       isAsset: true,
       updatedAt: a.updatedAt,
-      voltage: a.tag?.battery ?? null,
+      voltage: a.tag?.battery ?? extractVoltageFromDescription(a.description),
       lastSeen: a.tag?.lastSeen ?? null,
     }));
 

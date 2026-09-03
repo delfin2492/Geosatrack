@@ -7,15 +7,15 @@ import { AssetTypeService, CreateAssetTypeDto, UpdateAssetTypeDto } from './asse
 export class AssetTypeController {
   constructor(private readonly assetTypeService: AssetTypeService) {}
 
-  private checkSuperAdmin(userRole?: string) {
-    if (userRole && userRole.toLowerCase() !== 'superadmin') {
-      throw new ForbiddenException('Hanya Superadmin yang dapat mengelola konfigurasi tipe asset.');
+  private checkAccess(userRole?: string) {
+    if (userRole && !['superadmin', 'tenant_admin', 'admin'].includes(userRole.toLowerCase())) {
+      throw new ForbiddenException('Akses ditolak untuk mengelola konfigurasi tipe asset.');
     }
   }
 
   @Get()
-  findAll() {
-    return this.assetTypeService.findAll();
+  findAll(@Headers('x-tenant-id') tenantId?: string) {
+    return this.assetTypeService.findAll(tenantId);
   }
 
   @Get(':id')
@@ -26,31 +26,37 @@ export class AssetTypeController {
   @Post()
   create(
     @Headers('x-user-role') userRole: string,
+    @Headers('x-tenant-id') tenantId: string,
     @Body() body: CreateAssetTypeDto,
   ) {
-    this.checkSuperAdmin(userRole);
+    this.checkAccess(userRole);
     if (!body.code || !body.name) {
       throw new BadRequestException('Code dan name wajib diisi.');
     }
-    return this.assetTypeService.create(body);
+    const effectiveTenantId = userRole === 'superadmin' ? undefined : tenantId;
+    return this.assetTypeService.create(body, effectiveTenantId);
   }
 
   @Patch(':id')
   update(
     @Headers('x-user-role') userRole: string,
+    @Headers('x-tenant-id') tenantId: string,
     @Param('id') id: string,
     @Body() body: UpdateAssetTypeDto,
   ) {
-    this.checkSuperAdmin(userRole);
-    return this.assetTypeService.update(id, body);
+    this.checkAccess(userRole);
+    const effectiveTenantId = userRole === 'superadmin' ? undefined : tenantId;
+    return this.assetTypeService.update(id, body, effectiveTenantId);
   }
 
   @Delete(':id')
   remove(
     @Headers('x-user-role') userRole: string,
+    @Headers('x-tenant-id') tenantId: string,
     @Param('id') id: string,
   ) {
-    this.checkSuperAdmin(userRole);
-    return this.assetTypeService.remove(id);
+    this.checkAccess(userRole);
+    const effectiveTenantId = userRole === 'superadmin' ? undefined : tenantId;
+    return this.assetTypeService.remove(id, effectiveTenantId);
   }
 }

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
+import { getApiUrl, getBackendUrl } from '../lib/api';
 import {
   Boxes,
   Lock,
@@ -19,6 +20,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [platformLogo, setPlatformLogo] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchBranding = async () => {
+      try {
+        const { getApiUrl } = await import('../lib/api');
+        const res = await fetch(`${getApiUrl()}/system-settings`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.platform_logo_url) {
+            setPlatformLogo(data.platform_logo_url);
+          }
+        }
+      } catch (e) { }
+    };
+    fetchBranding();
+  }, []);
 
   useEffect(() => {
     // If user is ALREADY logged in, redirect away from login to /map
@@ -53,36 +71,30 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-screen bg-background text-foreground flex flex-col justify-between p-6 font-sans relative overflow-hidden">
-      
+
       {/* Background Subtle Accent */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-primary/5 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Header */}
+      {/* Header (Removed logo) */}
       <header className="w-full max-w-5xl mx-auto flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center">
-            <Boxes className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold tracking-tight text-foreground">
-              Geomesh
-            </h1>
-          </div>
-        </div>
       </header>
 
       {/* Main Container */}
       <main className="w-full max-w-md mx-auto z-10 my-auto">
         <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl space-y-6">
-          
+
           {/* Card Title */}
-          <div className="space-y-1.5 text-center">
+          <div className="flex flex-col items-center space-y-3 text-center mb-2">
+            {platformLogo ? (
+              <img src={`${getBackendUrl()}${platformLogo}`} alt="GeoMesh Logo" className="object-contain h-12 w-auto max-w-full" />
+            ) : (
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center shadow-sm">
+                <Boxes className="h-7 w-7 text-primary" />
+              </div>
+            )}
             <h2 className="text-xl font-bold tracking-tight text-foreground">
-              Masuk ke Portal GeoMesh
+              Welcome To Platform GeoMesh
             </h2>
-            <p className="text-xs text-muted-foreground">
-              Gunakan email dan kata sandi terverifikasi Anda untuk mengakses konsol.
-            </p>
           </div>
 
           {/* Error Message */}
@@ -146,11 +158,6 @@ export default function LoginPage() {
 
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="w-full max-w-5xl mx-auto flex justify-between items-center text-[11px] text-muted-foreground font-mono z-10">
-        <span>© 2026 GeoMesh IoT System</span>
-      </footer>
     </div>
   );
 }

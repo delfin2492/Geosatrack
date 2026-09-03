@@ -33,6 +33,7 @@ interface TenantItem {
   status: string;
   agentLimit: number;
   assetLimit: number;
+  isWhiteLabel?: boolean;
   createdAt: string;
   _count?: {
     sites: number;
@@ -56,6 +57,7 @@ export default function TenantsPage() {
   const [adminPassword, setAdminPassword] = useState('admin123');
   const [agentLimit, setAgentLimit] = useState(5);
   const [assetLimit, setAssetLimit] = useState(100);
+  const [isWhiteLabel, setIsWhiteLabel] = useState(false);
 
   // Edit Modal & Form states
   const [showEditModal, setShowEditModal] = useState(false);
@@ -64,6 +66,7 @@ export default function TenantsPage() {
   const [editStatus, setEditStatus] = useState('active');
   const [editAgentLimit, setEditAgentLimit] = useState(5);
   const [editAssetLimit, setEditAssetLimit] = useState(100);
+  const [editIsWhiteLabel, setEditIsWhiteLabel] = useState(false);
 
   // General states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -120,6 +123,7 @@ export default function TenantsPage() {
           password: adminPassword,
           agentLimit: Number(agentLimit),
           assetLimit: Number(assetLimit),
+          isWhiteLabel,
         }),
       });
 
@@ -135,6 +139,7 @@ export default function TenantsPage() {
       setAdminEmail('');
       setAgentLimit(5);
       setAssetLimit(100);
+      setIsWhiteLabel(false);
 
       fetchTenants();
       setTimeout(() => {
@@ -154,6 +159,7 @@ export default function TenantsPage() {
     setEditStatus(tenant.status || 'active');
     setEditAgentLimit(tenant.agentLimit || 5);
     setEditAssetLimit(tenant.assetLimit || 100);
+    setEditIsWhiteLabel(tenant.isWhiteLabel || false);
     setMsgError(null);
     setMsgSuccess(null);
     setShowEditModal(true);
@@ -177,6 +183,7 @@ export default function TenantsPage() {
           status: editStatus,
           agentLimit: Number(editAgentLimit),
           assetLimit: Number(editAssetLimit),
+          isWhiteLabel: editIsWhiteLabel,
         }),
       });
 
@@ -361,9 +368,16 @@ export default function TenantsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={t.status === 'active' ? 'success' : 'destructive'}>
-                        {t.status || 'active'}
-                      </Badge>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant={t.status === 'active' ? 'success' : 'destructive'}>
+                          {t.status || 'active'}
+                        </Badge>
+                        {t.isWhiteLabel && (
+                          <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-[10px]">
+                            White-Label
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="font-mono text-foreground font-bold">
                       {t.agentLimit || 5}
@@ -516,6 +530,19 @@ export default function TenantsPage() {
                   </div>
                 </div>
 
+                <div className="p-3 rounded-xl border border-purple-500/30 bg-purple-500/5 flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-bold text-foreground block">White-Label Subscription Package</label>
+                    <span className="text-[10px] text-muted-foreground block">Aktifkan kustomisasi logo, favicon, warna tema, SMTP, dan Telegram untuk tenant ini.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isWhiteLabel}
+                    onChange={(e) => setIsWhiteLabel(e.target.checked)}
+                    className="h-4 w-4 rounded accent-primary cursor-pointer"
+                  />
+                </div>
+
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-border/40">
                   <Button
                     type="button"
@@ -611,6 +638,19 @@ export default function TenantsPage() {
                       required
                     />
                   </div>
+                </div>
+
+                <div className="p-3 rounded-xl border border-purple-500/30 bg-purple-500/5 flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-bold text-foreground block">White-Label Subscription Package</label>
+                    <span className="text-[10px] text-muted-foreground block">Aktifkan kustomisasi logo, favicon, warna tema, SMTP, dan Telegram untuk tenant ini.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={editIsWhiteLabel}
+                    onChange={(e) => setEditIsWhiteLabel(e.target.checked)}
+                    className="h-4 w-4 rounded accent-primary cursor-pointer"
+                  />
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-border/40">

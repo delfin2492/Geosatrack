@@ -14,7 +14,17 @@ export interface UserSession {
   tenantId: string;
   tenantName: string;
   tenantLogoUrl?: string;
+  tenantFaviconUrl?: string;
+  avatarUrl?: string;
+  isWhiteLabel?: boolean;
+  tenantThemeColor?: string;
   tenantAdminEmail?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpFrom?: string;
+  telegramBotToken?: string;
+  telegramChatId?: string;
 }
 
 interface AuthContextType {
@@ -170,7 +180,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantId: result.user.tenantId,
       tenantName: result.tenant?.name || 'PT ABC Logistics',
       tenantLogoUrl: result.tenant?.logoUrl || undefined,
+      tenantFaviconUrl: result.tenant?.faviconUrl || undefined,
+      avatarUrl: result.user?.avatarUrl || undefined,
+      isWhiteLabel: result.tenant?.isWhiteLabel ?? false,
+      tenantThemeColor: result.tenant?.themeColor || undefined,
       tenantAdminEmail: result.tenant?.adminEmail || undefined,
+      smtpHost: result.tenant?.smtpHost || undefined,
+      smtpPort: result.tenant?.smtpPort || undefined,
+      smtpUser: result.tenant?.smtpUser || undefined,
+      smtpFrom: result.tenant?.smtpFrom || undefined,
+      telegramBotToken: result.tenant?.telegramBotToken || undefined,
+      telegramChatId: result.tenant?.telegramChatId || undefined,
     };
 
     setUser(userSession);

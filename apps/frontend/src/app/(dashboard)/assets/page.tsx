@@ -413,7 +413,7 @@ const defaultAttributesLookup: Record<string, { name: string; dataType: string; 
   ANCHOR: [
     { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'anchorId', dataType: 'String', unit: '' },
-    { name: 'txPower', dataType: 'Integer', unit: 'dBm' }
+    { name: 'voltage', dataType: 'Number', unit: 'V' }
   ],
   FORKLIFT: [
     { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
@@ -510,6 +510,18 @@ const getTypeIcon = (type: string) => {
   return typeIconLookup[type] || Boxes;
 };
 
+const getTypeColor = (type: string) => {
+  const t = (type || '').toUpperCase();
+  const matched = globalDbAssetTypesCache.find((x: any) => x.code.toUpperCase() === t);
+  if (matched && matched.color) {
+    return matched.color;
+  }
+  // Hardcoded defaults to match icon-utils.ts
+  if (t === 'ANCHOR') return '#f43f5e';
+  if (t === 'TAG') return '#3b82f6';
+  return undefined; // return undefined if no custom color, allowing tailwind classes to apply
+};
+
 interface AssetAttribute {
   name: string;
   dataType: string; // 'Number' | 'String' | 'JSON' | 'Text' | 'Integer' | 'Boolean'
@@ -604,7 +616,11 @@ export default function AssetsPage() {
   useEffect(() => {
     const fetchDbAssetTypes = async () => {
       try {
-        const res = await fetch(`${getApiUrl()}/asset-types`);
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+
+        const res = await fetch(`${getApiUrl()}/asset-types`, { headers });
         if (res.ok) {
           const data = await res.json();
           setDbAssetTypes(data);
@@ -615,7 +631,7 @@ export default function AssetsPage() {
       }
     };
     fetchDbAssetTypes();
-  }, []);
+  }, [token, tenantId]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1228,9 +1244,6 @@ export default function AssetsPage() {
 
     const markerIconInfo = getAssetMarkerIcon(selectedAsset.type, selectedAsset.name, dbAssetTypes);
     let pinColor = markerIconInfo.color;
-    if (selectedAsset.status === 'tilt_warning' || selectedAsset.status === 'fall_detected') {
-      pinColor = '#ef4444';
-    }
 
     const customIcon = L.divIcon({
       className: 'custom-asset-icon-view',
@@ -1341,7 +1354,7 @@ export default function AssetsPage() {
           ) : (
             <span className="w-3.5 h-3.5 shrink-0" />
           )}
-          <TypeIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" />
+          <TypeIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground/75" style={{ color: getTypeColor(node.type) }} />
           <span className="truncate text-xs flex-1">{node.name}</span>
           {hasChildren && (
             <Badge
@@ -1489,7 +1502,7 @@ export default function AssetsPage() {
               <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                 {(() => {
                   const TypeIcon = getTypeIcon(selectedAsset?.type || 'FORKLIFT');
-                  return <TypeIcon className="h-4.5 w-4.5 text-primary shrink-0 animate-pulse" />;
+                  return <TypeIcon className="h-4.5 w-4.5 shrink-0 animate-pulse" style={{ color: getTypeColor(selectedAsset?.type || 'FORKLIFT') || 'var(--primary)' }} />;
                 })()}
                 Modify: {selectedAsset?.name} ({selectedAsset?.type})
               </CardTitle>
@@ -2001,7 +2014,7 @@ export default function AssetsPage() {
                     <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                       {(() => {
                         const TypeIcon = getTypeIcon(selectedAsset.type);
-                        return <TypeIcon className="h-4.5 w-4.5 text-muted-foreground shrink-0" />;
+                        return <TypeIcon className="h-4.5 w-4.5 shrink-0" style={{ color: getTypeColor(selectedAsset.type) || 'currentColor' }} />;
                       })()}
                       {selectedAsset.name}
                     </h3>
