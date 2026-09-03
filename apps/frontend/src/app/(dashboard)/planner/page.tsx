@@ -2805,7 +2805,9 @@ export default function PlannerPage() {
 
                   return currentGroup.floors.map((fl) => {
                     const zone = zones.find(z => z.id === fl.zoneId);
+                    const floorAnchors = allTenantAnchors.filter(a => a.zoneId === fl.zoneId || a.zone?.id === fl.zoneId);
                     const floorMesh = allTenantMesh.filter(m => m.zoneId === fl.zoneId || m.zone?.id === fl.zoneId);
+                    const totalAssetCount = floorAnchors.length + floorMesh.length;
 
                     return (
                       <div
@@ -2826,8 +2828,8 @@ export default function PlannerPage() {
                             </Badge>
                             <span className="font-bold text-xs text-foreground">{fl.floorName}</span>
                           </div>
-                          <Badge className="bg-emerald-500 text-white text-[10px]">
-                            {floorMesh.length} Mesh Active
+                          <Badge className="bg-primary text-primary-foreground text-[10px]">
+                            {totalAssetCount} Asset Placed ({floorAnchors.length} Anchor · {floorMesh.length} Mesh)
                           </Badge>
                         </div>
 
@@ -2842,16 +2844,35 @@ export default function PlannerPage() {
                             <span className="text-xs text-muted-foreground font-mono">No floorplan image</span>
                           )}
 
+                          {/* Placed Anchors */}
+                          {floorAnchors.map((anc) => {
+                            const ancX = (anc as any).planX ?? anc.x ?? (zone?.width ? zone.width / 2 : 0);
+                            const ancY = (anc as any).planY ?? anc.y ?? (zone?.height ? zone.height / 2 : 0);
+                            const posX = zone?.width ? Math.min(95, Math.max(5, (ancX / zone.width) * 100)) : 50;
+                            const posY = zone?.height ? Math.min(95, Math.max(5, (ancY / zone.height) * 100)) : 50;
+                            return (
+                              <div
+                                key={`anc-${anc.id}`}
+                                className="absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 bg-rose-500/90 text-white px-1.5 py-0.5 rounded border border-rose-400/50 shadow-sm text-[9px] font-bold z-10"
+                                style={{ left: `${posX}%`, top: `${posY}%` }}
+                              >
+                                <Anchor className="h-3 w-3" />
+                                <span>{anc.name}</span>
+                              </div>
+                            );
+                          })}
+
+                          {/* Placed Mesh / Asset Tags */}
                           {floorMesh.map((m) => {
                             const posX = zone?.width ? Math.min(95, Math.max(5, ((m.planX || zone.width / 2) / zone.width) * 100)) : 50;
                             const posY = zone?.height ? Math.min(95, Math.max(5, ((m.planY || zone.height / 2) / zone.height) * 100)) : 50;
                             return (
                               <div
-                                key={m.id}
-                                className="absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 bg-background/90 p-1 rounded border border-border shadow-sm text-[9px] font-bold"
+                                key={`m-${m.id}`}
+                                className="absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 bg-emerald-500/90 text-white px-1.5 py-0.5 rounded border border-emerald-400/50 shadow-sm text-[9px] font-bold z-10"
                                 style={{ left: `${posX}%`, top: `${posY}%` }}
                               >
-                                <Tag className="h-3 w-3 text-emerald-500" />
+                                <Eye className="h-3 w-3" />
                                 <span>{m.name}</span>
                               </div>
                             );
