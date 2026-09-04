@@ -186,7 +186,7 @@ export default function AppearancePage() {
   const fetchSystemSettings = async () => {
     if (isSuperAdmin) {
       try {
-        const res = await fetch(`${getApiUrl()}/system-setting`);
+        const res = await fetch(`${getApiUrl()}/system-settings`);
         if (res.ok) {
           const data = await res.json();
           setPlatformLogo(data.platform_logo_url || null);
@@ -196,10 +196,20 @@ export default function AppearancePage() {
       } catch (e) {
         console.error('Failed to fetch system settings', e);
       }
-    } else if (user?.isWhiteLabel) {
-      setPlatformLogo(user.tenantLogoUrl || null);
-      setPlatformFavicon(user.tenantFaviconUrl || null);
-      if (user.tenantThemeColor) setThemeColor(user.tenantThemeColor);
+    } else if (user?.tenantId) {
+      try {
+        const tenantRes = await fetch(`${getApiUrl()}/tenants/${user.tenantId}`);
+        if (tenantRes.ok) {
+          const tenantData = await tenantRes.json();
+          setPlatformLogo(tenantData.logoUrl || null);
+          setPlatformFavicon(tenantData.faviconUrl || null);
+          if (tenantData.themeColor) setThemeColor(tenantData.themeColor);
+        }
+      } catch (e) {
+        setPlatformLogo(user.tenantLogoUrl || null);
+        setPlatformFavicon(user.tenantFaviconUrl || null);
+        if (user.tenantThemeColor) setThemeColor(user.tenantThemeColor);
+      }
     }
   };
 
@@ -388,6 +398,14 @@ export default function AppearancePage() {
   const handleSaveThemeColor = async (colorHex: string) => {
     setThemeColor(colorHex);
     setIsSavingTheme(true);
+
+    // Apply primary accent color immediately to the DOM root CSS variables
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--primary', colorHex);
+      document.documentElement.style.setProperty('--ring', colorHex);
+      document.documentElement.style.setProperty('--primary-foreground', getContrastColor(colorHex));
+    }
+
     try {
       if (isSuperAdmin) {
         const res = await fetch(`${getApiUrl()}/system-settings`, {
@@ -415,7 +433,6 @@ export default function AppearancePage() {
         updateSession({ tenantThemeColor: colorHex });
         showNotification('Berhasil memperbarui Warna Tema Tenant Anda!', false);
       }
-      setTimeout(() => window.location.reload(), 1200);
     } catch (e: any) {
       showNotification(e.message, true);
     } finally {
@@ -489,7 +506,7 @@ export default function AppearancePage() {
         }
       }
 
-      setTimeout(() => window.location.reload(), 1500);
+      await fetchSystemSettings();
 
     } catch (err: any) {
       showNotification(err.message, true);

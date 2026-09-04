@@ -59,12 +59,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // System Branding States
   const [platformLogo, setPlatformLogo] = useState<string | null>(null);
   const [platformFavicon, setPlatformFavicon] = useState<string | null>(null);
+  const [platformThemeColor, setPlatformThemeColor] = useState<string | null>(null);
 
   // Active Branding Selection (Tenant White-Label vs System Global)
   const isWhiteLabelTenant = !isSuperAdmin && Boolean(user?.isWhiteLabel);
   const activeLogoUrl = (isWhiteLabelTenant && user?.tenantLogoUrl) ? user.tenantLogoUrl : platformLogo;
   const activeFaviconUrl = (isWhiteLabelTenant && user?.tenantFaviconUrl) ? user.tenantFaviconUrl : platformFavicon;
-  const activeThemeColor = (isWhiteLabelTenant && user?.tenantThemeColor) ? user.tenantThemeColor : null;
+  const activeThemeColor = (isWhiteLabelTenant && user?.tenantThemeColor) ? user.tenantThemeColor : platformThemeColor;
 
   useEffect(() => {
     if (initialized && !authenticated) {
@@ -82,6 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           const data = await res.json();
           if (data.platform_logo_url) setPlatformLogo(data.platform_logo_url);
           if (data.platform_favicon_url) setPlatformFavicon(data.platform_favicon_url);
+          if (data.platform_theme_color) setPlatformThemeColor(data.platform_theme_color);
         }
       } catch (e) {}
 
