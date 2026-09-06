@@ -1184,9 +1184,9 @@ export default function InsightsPage() {
 
         {/* RIGHT: SIDEBAR (Widgets & Settings) - ONLY VISIBLE IN EDIT/MODIFY MODE */}
         {isEditMode && (
-          <div className="w-80 bg-card flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-20 transition-all duration-300 animate-in slide-in-from-right">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col">
-              <TabsList className="w-full grid grid-cols-2 rounded-none h-12 bg-muted/30 border-b border-border p-0">
+          <div className="w-80 bg-card flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-20 transition-all duration-300 animate-in slide-in-from-right h-full overflow-hidden">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex-1 flex flex-col min-h-0 overflow-hidden">
+              <TabsList className="w-full grid grid-cols-2 rounded-none h-12 bg-muted/30 border-b border-border p-0 shrink-0">
                 <TabsTrigger value="widgets" className="rounded-none data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary h-full">
                   WIDGETS
                 </TabsTrigger>
@@ -1195,7 +1195,7 @@ export default function InsightsPage() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="widgets" className="flex-1 p-4 overflow-y-auto m-0">
+              <TabsContent value="widgets" className="flex-1 p-4 overflow-y-auto m-0 min-h-0">
                 <div className="grid grid-cols-2 gap-3">
                   {WIDGET_TEMPLATES.map((tmpl) => (
                     <div
@@ -1213,12 +1213,12 @@ export default function InsightsPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="settings" className="flex-1 p-4 m-0 overflow-y-auto flex flex-col justify-between">
+              <TabsContent value="settings" className="flex-1 p-4 m-0 overflow-y-auto min-h-0">
                 {(() => {
                   const selectedWidget = widgets.find(w => w.id === selectedWidgetId);
                   if (!selectedWidget) {
                     return (
-                      <div className="flex flex-col items-center justify-center flex-1 text-center p-4">
+                      <div className="flex flex-col items-center justify-center flex-1 h-full text-center p-4">
                         <Settings className="w-10 h-10 text-slate-300 mb-3" />
                         <p className="text-sm text-slate-500 font-medium">Select a widget on the canvas to configure it.</p>
                       </div>
@@ -1229,7 +1229,7 @@ export default function InsightsPage() {
                   const isMultiAttribute = ['maps'].includes(selectedWidget.type);
 
                   return (
-                    <div className="flex flex-col flex-1 justify-between h-full space-y-6">
+                    <div className="flex flex-col min-h-full justify-between space-y-6">
                       <div className="space-y-4">
                         <div className="p-3 bg-secondary/30 border border-border rounded-lg flex items-center gap-3">
                           <Settings2 className="w-5 h-5 text-primary" />
