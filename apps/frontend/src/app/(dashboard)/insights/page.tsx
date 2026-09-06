@@ -916,9 +916,9 @@ export default function InsightsPage() {
           type: widgetType,
           config: {
             title: template.label,
-            assetId: assets[0]?.id || '',
-            attribute: 'temperature',
-            attributes: ['temperature']
+            assetId: '',
+            attribute: '',
+            attributes: []
           }
         }
       ];
@@ -1018,9 +1018,10 @@ export default function InsightsPage() {
 
     if (!hasDataSource) {
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
-          <Settings2 className="w-8 h-8 text-slate-400 mb-2" />
-          <span className="text-xs text-muted-foreground">Select data source in Settings</span>
+        <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center select-none">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-tight">
+            No attribute<br />connected
+          </span>
         </div>
       );
     }
@@ -1571,7 +1572,7 @@ export default function InsightsPage() {
 
                                       return (
                                         <div className="space-y-2.5">
-                                          {targetAsset ? (
+                                          {targetAsset && currentAttr ? (
                                             /* CLICKABLE ASSET CARD (Directly opens tree select attributes modal) */
                                             <div
                                               onClick={() => {
@@ -1601,19 +1602,25 @@ export default function InsightsPage() {
                                               </div>
                                             </div>
                                           ) : (
-                                            /* STANDALONE ATTRIBUTE BUTTON (For new gauge widget creation when no asset is selected yet) */
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setPickerSelectedAssetId(assets[0]?.id || '');
-                                                setPickerSelectedAttribute('temperature');
-                                                setIsAttrPickerOpen(true);
-                                              }}
-                                              className="px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer shadow-2xs"
-                                            >
-                                              <ArrowLeftRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                                              <span>Attribute</span>
-                                            </button>
+                                            /* UNCONNECTED STATE MATCHING TARGET SCREENSHOT */
+                                            <div className="space-y-3 pt-1">
+                                              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                No attributes connected
+                                              </p>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setPickerSelectedAssetId(assets[0]?.id || '');
+                                                  setPickerSelectedAttribute('temperature');
+                                                  setIsAttrPickerOpen(true);
+                                                }}
+                                                className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                              >
+                                                <Plus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                                <span>Attribute</span>
+                                              </button>
+                                            </div>
                                           )}
                                         </div>
                                       );
