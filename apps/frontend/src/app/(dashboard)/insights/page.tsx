@@ -251,6 +251,23 @@ export default function InsightsPage() {
   const [assets, setAssets] = useState<any[]>([]);
   const [telemetryData, setTelemetryData] = useState<Record<string, any>>({});
 
+  // Unified asset-attribute options list for single attribute selectors
+  const allAssetAttributeOptions = useMemo(() => {
+    const list: { label: string; value: string; assetId: string; attribute: string }[] = [];
+    assets.forEach(asset => {
+      const attrs = getAssetAttributes(asset.id);
+      attrs.forEach(attr => {
+        list.push({
+          value: `${asset.id}::${attr.value}`,
+          label: `${asset.name} - ${attr.label}`,
+          assetId: asset.id,
+          attribute: attr.value
+        });
+      });
+    });
+    return list;
+  }, [assets]);
+
   // Time range filters state for chart widgets
   const [widgetRanges, setWidgetRanges] = useState<Record<string, { range: string, startDate?: string, endDate?: string }>>({});
 
@@ -1371,84 +1388,101 @@ export default function InsightsPage() {
                           </>
                         ) : (
                           <>
-                            {/* Standard Single Asset Config */}
-                            <div className="space-y-2">
-                              <label className="text-xs font-semibold text-slate-600">Target Asset</label>
-                              <SearchableSelect
-                                value={selectedWidget.config.assetId || ''}
-                                placeholder="Select Asset..."
-                                options={assets.map(a => ({ value: a.id, label: a.name }))}
-                                onChange={(newAssetId) => {
-                                  const attrs = getAssetAttributes(newAssetId);
-                                  const defaultAttr = attrs.length > 0 ? attrs[0].value : 'temperature';
-                                  const defaultAttrs = attrs.length > 0 ? [attrs[0].value] : ['temperature'];
-                                  updateWidgetConfig({
-                                    ...selectedWidget.config,
-                                    assetId: newAssetId,
-                                    attribute: defaultAttr,
-                                    attributes: defaultAttrs
-                                  });
-                                }}
-                              />
-                            </div>
-
-                            <div className="space-y-2 pt-2 border-t border-border">
-                              <label className="text-xs font-semibold text-slate-600">
-                                {isMultiAttribute ? 'Telemetry Attributes' : 'Telemetry Attribute'}
-                              </label>
-
-                              {isMultiAttribute ? (
-                                <div className="space-y-1 bg-background border border-border rounded-md p-2">
-                                  {(() => {
-                                    const availableAttributes = getAssetAttributes(selectedWidget.config.assetId);
-                                    const currentList = selectedWidget.config.attributes || [];
-                                    const getAttributeTypeKey = (name: string) => {
-                                      const n = name.toLowerCase();
-                                      if (n.startsWith('rssi')) return 'rssi';
-                                      if (n.includes('temperature') || n.includes('temp')) return 'temperature';
-                                      if (n.includes('humidity') || n.includes('hum')) return 'humidity';
-                                      if (n.includes('battery') || n.includes('voltage') || n.includes('volt')) return 'battery';
-                                      if (n.includes('co2')) return 'co2';
-                                      if (n.includes('co')) return 'co';
-                                      return n;
-                                    };
-                                    const activeType = currentList.length > 0 ? getAttributeTypeKey(currentList[0]) : null;
-
-                                    return availableAttributes.map(attr => {
-                                      const isChecked = currentList.includes(attr.value);
-                                      const attrType = getAttributeTypeKey(attr.value);
-                                      const isDisabled = activeType !== null && !isChecked && attrType !== activeType;
-
-                                      return (
-                                        <label key={attr.value} className={`flex items-center gap-2 text-xs text-slate-700 cursor-pointer p-1 rounded hover:bg-slate-50 ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                                          <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            disabled={isDisabled}
-                                            onChange={(e) => {
-                                              const newList = e.target.checked
-                                                ? [...currentList, attr.value]
-                                                : currentList.filter((x: string) => x !== attr.value);
-                                              updateWidgetConfig({ ...selectedWidget.config, attributes: newList });
-                                            }}
-                                            className="rounded text-primary focus:ring-primary border-slate-300 disabled:opacity-50"
-                                          />
-                                          {attr.label}
-                                          {isDisabled && <span className="text-[8px] text-muted-foreground ml-auto">(mismatched type)</span>}
-                                        </label>
-                                      );
-                                    });
-                                  })()}
+                            {/* Single Unified Target Attribute Config or Multi-Attribute Config */}
+                            {isMultiAttribute ? (
+                              <>
+                                <div className="space-y-2">
+                                  <label className="text-xs font-semibold text-slate-600">Target Asset</label>
+                                  <SearchableSelect
+                                    value={selectedWidget.config.assetId || ''}
+                                    placeholder="Select Asset..."
+                                    options={assets.map(a => ({ value: a.id, label: a.name }))}
+                                    onChange={(newAssetId) => {
+                                      const attrs = getAssetAttributes(newAssetId);
+                                      const defaultAttr = attrs.length > 0 ? attrs[0].value : 'temperature';
+                                      const defaultAttrs = attrs.length > 0 ? [attrs[0].value] : ['temperature'];
+                                      updateWidgetConfig({
+                                        ...selectedWidget.config,
+                                        assetId: newAssetId,
+                                        attribute: defaultAttr,
+                                        attributes: defaultAttrs
+                                      });
+                                    }}
+                                  />
                                 </div>
-                              ) : (
+
+                                <div className="space-y-2 pt-2 border-t border-border">
+                                  <label className="text-xs font-semibold text-slate-600">Telemetry Attributes</label>
+                                  <div className="space-y-1 bg-background border border-border rounded-md p-2">
+                                    {(() => {
+                                      const availableAttributes = getAssetAttributes(selectedWidget.config.assetId);
+                                      const currentList = selectedWidget.config.attributes || [];
+                                      const getAttributeTypeKey = (name: string) => {
+                                        const n = name.toLowerCase();
+                                        if (n.startsWith('rssi')) return 'rssi';
+                                        if (n.includes('temperature') || n.includes('temp')) return 'temperature';
+                                        if (n.includes('humidity') || n.includes('hum')) return 'humidity';
+                                        if (n.includes('battery') || n.includes('voltage') || n.includes('volt')) return 'battery';
+                                        if (n.includes('co2')) return 'co2';
+                                        if (n.includes('co')) return 'co';
+                                        return n;
+                                      };
+                                      const activeType = currentList.length > 0 ? getAttributeTypeKey(currentList[0]) : null;
+
+                                      return availableAttributes.map(attr => {
+                                        const isChecked = currentList.includes(attr.value);
+                                        const attrType = getAttributeTypeKey(attr.value);
+                                        const isDisabled = activeType !== null && !isChecked && attrType !== activeType;
+
+                                        return (
+                                          <label key={attr.value} className={`flex items-center gap-2 text-xs text-slate-700 cursor-pointer p-1 rounded hover:bg-slate-50 ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              disabled={isDisabled}
+                                              onChange={(e) => {
+                                                const newList = e.target.checked
+                                                  ? [...currentList, attr.value]
+                                                  : currentList.filter((x: string) => x !== attr.value);
+                                                updateWidgetConfig({ ...selectedWidget.config, attributes: newList });
+                                              }}
+                                              className="rounded text-primary focus:ring-primary border-slate-300 disabled:opacity-50"
+                                            />
+                                            {attr.label}
+                                            {isDisabled && <span className="text-[8px] text-muted-foreground ml-auto">(mismatched type)</span>}
+                                          </label>
+                                        );
+                                      });
+                                    })()}
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="space-y-2">
+                                <label className="text-xs font-semibold text-slate-600">Telemetry Attribute</label>
                                 <SearchableSelect
-                                  value={selectedWidget.config.attribute || 'temperature'}
-                                  placeholder="Select Attribute..."
-                                  options={getAssetAttributes(selectedWidget.config.assetId)}
-                                  onChange={(val) => updateWidgetConfig({ ...selectedWidget.config, attribute: val })}
+                                  value={
+                                    selectedWidget.config.assetId && selectedWidget.config.attribute
+                                      ? `${selectedWidget.config.assetId}::${selectedWidget.config.attribute}`
+                                      : ''
+                                  }
+                                  placeholder="Select Asset & Attribute..."
+                                  alwaysSearchable={true}
+                                  options={allAssetAttributeOptions}
+                                  onChange={(compositeVal) => {
+                                    const selected = allAssetAttributeOptions.find(o => o.value === compositeVal);
+                                    if (selected) {
+                                      updateWidgetConfig({
+                                        ...selectedWidget.config,
+                                        assetId: selected.assetId,
+                                        attribute: selected.attribute,
+                                        attributes: [selected.attribute]
+                                      });
+                                    }
+                                  }}
                                 />
-                              )}
-                            </div>
+                              </div>
+                            )}
 
                             {/* Gauge Specific Settings: Values Range & Thresholds */}
                             {selectedWidget.type === 'gauge' && (
@@ -1457,7 +1491,6 @@ export default function InsightsPage() {
                                 <div className="space-y-2">
                                   <button
                                     type="button"
-                                    onClick={() => setIsValuesOpen(!isValuesOpen)}
                                     className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
                                   >
                                     <ChevronDown className={`w-4 h-4 transition-transform ${isValuesOpen ? '' : '-rotate-90'}`} />
