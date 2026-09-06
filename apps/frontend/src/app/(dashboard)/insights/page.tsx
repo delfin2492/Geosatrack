@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import {
-  Activity, LayoutGrid, Settings2, Plus, GripHorizontal, Settings, LineChart, Hash, MapPin, Tablet, Edit2, Trash2, Check, X, RefreshCw, Eye, EyeOff, LayoutTemplate, ExternalLink, Save, Lock, ChevronDown, Search
+  Activity, LayoutGrid, Settings2, Plus, GripHorizontal, Settings, LineChart, Hash, MapPin, Tablet, Edit2, Trash2, Check, X, RefreshCw, Eye, EyeOff, LayoutTemplate, ExternalLink, Save, Lock, ChevronDown, Search, Filter, SlidersHorizontal, ChevronRight, ArrowLeftRight
 } from 'lucide-react';
 import { getApiUrl, getBackendUrl } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
@@ -176,6 +176,19 @@ export default function InsightsPage() {
   const [activeTab, setActiveTab] = useState('widgets');
   const [isValuesOpen, setIsValuesOpen] = useState(true);
   const [isThresholdsOpen, setIsThresholdsOpen] = useState(true);
+
+  // Select Attributes Modal Popup State (Matching Target Images)
+  const [isAttrPickerOpen, setIsAttrPickerOpen] = useState(false);
+  const [pickerSelectedAssetId, setPickerSelectedAssetId] = useState('');
+  const [pickerSelectedAttribute, setPickerSelectedAttribute] = useState('');
+  const [assetSearchFilter, setAssetSearchFilter] = useState('');
+  const [collapsedAssetIds, setCollapsedAssetIds] = useState<Record<string, boolean>>({});
+  const [isAttributesSectionOpen, setIsAttributesSectionOpen] = useState(true);
+
+  const toggleExpandAsset = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedAssetIds(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Custom Confirm Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -1458,29 +1471,63 @@ export default function InsightsPage() {
                                 </div>
                               </>
                             ) : (
-                              <div className="space-y-2">
-                                <label className="text-xs font-semibold text-slate-600">Telemetry Attribute</label>
-                                <SearchableSelect
-                                  value={
-                                    selectedWidget.config.assetId && selectedWidget.config.attribute
-                                      ? `${selectedWidget.config.assetId}::${selectedWidget.config.attribute}`
-                                      : ''
-                                  }
-                                  placeholder="Select Asset & Attribute..."
-                                  alwaysSearchable={true}
-                                  options={allAssetAttributeOptions}
-                                  onChange={(compositeVal) => {
-                                    const selected = allAssetAttributeOptions.find(o => o.value === compositeVal);
-                                    if (selected) {
-                                      updateWidgetConfig({
-                                        ...selectedWidget.config,
-                                        assetId: selected.assetId,
-                                        attribute: selected.attribute,
-                                        attributes: [selected.attribute]
-                                      });
-                                    }
-                                  }}
-                                />
+                              /* ATTRIBUTES SECTION (Collapsible with Attribute Button & Card - Matching Image 2) */
+                              <div className="space-y-2 pt-2 border-t border-border">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsAttributesSectionOpen(!isAttributesSectionOpen)}
+                                  className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                                >
+                                  <ChevronDown className={`w-4 h-4 transition-transform ${isAttributesSectionOpen ? '' : '-rotate-90'}`} />
+                                  <span>Attributes</span>
+                                </button>
+
+                                {isAttributesSectionOpen && (
+                                  <div className="space-y-3 pl-2 animate-in fade-in duration-150">
+                                    {(() => {
+                                      const targetAsset = assets.find(a => a.id === selectedWidget.config.assetId);
+                                      const currentAttr = selectedWidget.config.attribute || 'temperature';
+                                      const assetName = targetAsset?.name || 'Weather Station';
+
+                                      const attrs = targetAsset ? getAssetAttributes(targetAsset.id) : [];
+                                      const attrObj = attrs.find(a => a.value === currentAttr);
+                                      const attrLabel = attrObj ? attrObj.label : (currentAttr.charAt(0).toUpperCase() + currentAttr.slice(1));
+
+                                      return (
+                                        <div className="space-y-2.5">
+                                          {targetAsset ? (
+                                            <div className="flex items-center gap-3 p-2.5 bg-secondary/20 border border-border rounded-xl">
+                                              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
+                                                <Activity className="w-4 h-4" />
+                                              </div>
+                                              <div className="flex flex-col leading-tight min-w-0 flex-1">
+                                                <span className="text-xs font-bold text-foreground truncate">{assetName}</span>
+                                                <span className="text-[11px] font-medium text-muted-foreground truncate">{attrLabel}</span>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="p-2.5 bg-secondary/20 border border-dashed border-border rounded-xl text-center text-xs text-muted-foreground">
+                                              No attribute selected yet
+                                            </div>
+                                          )}
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setPickerSelectedAssetId(selectedWidget.config.assetId || (assets[0]?.id || ''));
+                                              setPickerSelectedAttribute(selectedWidget.config.attribute || 'temperature');
+                                              setIsAttrPickerOpen(true);
+                                            }}
+                                            className="px-3.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                                          >
+                                            <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                            <span>Attribute</span>
+                                          </button>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                )}
                               </div>
                             )}
 
@@ -1670,6 +1717,207 @@ export default function InsightsPage() {
         onConfirm={() => confirmModal?.onConfirm()}
         onCancel={() => setConfirmModal(null)}
       />
+
+      {/* SELECT ATTRIBUTES MODAL (MATCHING IMAGE 1 WITH TREE HIERARCHY & ATTRIBUTES LIST) */}
+      {isAttrPickerOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsAttrPickerOpen(false)}>
+          <div className="w-full max-w-2xl bg-card border border-border shadow-2xl rounded-lg overflow-hidden flex flex-col h-[530px] animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+
+            {/* HEADER */}
+            <div className="px-5 py-3 border-b border-border bg-card flex items-center justify-between">
+              <h3 className="text-base font-semibold text-foreground">Select attributes</h3>
+              <button onClick={() => setIsAttrPickerOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* TWO COLUMN CONTENT */}
+            <div className="flex-1 flex overflow-hidden">
+
+              {/* LEFT COLUMN: ASSETS HIERARCHICAL TREE SELECTION */}
+              <div className="w-5/12 border-r border-border bg-secondary/10 flex flex-col">
+                {/* Yellow Amber Header */}
+                <div className="bg-amber-500 text-white px-3.5 py-2.5 flex items-center justify-between font-bold text-xs shadow-sm">
+                  <span>Assets</span>
+                  <div className="flex items-center gap-2.5">
+                    <X className="w-3.5 h-3.5 cursor-pointer hover:opacity-80" onClick={() => setAssetSearchFilter('')} />
+                    <Filter className="w-3.5 h-3.5 cursor-pointer hover:opacity-80" />
+                  </div>
+                </div>
+
+                {/* Filter Search Input */}
+                <div className="p-2.5 border-b border-border bg-card">
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      placeholder="Filter..."
+                      value={assetSearchFilter}
+                      onChange={(e) => setAssetSearchFilter(e.target.value)}
+                      className="w-full h-8 text-xs bg-secondary/35 pr-8 pl-2.5 rounded-md border border-border text-foreground focus:outline-none focus:border-amber-500"
+                    />
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Asset Hierarchical Tree List */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-1 text-xs">
+                  {(() => {
+                    const assetMap = new Map();
+                    assets.forEach(a => assetMap.set(a.id, { ...a, children: [] }));
+
+                    const roots: any[] = [];
+                    assets.forEach(a => {
+                      const item = assetMap.get(a.id);
+                      if (a.parentId && assetMap.has(a.parentId)) {
+                        assetMap.get(a.parentId).children.push(item);
+                      } else {
+                        roots.push(item);
+                      }
+                    });
+
+                    const flattened: { asset: any; depth: number; hasChildren: boolean; isCollapsed: boolean }[] = [];
+                    const traverse = (list: any[], depth: number) => {
+                      list.forEach(node => {
+                        const isCollapsed = !!collapsedAssetIds[node.id];
+                        const matches = !assetSearchFilter || node.name.toLowerCase().includes(assetSearchFilter.toLowerCase()) || (node.children && node.children.some((c: any) => c.name.toLowerCase().includes(assetSearchFilter.toLowerCase())));
+                        if (matches) {
+                          flattened.push({ asset: node, depth, hasChildren: node.children.length > 0, isCollapsed });
+                          if (!isCollapsed || assetSearchFilter) {
+                            traverse(node.children, depth + 1);
+                          }
+                        }
+                      });
+                    };
+                    traverse(roots, 0);
+
+                    return flattened.map(({ asset, depth, hasChildren, isCollapsed }) => {
+                      const isSelected = pickerSelectedAssetId === asset.id;
+                      const indentPadding = Math.min(depth * 14 + 10, 48);
+
+                      return (
+                        <div
+                          key={asset.id}
+                          style={{ paddingLeft: `${indentPadding}px` }}
+                          onClick={() => {
+                            setPickerSelectedAssetId(asset.id);
+                            const attrs = getAssetAttributes(asset.id);
+                            if (!attrs.find(x => x.value === pickerSelectedAttribute)) {
+                              setPickerSelectedAttribute(attrs[0]?.value || 'temperature');
+                            }
+                          }}
+                          className={`flex items-center gap-1.5 pr-2.5 py-1.5 rounded-md cursor-pointer transition-all border-l-4 ${isSelected
+                            ? 'bg-secondary border-amber-500 font-bold text-foreground shadow-sm'
+                            : 'border-transparent hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                          {hasChildren ? (
+                            <button
+                              type="button"
+                              onClick={(e) => toggleExpandAsset(asset.id, e)}
+                              className="p-0.5 hover:bg-secondary/80 rounded text-muted-foreground hover:text-foreground shrink-0 transition-transform"
+                              title={isCollapsed ? "Expand" : "Collapse"}
+                            >
+                              {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
+                          ) : (
+                            <span className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <Activity className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : 'text-emerald-500'}`} />
+                          <span className="truncate text-xs flex-1">{asset.name}</span>
+                          {hasChildren && (
+                            <span
+                              onClick={(e) => toggleExpandAsset(asset.id, e)}
+                              className="font-mono text-[9px] px-1.5 py-0.5 rounded-full bg-secondary/60 text-muted-foreground hover:bg-secondary cursor-pointer ml-auto"
+                            >
+                              {asset.children.length}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: ATTRIBUTES LIST WITH UNITS */}
+              <div className="w-7/12 bg-card flex flex-col">
+                {/* Header Bar */}
+                <div className="bg-secondary/35 px-4 py-2.5 border-b border-border font-bold text-xs text-muted-foreground">
+                  Attributes
+                </div>
+
+                {/* Attributes List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-1 text-xs">
+                  {(() => {
+                    const selectedAsset = assets.find(a => a.id === pickerSelectedAssetId);
+                    let attributes = selectedAsset ? getAssetAttributes(selectedAsset.id) : [
+                      { value: 'temperature', label: 'Temperature (°C)' },
+                      { value: 'humidity', label: 'Humidity (%)' },
+                      { value: 'battery', label: 'Battery (V)' },
+                      { value: 'rssi', label: 'RSSI (dBm)' }
+                    ];
+
+                    return attributes.map(attr => {
+                      const isSelected = pickerSelectedAttribute === attr.value;
+
+                      return (
+                        <div
+                          key={attr.value}
+                          onClick={() => setPickerSelectedAttribute(attr.value)}
+                          className={`px-3 py-2.5 rounded-md cursor-pointer transition-all flex items-center justify-between ${isSelected
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30'
+                            : 'hover:bg-secondary/60 text-foreground'
+                            }`}
+                        >
+                          <span>{attr.label}</span>
+                          {isSelected && <span className="text-amber-500 text-xs font-bold">✓</span>}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+            </div>
+
+            {/* FOOTER */}
+            <div className="px-5 py-3 border-t border-border bg-card flex items-center justify-end gap-5">
+              <button
+                type="button"
+                onClick={() => setIsAttrPickerOpen(false)}
+                className="text-xs font-bold text-amber-500 hover:text-amber-600 uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                disabled={!pickerSelectedAssetId || !pickerSelectedAttribute}
+                onClick={() => {
+                  const selectedWidget = widgets.find(w => w.id === selectedWidgetId);
+                  if (!selectedWidget) return;
+
+                  const asset = assets.find(a => a.id === pickerSelectedAssetId);
+                  const assetName = asset?.name || 'Weather Station';
+
+                  updateWidgetConfig({
+                    ...selectedWidget.config,
+                    assetId: pickerSelectedAssetId,
+                    attribute: pickerSelectedAttribute,
+                    attributes: [pickerSelectedAttribute],
+                    title: `${assetName} - ${pickerSelectedAttribute}`
+                  });
+
+                  setIsAttrPickerOpen(false);
+                }}
+                className="text-xs font-bold text-amber-500 hover:text-amber-600 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                ADD
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
