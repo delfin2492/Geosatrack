@@ -174,6 +174,8 @@ export default function InsightsPage() {
 
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('widgets');
+  const [isValuesOpen, setIsValuesOpen] = useState(true);
+  const [isThresholdsOpen, setIsThresholdsOpen] = useState(true);
 
   // Custom Confirm Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -1447,6 +1449,146 @@ export default function InsightsPage() {
                                 />
                               )}
                             </div>
+
+                            {/* Gauge Specific Settings: Values Range & Thresholds */}
+                            {selectedWidget.type === 'gauge' && (
+                              <div className="space-y-4 pt-3 border-t border-border">
+                                {/* VALUES SECTION (Collapsible) */}
+                                <div className="space-y-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsValuesOpen(!isValuesOpen)}
+                                    className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                                  >
+                                    <ChevronDown className={`w-4 h-4 transition-transform ${isValuesOpen ? '' : '-rotate-90'}`} />
+                                    <span>Values</span>
+                                  </button>
+
+                                  {isValuesOpen && (
+                                    <div className="space-y-3 pl-2 animate-in fade-in duration-150">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Min</label>
+                                          <input
+                                            type="number"
+                                            value={selectedWidget.config.min !== undefined ? selectedWidget.config.min : 0}
+                                            onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, min: e.target.value === '' ? '' : Number(e.target.value) })}
+                                            className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Max</label>
+                                          <input
+                                            type="number"
+                                            value={selectedWidget.config.max !== undefined ? selectedWidget.config.max : 100}
+                                            onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, max: e.target.value === '' ? '' : Number(e.target.value) })}
+                                            className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Decimals</label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="5"
+                                          value={selectedWidget.config.decimals !== undefined ? selectedWidget.config.decimals : 0}
+                                          onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, decimals: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) })}
+                                          className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* THRESHOLDS SECTION (Collapsible) */}
+                                <div className="space-y-2 pt-2 border-t border-border">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsThresholdsOpen(!isThresholdsOpen)}
+                                    className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                                  >
+                                    <ChevronDown className={`w-4 h-4 transition-transform ${isThresholdsOpen ? '' : '-rotate-90'}`} />
+                                    <span>Thresholds</span>
+                                  </button>
+
+                                  {isThresholdsOpen && (
+                                    <div className="space-y-2.5 pl-2 animate-in fade-in duration-150">
+                                      {(() => {
+                                        const thresholds: { color: string, value: number }[] = selectedWidget.config.thresholds || [
+                                          { color: '#22c55e', value: 0 },
+                                          { color: '#f97316', value: 25 },
+                                          { color: '#ef4444', value: 75 }
+                                        ];
+
+                                        return (
+                                          <>
+                                            <div className="space-y-2">
+                                              {thresholds.map((t, idx) => (
+                                                <div key={idx} className="flex items-center gap-2">
+                                                  <div className="w-8 h-8 rounded-lg border border-border overflow-hidden relative shrink-0 cursor-pointer shadow-xs">
+                                                    <input
+                                                      type="color"
+                                                      value={t.color || '#10b981'}
+                                                      onChange={(e) => {
+                                                        const updated = [...thresholds];
+                                                        updated[idx] = { ...updated[idx], color: e.target.value };
+                                                        updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
+                                                      }}
+                                                      className="absolute -inset-2 w-12 h-12 opacity-0 cursor-pointer"
+                                                    />
+                                                    <div className="w-full h-full" style={{ backgroundColor: t.color || '#10b981' }} />
+                                                  </div>
+
+                                                  <input
+                                                    type="number"
+                                                    value={t.value !== undefined ? t.value : ''}
+                                                    onChange={(e) => {
+                                                      const updated = [...thresholds];
+                                                      updated[idx] = { ...updated[idx], value: e.target.value === '' ? 0 : Number(e.target.value) };
+                                                      updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
+                                                    }}
+                                                    className="flex-1 text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
+                                                  />
+
+                                                  {thresholds.length > 1 && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const updated = thresholds.filter((_, i) => i !== idx);
+                                                        updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
+                                                      }}
+                                                      className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-md"
+                                                    >
+                                                      <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const lastVal = thresholds.length > 0 ? thresholds[thresholds.length - 1].value + 20 : 0;
+                                                const defaultColors = ['#22c55e', '#f97316', '#ef4444', '#3b82f6', '#8b5cf6'];
+                                                const nextColor = defaultColors[thresholds.length % defaultColors.length];
+                                                const updated = [...thresholds, { color: nextColor, value: lastVal }];
+                                                updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
+                                              }}
+                                              className="w-full py-2 px-3 border border-border rounded-xl bg-secondary/30 hover:bg-secondary/60 text-primary font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                                            >
+                                              <Plus className="w-4 h-4" /> Threshold
+                                            </button>
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
                       </div>

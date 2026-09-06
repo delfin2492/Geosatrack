@@ -27,49 +27,37 @@ const getArcPath = (x: number, y: number, radius: number, startAngle: number, en
 const getSpeedometerConfig = (attributeName: string, value: number, widgetConfig: any) => {
   const attr = (attributeName || 'temperature').toLowerCase();
 
-  let minVal = widgetConfig?.min ?? 0;
-  let maxVal = widgetConfig?.max ?? 50;
-  let unit = '°C';
-  let ticks = [0, 15, 35, 50];
-  let tickAngles = [180, 126, 54, 0];
-  let colors = ['#10b981', '#eab308', '#ef4444']; // green, yellow, red
+  let minVal = widgetConfig?.min !== undefined && widgetConfig?.min !== null && widgetConfig?.min !== ''
+    ? Number(widgetConfig.min)
+    : (attr === 'humidity' ? 0 : attr === 'battery' ? 2.0 : attr.startsWith('rssi') ? -100 : 0);
 
-  if (attr === 'humidity') {
-    if (widgetConfig?.min === undefined) minVal = 0;
-    if (widgetConfig?.max === undefined) maxVal = 100;
-    unit = '%';
-    ticks = [0, 30, 70, 100];
-    tickAngles = [180, 126, 54, 0];
-    colors = ['#10b981', '#eab308', '#ef4444'];
-  } else if (attr === 'battery') {
-    if (widgetConfig?.min === undefined) minVal = 2.0;
-    if (widgetConfig?.max === undefined) maxVal = 4.0;
-    unit = 'V';
-    ticks = [2.0, 2.8, 3.2, 4.0];
-    tickAngles = [180, 108, 72, 0];
-    colors = ['#ef4444', '#eab308', '#10b981']; // Red (low), Yellow, Green (high)
-  } else if (attr === 'rssi' || attr.startsWith('rssi_')) {
-    if (widgetConfig?.min === undefined) minVal = -100;
-    if (widgetConfig?.max === undefined) maxVal = -30;
-    unit = 'dBm';
-    ticks = [-100, -85, -65, -30];
-    tickAngles = [180, 141.4, 90, 0];
-    colors = ['#ef4444', '#eab308', '#10b981']; // Red (low), Yellow, Green (high)
-  } else {
-    if (widgetConfig?.min === undefined) minVal = 0;
-    if (widgetConfig?.max === undefined) maxVal = 100;
-    unit = widgetConfig?.unit || '';
-    ticks = [minVal, minVal + (maxVal - minVal) * 0.3, minVal + (maxVal - minVal) * 0.7, maxVal];
-    tickAngles = [180, 126, 54, 0];
+  let maxVal = widgetConfig?.max !== undefined && widgetConfig?.max !== null && widgetConfig?.max !== ''
+    ? Number(widgetConfig.max)
+    : (attr === 'humidity' ? 100 : attr === 'battery' ? 4.0 : attr.startsWith('rssi') ? -30 : 100);
+
+  let unit = '°C';
+  if (attr === 'humidity') unit = '%';
+  else if (attr === 'battery') unit = 'V';
+  else if (attr === 'rssi' || attr.startsWith('rssi_')) unit = 'dBm';
+  else unit = widgetConfig?.unit || '';
+
+  let ticks = [minVal, minVal + (maxVal - minVal) * 0.3, minVal + (maxVal - minVal) * 0.7, maxVal];
+  let tickAngles = [180, 126, 54, 0];
+  let colors = ['#10b981', '#eab308', '#ef4444'];
+
+  if (attr === 'battery' || attr === 'rssi' || attr.startsWith('rssi_')) {
+    colors = ['#ef4444', '#eab308', '#10b981'];
   }
 
   // Override thresholds if custom thresholds are defined in config
   if (widgetConfig?.thresholds && widgetConfig.thresholds.length > 0) {
-    const sortedThresholds = [...widgetConfig.thresholds].sort((a: any, b: any) => a.value - b.value);
-    ticks = [minVal, ...sortedThresholds.map((t: any) => t.value), maxVal].filter((v, i, a) => a.indexOf(v) === i);
-    colors = sortedThresholds.map((t: any) => t.color);
-    if (colors.length < ticks.length - 1) {
-      // Fallback color for final segment if not enough colors
+    const sortedThresholds = [...widgetConfig.thresholds].sort((a: any, b: any) => Number(a.value) - Number(b.value));
+    const threshVals = sortedThresholds.map((t: any) => Number(t.value));
+
+    const rawTicks = [minVal, ...threshVals.filter(v => v > minVal && v < maxVal), maxVal];
+    ticks = Array.from(new Set(rawTicks)).sort((a, b) => a - b);
+    colors = sortedThresholds.map((t: any) => t.color || '#10b981');
+    while (colors.length < ticks.length - 1) {
       colors.push('#cbd5e1');
     }
     tickAngles = ticks.map(t => {
@@ -107,6 +95,10 @@ export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widg
   };
 
   const widgetConfig = widget?.config || {};
+  const decimals = widgetConfig?.decimals !== undefined && widgetConfig?.decimals !== null && widgetConfig?.decimals !== ''
+    ? Math.max(0, Number(widgetConfig.decimals))
+    : 0;
+
   const { minVal, maxVal, unit, ticks, tickAngles, colors, val, needleAngle } = getSpeedometerConfig(attribute, value, widgetConfig);
 
   const cx = 100;
@@ -182,7 +174,7 @@ export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widg
         ))}
 
         <text x={cx} y={cy - 12} textAnchor="middle" style={{ fontSize: `${getDynamicFontSize(18)}px` }} className="fill-slate-800 dark:fill-slate-200 font-extrabold">
-          {val.toFixed(1)}
+          {val.toFixed(decimals)}
         </text>
 
         <polygon points={needlePoints} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.5" className="transition-all duration-500 ease-out" />
