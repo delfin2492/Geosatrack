@@ -25,7 +25,9 @@ import {
   Terminal,
   Settings,
   Palette,
-  Loader2
+  Loader2,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import NotificationDropdown from '../components/NotificationDropdown';
 
@@ -50,6 +52,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   } = useAuth();
   const tenantLogoUrl = user?.tenantLogoUrl;
   const { theme, toggleTheme } = useTheme();
+
+  // Collapsible Sidebar State
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('geomesh_sidebar_collapsed') === 'true';
+    }
+    return false;
+  });
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('geomesh_sidebar_collapsed', String(next));
+      }
+      return next;
+    });
+  };
 
   // Impersonation modal popup states
   const [showTenantPopup, setShowTenantPopup] = useState(false);
@@ -207,32 +227,42 @@ function getContrastColor(hexColor: string): string {
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
       <GlobalAlerts />
       
-      {/* SIDEBAR (OpenRemote Inspired) */}
-      <aside className="w-64 bg-card border-r border-border flex flex-col justify-between shrink-0">
+      {/* SIDEBAR (OpenRemote Inspired - Collapsible) */}
+      <aside className={`bg-card border-r border-border flex flex-col justify-between shrink-0 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <div>
           {/* Logo Brand */}
-          <div className="h-16 flex items-center px-6 border-b border-border">
-            {activeLogoUrl ? (
-              <img src={`${getBackendUrl()}${activeLogoUrl}`} alt="Platform Logo" className="object-contain h-8 w-auto max-w-full" />
-            ) : (
-              <div className="flex items-center gap-3">
+          <div className={`h-16 flex items-center border-b border-border ${sidebarCollapsed ? 'justify-center px-2' : 'px-6'}`}>
+            {sidebarCollapsed ? (
+              activeFaviconUrl ? (
+                <img src={`${getBackendUrl()}${activeFaviconUrl}`} alt="Platform Logo" className="object-contain h-8 w-8" />
+              ) : (
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/30">
                   <Boxes className="h-5 w-5 text-primary" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-                    Geomesh
-                  </h2>
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
-                    Manager Console
-                  </p>
+              )
+            ) : (
+              activeLogoUrl ? (
+                <img src={`${getBackendUrl()}${activeLogoUrl}`} alt="Platform Logo" className="object-contain h-8 w-auto max-w-full" />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 border border-primary/30">
+                    <Boxes className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
+                      Geomesh
+                    </h2>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
+                      Manager Console
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )
             )}
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-4 space-y-1.5">
+          <nav className={`p-3 space-y-1.5 ${sidebarCollapsed ? 'px-2' : 'p-4'}`}>
             {navigation.map((item) => {
               const isActive = pathname === item.href;
               const Icon = item.icon;
@@ -240,14 +270,17 @@ function getContrastColor(hexColor: string): string {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-3.5 px-4 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all border ${
+                  title={sidebarCollapsed ? item.name : undefined}
+                  className={`flex items-center rounded-lg text-xs font-semibold tracking-wide transition-all border ${
+                    sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-3.5 px-4 py-2.5'
+                  } ${
                     isActive 
                       ? 'bg-primary/10 border-primary/20 text-primary shadow-sm' 
                       : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                   }`}
                 >
-                  <Icon className={`h-4.5 w-4.5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
-                  {item.name}
+                  <Icon className={`h-4.5 w-4.5 shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                  {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
                 </Link>
               );
             })}
@@ -255,40 +288,49 @@ function getContrastColor(hexColor: string): string {
         </div>
 
         {/* User Info & Footer */}
-        <div className="p-4 border-t border-border bg-card/45 space-y-3">
-          
+        <div className={`border-t border-border bg-card/45 space-y-3 ${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
           <div className="space-y-3">
             {/* Active Tenant / Impersonation trigger */}
             {isSuperAdmin && !isImpersonating ? (
-              // If Superadmin and NOT impersonating, show the view switch button instead of the tenant card
               <button
                 onClick={() => setShowTenantPopup(true)}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title={sidebarCollapsed ? "View Tenant Workspace" : undefined}
+                className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer shadow-sm ${
+                  sidebarCollapsed ? 'px-0' : 'px-3'
+                }`}
               >
-                <Building2 className="h-4 w-4" />
-                View Tenant Workspace
+                <Building2 className="h-4 w-4 shrink-0" />
+                {!sidebarCollapsed && <span>View Tenant Workspace</span>}
               </button>
             ) : (
-              // Show normal active tenant card for tenant users or active impersonating superadmin
-              <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20 space-y-2">
-                <div className="flex items-center justify-between text-[10px] text-primary font-bold uppercase tracking-wider">
+              <div
+                title={sidebarCollapsed ? `Active Tenant: ${tenantName || tenantId}` : undefined}
+                className={`rounded-lg bg-primary/10 border border-primary/20 space-y-2 ${
+                  sidebarCollapsed ? 'p-2 flex flex-col items-center justify-center space-y-0' : 'p-2.5'
+                }`}
+              >
+                <div className={`flex items-center text-primary font-bold uppercase tracking-wider ${
+                  sidebarCollapsed ? 'justify-center' : 'justify-between text-[10px]'
+                }`}>
                   <span className="flex items-center gap-1">
-                    <Building2 className="h-3 w-3" />
-                    Active Tenant
+                    <Building2 className="h-3.5 w-3.5 shrink-0" />
+                    {!sidebarCollapsed && 'Active Tenant'}
                   </span>
-                  {isSuperAdmin && (
+                  {!sidebarCollapsed && isSuperAdmin && (
                     <button
                       onClick={() => setShowTenantPopup(true)}
-                      className="hover:underline flex items-center gap-0.5 text-muted-foreground hover:text-foreground font-semibold cursor-pointer"
+                      className="hover:underline flex items-center gap-0.5 text-muted-foreground hover:text-foreground font-semibold cursor-pointer text-[10px]"
                     >
                       Switch
                     </button>
                   )}
                 </div>
-                <div className="text-xs font-bold truncate text-foreground">
-                  {tenantName || tenantId || 'PT ABC Logistics'}
-                </div>
-                {isSuperAdmin && isImpersonating && (
+                {!sidebarCollapsed && (
+                  <div className="text-xs font-bold truncate text-foreground">
+                    {tenantName || tenantId || 'PT ABC Logistics'}
+                  </div>
+                )}
+                {!sidebarCollapsed && isSuperAdmin && isImpersonating && (
                   <button
                     onClick={handleExitImpersonation}
                     className="w-full mt-1.5 py-1 px-2 rounded bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 border border-yellow-500/30 text-[10px] font-bold uppercase tracking-wide transition-all cursor-pointer text-center"
@@ -300,7 +342,12 @@ function getContrastColor(hexColor: string): string {
             )}
 
             {/* User Account */}
-            <div className="flex items-center gap-3 px-2 py-1.5 bg-secondary/35 rounded-lg border border-border/50">
+            <div
+              title={sidebarCollapsed ? `User: ${username}` : undefined}
+              className={`flex items-center rounded-lg border border-border/50 bg-secondary/35 ${
+                sidebarCollapsed ? 'justify-center p-1.5' : 'gap-3 px-2 py-1.5'
+              }`}
+            >
               <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0 relative overflow-hidden">
                 {user?.avatarUrl ? (
                   <img
@@ -312,23 +359,28 @@ function getContrastColor(hexColor: string): string {
                   username?.charAt(0).toUpperCase() || 'U'
                 )}
               </div>
-              <div className="flex flex-col overflow-hidden">
-                <span className="text-xs font-bold truncate text-foreground flex items-center gap-1">
-                  <User className="h-3 w-3 text-muted-foreground" />
-                  {username}
-                </span>
-                <span className="text-[9px] font-mono text-muted-foreground capitalize truncate">
-                  {role === 'tenant_admin' || role === 'superadmin' ? 'Admin Tenant' : 'Staff Tenant'}
-                </span>
-              </div>
+              {!sidebarCollapsed && (
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-xs font-bold truncate text-foreground flex items-center gap-1">
+                    <User className="h-3 w-3 text-muted-foreground" />
+                    {username}
+                  </span>
+                  <span className="text-[9px] font-mono text-muted-foreground capitalize truncate">
+                    {role === 'tenant_admin' || role === 'superadmin' ? 'Admin Tenant' : 'Staff Tenant'}
+                  </span>
+                </div>
+              )}
             </div>
 
             <button
               onClick={logout}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 text-xs font-semibold text-muted-foreground transition-all cursor-pointer"
+              title={sidebarCollapsed ? "Sign Out" : undefined}
+              className={`w-full flex items-center justify-center py-2 rounded-lg border border-border bg-card hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 text-xs font-semibold text-muted-foreground transition-all cursor-pointer ${
+                sidebarCollapsed ? 'px-0' : 'gap-2 px-3'
+              }`}
             >
-              <LogOut className="h-4 w-4" />
-              Sign Out
+              <LogOut className="h-4 w-4 shrink-0" />
+              {!sidebarCollapsed && <span>Sign Out</span>}
             </button>
           </div>
         </div>
@@ -339,7 +391,18 @@ function getContrastColor(hexColor: string): string {
         
         {/* HEADER BAR */}
         <header className="relative z-30 h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleSidebar}
+              className="p-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer flex items-center justify-center"
+              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4 text-primary" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
             <h1 className="text-sm font-bold tracking-wider uppercase text-muted-foreground">
               {navigation.find((item) => item.href === pathname)?.name || 'Console'}
             </h1>
