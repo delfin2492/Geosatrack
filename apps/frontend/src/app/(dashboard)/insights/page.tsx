@@ -488,21 +488,55 @@ export default function InsightsPage() {
         } else {
           const attr = attribute || 'temperature';
           try {
-            const res = await apiClient.get(`/assets/${assetId}/telemetry?attribute=${attr}&range=1h`);
-            if (res.data && res.data.length > 0) {
-              newData[widget.id] = res.data[res.data.length - 1].value;
+            const res = await apiClient.get(`/assets/${assetId}/telemetry?attribute=${attr}&range=24h`);
+            if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+              const latestPoint = res.data[res.data.length - 1];
+              newData[widget.id] = typeof latestPoint.value === 'number' ? latestPoint.value : Number(latestPoint.value);
+            } else {
+              // Fallback: check target asset description JSON attributes
+              const targetAsset = assets.find(a => a.id === assetId);
+              if (targetAsset && targetAsset.description && targetAsset.description.startsWith('{')) {
+                try {
+                  const desc = JSON.parse(targetAsset.description);
+                  const descAttrs = desc.attributes || [];
+                  const matched = descAttrs.find((a: any) => a.name === attr);
+                  if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
+                    newData[widget.id] = Number(matched.value);
+                  } else {
+                    newData[widget.id] = null;
+                  }
+                } catch (e) {
+                  newData[widget.id] = null;
+                }
+              } else {
+                newData[widget.id] = null;
+              }
+            }
+          } catch (e) {
+            const targetAsset = assets.find(a => a.id === assetId);
+            if (targetAsset && targetAsset.description && targetAsset.description.startsWith('{')) {
+              try {
+                const desc = JSON.parse(targetAsset.description);
+                const descAttrs = desc.attributes || [];
+                const matched = descAttrs.find((a: any) => a.name === attr);
+                if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
+                  newData[widget.id] = Number(matched.value);
+                } else {
+                  newData[widget.id] = null;
+                }
+              } catch (err) {
+                newData[widget.id] = null;
+              }
             } else {
               newData[widget.id] = null;
             }
-          } catch (e) {
-            newData[widget.id] = null;
           }
         }
       })
     );
 
     setTelemetryData(newData);
-  }, [widgetsDependency, activeSectionId, widgetRangesDependency]);
+  }, [widgetsDependency, activeSectionId, widgetRangesDependency, assets]);
 
   useEffect(() => {
     fetchAllTelemetry();
@@ -510,13 +544,31 @@ export default function InsightsPage() {
     return () => clearInterval(interval);
   }, [fetchAllTelemetry]);
 
-  // Real-time WebSocket update push for chart widgets in realtime mode
+  // Real-time WebSocket update push for single-attribute widgets & chart widgets
   useEffect(() => {
     if (!socket) return;
 
     const handleAssetUpdate = (updatedAsset: any) => {
       widgets.forEach(widget => {
-        if (widget.type === 'chart') {
+        if (widget.type === 'gauge' || widget.type === 'kpi' || widget.type === 'valueCard') {
+          if (widget.config?.assetId === updatedAsset.id) {
+            const attrName = widget.config?.attribute || 'temperature';
+            if (updatedAsset.description && updatedAsset.description.startsWith('{')) {
+              try {
+                const desc = JSON.parse(updatedAsset.description);
+                const descAttrs = desc.attributes || [];
+                const matched = descAttrs.find((a: any) => a.name === attrName);
+                if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
+                  const val = Number(matched.value);
+                  setTelemetryData(prev => ({
+                    ...prev,
+                    [widget.id]: val
+                  }));
+                }
+              } catch (e) {}
+            }
+          }
+        } else if (widget.type === 'chart') {
           const rangeInfo = widgetRanges[widget.id] || { range: '24h' };
           if (rangeInfo.range === 'realtime') {
             let targets = widget.config.targets || [];
