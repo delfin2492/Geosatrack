@@ -58,18 +58,36 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Monitor
 };
 
-const getAssetIconAndColor = (asset: any, fallbackName = '') => {
+let globalDbAssetTypesCache: any[] = [];
+
+const getAssetIconAndColor = (asset: any, fallbackName = '', dbAssetTypesList: any[] = []) => {
   let IconComp = Zap;
-  let color = '#10b981';
+  let color = '#3b82f6';
+  const list = dbAssetTypesList.length > 0 ? dbAssetTypesList : globalDbAssetTypesCache;
 
   if (asset) {
     const t = String(asset.type || asset.code || '').toUpperCase();
+    const matched = list.find((x: any) => x.code.toUpperCase() === t);
+    if (matched) {
+      let iconName = matched.icon;
+      if (!iconName || !ICON_MAP[iconName]) {
+        if (t === 'ANCHOR') iconName = 'MapPin';
+        else if (t === 'TAG' || t.includes('BLE')) iconName = 'HardDrive';
+        else if (t === 'MESH_EYE_SENSOR' || t.includes('SENSOR')) iconName = 'Activity';
+        else iconName = 'Boxes';
+      }
+      const comp = ICON_MAP[iconName] || Boxes;
+      return { IconComp: comp, color: matched.color || '#3b82f6' };
+    }
+
     if (asset.color) color = asset.color;
 
+    // 1. Check direct asset.icon string (from AssetType DB)
     if (asset.icon && ICON_MAP[asset.icon]) {
       return { IconComp: ICON_MAP[asset.icon], color };
     }
 
+    // 2. Check asset.type or asset.code
     if (t === 'ANCHOR') return { IconComp: MapPin, color: color || '#f43f5e' };
     if (t === 'TAG' || t.includes('BLE')) return { IconComp: HardDrive, color: color || '#3b82f6' };
     if (t === 'MESH_EYE_SENSOR' || t.includes('SENSOR')) return { IconComp: Activity, color: color || '#10b981' };
@@ -195,9 +213,44 @@ const ATTRIBUTES = [
 ];
 
 export default function InsightsPage() {
-  const { tenantId, token } = useAuth();
+  const { tenantId, token, user, isSuperAdmin } = useAuth();
   const { socket } = useSocket();
   const router = useRouter();
+
+  // Branding & Theme state (White Label Tenant vs Global System Branding)
+  const [platformThemeColor, setPlatformThemeColor] = useState<string | null>(null);
+  const [dbAssetTypes, setDbAssetTypes] = useState<any[]>([]);
+
+  const isWhiteLabelTenant = !isSuperAdmin && Boolean(user?.isWhiteLabel);
+  const primaryAccentColor = (isWhiteLabelTenant && user?.tenantThemeColor) ? user.tenantThemeColor : (platformThemeColor || '#10b981');
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchBrandingAndAssetTypes = async () => {
+      try {
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (tenantId) headers['x-tenant-id'] = tenantId;
+
+        const [resSettings, resTypes] = await Promise.all([
+          fetch(`${getApiUrl()}/system-settings`, { headers }),
+          fetch(`${getApiUrl()}/asset-types`, { headers })
+        ]);
+
+        if (resSettings.ok && isMounted) {
+          const data = await resSettings.json();
+          if (data.platform_theme_color) setPlatformThemeColor(data.platform_theme_color);
+        }
+        if (resTypes.ok && isMounted) {
+          const data = await resTypes.json();
+          setDbAssetTypes(data);
+          globalDbAssetTypesCache = data;
+        }
+      } catch (e) {}
+    };
+    fetchBrandingAndAssetTypes();
+    return () => { isMounted = false; };
+  }, [token, tenantId]);
 
   const apiClient = {
     get: async (path: string) => {
@@ -1568,7 +1621,7 @@ export default function InsightsPage() {
                                       const attrObj = attrs.find(a => a.value === currentAttr);
                                       const attrLabel = attrObj ? attrObj.label : (currentAttr.charAt(0).toUpperCase() + currentAttr.slice(1));
 
-                                      const { IconComp, color: iconColor } = getAssetIconAndColor(targetAsset, assetName);
+                                      const { IconComp, color: iconColor } = getAssetIconAndColor(targetAsset, assetName, dbAssetTypes);
 
                                       return (
                                         <div className="space-y-2.5">
@@ -1580,7 +1633,7 @@ export default function InsightsPage() {
                                                 setPickerSelectedAttribute(selectedWidget.config.attribute || 'temperature');
                                                 setIsAttrPickerOpen(true);
                                               }}
-                                              className="flex items-center gap-3 p-3 bg-card border border-border hover:border-emerald-500/60 rounded-2xl cursor-pointer transition-all shadow-2xs hover:shadow-md group active:scale-[0.99]"
+                                              className="flex items-center gap-3 p-3 bg-card border border-border hover:border-primary/60 rounded-2xl cursor-pointer transition-all shadow-2xs hover:shadow-md group active:scale-[0.99]"
                                             >
                                               <div
                                                 className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
@@ -1593,7 +1646,7 @@ export default function InsightsPage() {
                                                 <IconComp className="w-5 h-5" />
                                               </div>
                                               <div className="flex flex-col leading-tight min-w-0 flex-1">
-                                                <span className="text-xs font-bold text-foreground truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                                <span className="text-xs font-bold text-foreground truncate transition-colors" style={{ color: undefined }}>
                                                   {assetName}
                                                 </span>
                                                 <span className="text-[11px] font-medium text-muted-foreground truncate">
@@ -1615,9 +1668,14 @@ export default function InsightsPage() {
                                                   setPickerSelectedAttribute('temperature');
                                                   setIsAttrPickerOpen(true);
                                                 }}
-                                                className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                                                style={{
+                                                  backgroundColor: `${primaryAccentColor}18`,
+                                                  borderColor: `${primaryAccentColor}35`,
+                                                  color: primaryAccentColor
+                                                }}
+                                                className="px-3.5 py-1.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs hover:opacity-90"
                                               >
-                                                <Plus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                                <Plus className="w-4 h-4" style={{ color: primaryAccentColor }} />
                                                 <span>Attribute</span>
                                               </button>
                                             </div>
@@ -1756,9 +1814,10 @@ export default function InsightsPage() {
                                                 const updated = [...thresholds, { color: nextColor, value: lastVal }];
                                                 updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
                                               }}
-                                              className="w-full py-2 px-3 border border-border rounded-xl bg-secondary/30 hover:bg-secondary/60 text-primary font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                                              style={{ color: primaryAccentColor }}
+                                              className="w-full py-2 px-3 border border-border rounded-xl bg-secondary/30 hover:bg-secondary/60 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
                                             >
-                                              <Plus className="w-4 h-4" /> Threshold
+                                              <Plus className="w-4 h-4" style={{ color: primaryAccentColor }} /> Threshold
                                             </button>
                                           </>
                                         );
@@ -1835,8 +1894,8 @@ export default function InsightsPage() {
 
               {/* LEFT COLUMN: ASSETS HIERARCHICAL TREE SELECTION */}
               <div className="w-5/12 border-r border-border bg-secondary/10 flex flex-col">
-                {/* Yellow Amber Header */}
-                <div className="bg-amber-500 text-white px-3.5 py-2.5 flex items-center justify-between font-bold text-xs shadow-sm">
+                {/* Assets Header matching Primary Accent */}
+                <div style={{ backgroundColor: primaryAccentColor }} className="text-white px-3.5 py-2.5 flex items-center justify-between font-bold text-xs shadow-sm">
                   <span>Assets</span>
                   <div className="flex items-center gap-2.5">
                     <X className="w-3.5 h-3.5 cursor-pointer hover:opacity-80" onClick={() => setAssetSearchFilter('')} />
@@ -1852,7 +1911,7 @@ export default function InsightsPage() {
                       placeholder="Filter..."
                       value={assetSearchFilter}
                       onChange={(e) => setAssetSearchFilter(e.target.value)}
-                      className="w-full h-8 text-xs bg-secondary/35 pr-8 pl-2.5 rounded-md border border-border text-foreground focus:outline-none focus:border-amber-500"
+                      className="w-full h-8 text-xs bg-secondary/35 pr-8 pl-2.5 rounded-md border border-border text-foreground focus:outline-none"
                     />
                     <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 pointer-events-none" />
                   </div>
@@ -1891,13 +1950,17 @@ export default function InsightsPage() {
 
                     return flattened.map(({ asset, depth, hasChildren, isCollapsed }) => {
                       const isSelected = pickerSelectedAssetId === asset.id;
-                      const { IconComp, color: iconColor } = getAssetIconAndColor(asset, asset.name);
+                      const { IconComp, color: iconColor } = getAssetIconAndColor(asset, asset.name, dbAssetTypes);
                       const indentPadding = Math.min(depth * 14 + 10, 48);
 
                       return (
                         <div
                           key={asset.id}
-                          style={{ paddingLeft: `${indentPadding}px` }}
+                          style={{
+                            paddingLeft: `${indentPadding}px`,
+                            borderLeftColor: isSelected ? primaryAccentColor : 'transparent',
+                            backgroundColor: isSelected ? `${primaryAccentColor}18` : undefined
+                          }}
                           onClick={() => {
                             setPickerSelectedAssetId(asset.id);
                             const attrs = getAssetAttributes(asset.id);
@@ -1906,7 +1969,7 @@ export default function InsightsPage() {
                             }
                           }}
                           className={`flex items-center gap-1.5 pr-2.5 py-1.5 rounded-md cursor-pointer transition-all border-l-4 ${isSelected
-                            ? 'bg-secondary border-amber-500 font-bold text-foreground shadow-sm'
+                            ? 'font-bold text-foreground shadow-sm'
                             : 'border-transparent hover:bg-secondary/60 text-muted-foreground hover:text-foreground'
                             }`}
                         >
@@ -1923,8 +1986,8 @@ export default function InsightsPage() {
                             <span className="w-3.5 h-3.5 shrink-0" />
                           )}
                           <IconComp
-                            className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : ''}`}
-                            style={{ color: isSelected ? undefined : iconColor }}
+                            className="w-3.5 h-3.5 shrink-0"
+                            style={{ color: iconColor }}
                           />
                           <span className="truncate text-xs flex-1">{asset.name}</span>
                           {hasChildren && (
@@ -1967,13 +2030,18 @@ export default function InsightsPage() {
                         <div
                           key={attr.value}
                           onClick={() => setPickerSelectedAttribute(attr.value)}
-                          className={`px-3 py-2.5 rounded-md cursor-pointer transition-all flex items-center justify-between ${isSelected
-                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30'
-                            : 'hover:bg-secondary/60 text-foreground'
+                          style={isSelected ? {
+                            backgroundColor: `${primaryAccentColor}18`,
+                            color: primaryAccentColor,
+                            borderColor: `${primaryAccentColor}40`
+                          } : undefined}
+                          className={`px-3 py-2.5 rounded-md cursor-pointer transition-all flex items-center justify-between border ${isSelected
+                            ? 'font-bold'
+                            : 'border-transparent hover:bg-secondary/60 text-foreground'
                             }`}
                         >
                           <span>{attr.label}</span>
-                          {isSelected && <span className="text-amber-500 text-xs font-bold">✓</span>}
+                          {isSelected && <span style={{ color: primaryAccentColor }} className="text-xs font-bold">✓</span>}
                         </div>
                       );
                     });
@@ -1988,7 +2056,8 @@ export default function InsightsPage() {
               <button
                 type="button"
                 onClick={() => setIsAttrPickerOpen(false)}
-                className="text-xs font-bold text-amber-500 hover:text-amber-600 uppercase tracking-wider transition-colors cursor-pointer"
+                style={{ color: primaryAccentColor }}
+                className="text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer hover:opacity-80"
               >
                 CANCEL
               </button>
@@ -2012,7 +2081,8 @@ export default function InsightsPage() {
 
                   setIsAttrPickerOpen(false);
                 }}
-                className="text-xs font-bold text-amber-500 hover:text-amber-600 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wider transition-colors cursor-pointer"
+                style={{ color: primaryAccentColor }}
+                className="text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 ADD
               </button>
