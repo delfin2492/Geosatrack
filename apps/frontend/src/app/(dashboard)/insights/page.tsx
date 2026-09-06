@@ -8,7 +8,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import {
-  Activity, LayoutGrid, Settings2, Plus, GripHorizontal, Settings, LineChart, Hash, MapPin, Tablet, Edit2, Trash2, Check, X, RefreshCw, Eye, EyeOff, LayoutTemplate, ExternalLink, Save, Lock, ChevronDown, Search, Filter, SlidersHorizontal, ChevronRight, ArrowLeftRight
+  Activity, LayoutGrid, Settings2, Plus, GripHorizontal, Settings, LineChart, Hash, MapPin, Tablet, Edit2, Trash2, Check, X, RefreshCw, Eye, EyeOff, LayoutTemplate, ExternalLink, Save, Lock, ChevronDown, Search, Filter, SlidersHorizontal, ChevronRight, ArrowLeftRight,
+  HardDrive, Building, Boxes, Radio, Truck, Wrench, Battery, Tag, Tv, Navigation, Layers, Wifi, Database, Server, Anchor, Gauge, Compass, DoorClosed, Box, Plug, Monitor, Lightbulb, Zap, Folder, Globe, Car, Cpu
 } from 'lucide-react';
 import { getApiUrl, getBackendUrl } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
@@ -20,6 +21,79 @@ import { KPIWidget } from '../components/widgets/KPIWidget';
 import { GaugeWidget } from '../components/widgets/GaugeWidget';
 import { ChartWidget } from '../components/widgets/ChartWidget';
 import { MapWidget } from '../components/widgets/MapWidget';
+
+const ICON_MAP: Record<string, React.ElementType> = {
+  MapPin,
+  HardDrive,
+  Activity,
+  Boxes,
+  Sliders: SlidersHorizontal,
+  SlidersHorizontal,
+  Folder,
+  Globe,
+  Car,
+  Cpu,
+  Radio,
+  Zap,
+  Truck,
+  Wrench,
+  Battery,
+  Tag,
+  Tv,
+  Navigation,
+  Layers,
+  Wifi,
+  Database,
+  Server,
+  Anchor,
+  Gauge,
+  Compass,
+  Eye,
+  Settings,
+  Lightbulb,
+  DoorClosed,
+  Building,
+  Box,
+  Plug,
+  Monitor
+};
+
+const getAssetIconAndColor = (asset: any, fallbackName = '') => {
+  let IconComp = Zap;
+  let color = '#10b981';
+
+  if (asset) {
+    const t = String(asset.type || asset.code || '').toUpperCase();
+    if (asset.color) color = asset.color;
+
+    if (asset.icon && ICON_MAP[asset.icon]) {
+      return { IconComp: ICON_MAP[asset.icon], color };
+    }
+
+    if (t === 'ANCHOR') return { IconComp: MapPin, color: color || '#f43f5e' };
+    if (t === 'TAG' || t.includes('BLE')) return { IconComp: HardDrive, color: color || '#3b82f6' };
+    if (t === 'MESH_EYE_SENSOR' || t.includes('SENSOR')) return { IconComp: Activity, color: color || '#10b981' };
+    if (t === 'FORKLIFT' || t.includes('CARGO') || t.includes('THINGS')) return { IconComp: Boxes, color: color || '#d97706' };
+    if (t === 'LIGHT' || t.includes('MACHINE')) return { IconComp: SlidersHorizontal, color: color || '#eab308' };
+    if (t === 'BUILDING' || t.includes('ROOM') || t.includes('DOOR')) return { IconComp: Folder, color: color || '#8b5cf6' };
+    if (t === 'CITY' || t.includes('WEATHER')) return { IconComp: Globe, color: color || '#06b6d4' };
+    if (t === 'CAR' || t.includes('VEHICLE') || t.includes('TRUCK')) return { IconComp: Car, color: color || '#0284c7' };
+    if (t.includes('TELTONIKA') || t.includes('CPU')) return { IconComp: Cpu, color: color || '#6366f1' };
+    if (t.includes('MQTT') || t.includes('RADIO')) return { IconComp: Radio, color: color || '#8b5cf6' };
+  }
+
+  const nameLower = (fallbackName || asset?.name || '').toLowerCase();
+  if (nameLower.includes('lampu') || nameLower.includes('light')) return { IconComp: Lightbulb, color: color || '#eab308' };
+  if (nameLower.includes('mobil') || nameLower.includes('car')) return { IconComp: Car, color: color || '#0284c7' };
+  if (nameLower.includes('door') || nameLower.includes('pintu')) return { IconComp: DoorClosed, color: color || '#8b5cf6' };
+  if (nameLower.includes('building') || nameLower.includes('gedung')) return { IconComp: Building, color: color || '#8b5cf6' };
+  if (nameLower.includes('forklift') || nameLower.includes('cargo')) return { IconComp: Boxes, color: color || '#d97706' };
+  if (nameLower.includes('tag')) return { IconComp: HardDrive, color: color || '#3b82f6' };
+  if (nameLower.includes('anchor')) return { IconComp: MapPin, color: color || '#f43f5e' };
+  if (nameLower.includes('mesh') || nameLower.includes('sensor')) return { IconComp: Activity, color: color || '#10b981' };
+
+  return { IconComp, color };
+};
 
 
 
@@ -1471,7 +1545,7 @@ export default function InsightsPage() {
                                 </div>
                               </>
                             ) : (
-                              /* ATTRIBUTES SECTION (Collapsible with Attribute Button & Card - Matching Image 2) */
+                              /* ATTRIBUTES SECTION (Collapsible with Clickable Asset Card or Standalone Attribute Button) */
                               <div className="space-y-2 pt-2 border-t border-border">
                                 <button
                                   type="button"
@@ -1493,36 +1567,54 @@ export default function InsightsPage() {
                                       const attrObj = attrs.find(a => a.value === currentAttr);
                                       const attrLabel = attrObj ? attrObj.label : (currentAttr.charAt(0).toUpperCase() + currentAttr.slice(1));
 
+                                      const { IconComp, color: iconColor } = getAssetIconAndColor(targetAsset, assetName);
+
                                       return (
                                         <div className="space-y-2.5">
                                           {targetAsset ? (
-                                            <div className="flex items-center gap-3 p-2.5 bg-secondary/20 border border-border rounded-xl">
-                                              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 flex items-center justify-center shrink-0">
-                                                <Activity className="w-4 h-4" />
+                                            /* CLICKABLE ASSET CARD (Directly opens tree select attributes modal) */
+                                            <div
+                                              onClick={() => {
+                                                setPickerSelectedAssetId(selectedWidget.config.assetId || (assets[0]?.id || ''));
+                                                setPickerSelectedAttribute(selectedWidget.config.attribute || 'temperature');
+                                                setIsAttrPickerOpen(true);
+                                              }}
+                                              className="flex items-center gap-3 p-3 bg-card border border-border hover:border-emerald-500/60 rounded-2xl cursor-pointer transition-all shadow-2xs hover:shadow-md group active:scale-[0.99]"
+                                            >
+                                              <div
+                                                className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
+                                                style={{
+                                                  backgroundColor: `${iconColor}18`,
+                                                  color: iconColor,
+                                                  border: `1px solid ${iconColor}35`,
+                                                }}
+                                              >
+                                                <IconComp className="w-5 h-5" />
                                               </div>
                                               <div className="flex flex-col leading-tight min-w-0 flex-1">
-                                                <span className="text-xs font-bold text-foreground truncate">{assetName}</span>
-                                                <span className="text-[11px] font-medium text-muted-foreground truncate">{attrLabel}</span>
+                                                <span className="text-xs font-bold text-foreground truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                                  {assetName}
+                                                </span>
+                                                <span className="text-[11px] font-medium text-muted-foreground truncate">
+                                                  {attrLabel}
+                                                </span>
                                               </div>
                                             </div>
                                           ) : (
-                                            <div className="p-2.5 bg-secondary/20 border border-dashed border-border rounded-xl text-center text-xs text-muted-foreground">
-                                              No attribute selected yet
-                                            </div>
+                                            /* STANDALONE ATTRIBUTE BUTTON (For new gauge widget creation when no asset is selected yet) */
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setPickerSelectedAssetId(assets[0]?.id || '');
+                                                setPickerSelectedAttribute('temperature');
+                                                setIsAttrPickerOpen(true);
+                                              }}
+                                              className="px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer shadow-2xs"
+                                            >
+                                              <ArrowLeftRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                              <span>Attribute</span>
+                                            </button>
                                           )}
-
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setPickerSelectedAssetId(selectedWidget.config.assetId || (assets[0]?.id || ''));
-                                              setPickerSelectedAttribute(selectedWidget.config.attribute || 'temperature');
-                                              setIsAttrPickerOpen(true);
-                                            }}
-                                            className="px-3.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                                          >
-                                            <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                                            <span>Attribute</span>
-                                          </button>
                                         </div>
                                       );
                                     })()}
@@ -1792,6 +1884,7 @@ export default function InsightsPage() {
 
                     return flattened.map(({ asset, depth, hasChildren, isCollapsed }) => {
                       const isSelected = pickerSelectedAssetId === asset.id;
+                      const { IconComp, color: iconColor } = getAssetIconAndColor(asset, asset.name);
                       const indentPadding = Math.min(depth * 14 + 10, 48);
 
                       return (
@@ -1822,7 +1915,10 @@ export default function InsightsPage() {
                           ) : (
                             <span className="w-3.5 h-3.5 shrink-0" />
                           )}
-                          <Activity className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : 'text-emerald-500'}`} />
+                          <IconComp
+                            className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-amber-500' : ''}`}
+                            style={{ color: isSelected ? undefined : iconColor }}
+                          />
                           <span className="truncate text-xs flex-1">{asset.name}</span>
                           {hasChildren && (
                             <span
