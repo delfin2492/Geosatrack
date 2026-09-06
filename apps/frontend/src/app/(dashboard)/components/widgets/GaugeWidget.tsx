@@ -166,8 +166,8 @@ export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widg
   });
 
   return (
-    <div ref={containerRef} className="w-full h-full flex flex-col items-center justify-between pb-1 select-none overflow-hidden">
-      <svg viewBox="0 0 200 135" className="w-full max-h-[160px] overflow-visible">
+    <div ref={containerRef} className="w-full h-full flex flex-col items-center justify-center p-0.5 select-none overflow-hidden relative">
+      <svg viewBox="0 0 200 130" className="w-full h-full max-h-[140px] object-contain overflow-visible">
         {segments.map(seg => (
           <path key={seg.key} d={seg.path} fill="none" stroke={seg.color} strokeWidth="12" strokeLinecap="round" />
         ))}
@@ -189,9 +189,11 @@ export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widg
         <circle cx={cx} cy={cy} r="8" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1.5" />
       </svg>
 
-      <span style={{ fontSize: `${getDynamicFontSize(13)}px` }} className="font-extrabold text-slate-500 mt-[-5px]">
-        {unit}
-      </span>
+      {unit && (
+        <span style={{ fontSize: `${getDynamicFontSize(11)}px` }} className="font-extrabold text-slate-500 -mt-1 shrink-0">
+          {unit}
+        </span>
+      )}
     </div>
   );
 };

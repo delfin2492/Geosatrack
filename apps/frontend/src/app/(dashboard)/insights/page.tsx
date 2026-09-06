@@ -103,11 +103,11 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
 
 
 const WIDGET_TEMPLATES = [
-  { type: 'valueCard', label: 'Value Card', icon: Hash, w: 2, h: 2, minW: 2, minH: 2 },
-  { type: 'kpi', label: 'KPI', icon: Plus, w: 2, h: 2, minW: 2, minH: 2 },
+  { type: 'valueCard', label: 'Value Card', icon: Hash, w: 3, h: 2, minW: 2, minH: 2 },
+  { type: 'kpi', label: 'KPI', icon: Plus, w: 3, h: 2, minW: 2, minH: 2 },
   { type: 'gauge', label: 'Gauge', icon: Activity, w: 3, h: 3, minW: 2, minH: 2 },
-  { type: 'chart', label: 'Chart', icon: LineChart, w: 6, h: 4, minW: 4, minH: 3 },
-  { type: 'maps', label: 'Maps', icon: MapPin, w: 6, h: 4, minW: 4, minH: 3 },
+  { type: 'chart', label: 'Chart', icon: LineChart, w: 8, h: 5, minW: 4, minH: 3 },
+  { type: 'maps', label: 'Maps', icon: MapPin, w: 8, h: 5, minW: 4, minH: 3 },
 ];
 
 type WidgetData = { id: string, type: string, config: any };
@@ -1032,9 +1032,9 @@ export default function InsightsPage() {
         {/* LEFT: MAIN CANVAS (Grid Layout) */}
         <div className="flex-1 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] bg-slate-50 dark:bg-slate-950/20 overflow-y-scroll p-0 border-r border-border relative">
           {(() => {
-            const currentCols = containerWidth > 1200 ? 12 : containerWidth > 996 ? 10 : containerWidth > 768 ? 6 : containerWidth > 480 ? 4 : 2;
-            const gridX = containerWidth ? ((containerWidth - 32 - ((currentCols - 1) * 16)) / currentCols) + 16 : 80;
-            const gridY = 80 + 16; // rowHeight + margin
+            const currentCols = containerWidth > 1200 ? 24 : containerWidth > 996 ? 18 : containerWidth > 768 ? 12 : containerWidth > 480 ? 8 : 4;
+            const gridX = containerWidth ? ((containerWidth - 24 - ((currentCols - 1) * 8)) / currentCols) + 8 : 48;
+            const gridY = 40 + 8; // rowHeight (40) + margin (8)
             return (
               <div
                 className="absolute inset-0 pointer-events-none opacity-50 transition-all duration-300"
@@ -1044,7 +1044,7 @@ export default function InsightsPage() {
                     linear-gradient(to right, rgba(148, 163, 184, 0.35) 1px, transparent 1px)
                   `,
                   backgroundSize: `${gridX}px ${gridY}px`,
-                  backgroundPosition: '16px 16px' // container padding offset
+                  backgroundPosition: '12px 12px' // container padding offset
                 } : {
               backgroundImage: 'linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px)',
               backgroundSize: '20px 20px'
@@ -1064,10 +1064,10 @@ export default function InsightsPage() {
                 className="layout"
                 layouts={{ lg: layout }}
                 breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-                cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
-                rowHeight={80}
-                margin={[16, 16]}
-                containerPadding={[16, 16]}
+                cols={{ lg: 24, md: 18, sm: 12, xs: 8, xxs: 4 }}
+                rowHeight={40}
+                margin={[8, 8]}
+                containerPadding={[12, 12]}
                 onLayoutChange={(curr: Layout, all: any) => onLayoutChange(curr, all)}
                 onDragStop={(layout: Layout) => onDragStop(layout)}
                 onResizeStop={(layout: Layout) => onResizeStop(layout)}
@@ -1086,27 +1086,27 @@ export default function InsightsPage() {
 
                   return (
                     <div key={widget.id} data-grid={l}
-                      className={`bg-card border rounded-lg shadow-sm overflow-hidden flex flex-col transition-all ${isSelected ? 'ring-2 ring-primary border-transparent shadow-md shadow-primary/10' : 'border-border'
-                        } ${!isEditMode ? 'hover:shadow-md' : 'cursor-pointer'}`}
+                      className={`bg-card border rounded-lg shadow-xs overflow-hidden flex flex-col transition-all ${isSelected ? 'ring-2 ring-primary border-transparent shadow-md shadow-primary/10' : 'border-border'
+                        } ${!isEditMode ? 'hover:shadow-sm' : 'cursor-pointer'}`}
                       onClick={() => { if (isEditMode) { setSelectedWidgetId(widget.id); setActiveTab('settings'); } }}>
 
-                      {/* Unified Widget Header (Title always on top!) */}
-                      <div className={`px-3 py-2 flex items-center justify-between border-b border-muted/10 shrink-0 select-none ${isEditMode ? 'bg-muted/10 cursor-move drag-handle group' : ''}`}>
-                        <div className="flex items-center gap-1.5 overflow-hidden mr-2">
+                      {/* Unified Widget Header (Compact & Space Efficient) */}
+                      <div className={`px-2 py-1 flex items-center justify-between border-b border-muted/10 shrink-0 select-none ${isEditMode ? 'bg-muted/10 cursor-move drag-handle group' : ''}`}>
+                        <div className="flex items-center gap-1 overflow-hidden mr-1">
                           {isEditMode && <GripHorizontal className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />}
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate capitalize">
+                          <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 truncate capitalize">
                             {widget.config.title || (widget.type === 'valueCard' ? 'Value Card' : widget.type)}
                           </span>
                         </div>
                         {isEditMode && (
-                          <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 rounded shrink-0">
+                          <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-wider bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1 py-0.2 rounded shrink-0">
                             {widget.type}
                           </span>
                         )}
                       </div>
 
                       {/* Widget Content */}
-                      <div className="flex-1 p-1 overflow-hidden relative">
+                      <div className="flex-1 p-0.5 overflow-hidden relative flex flex-col justify-center">
                         {renderWidgetContent(widget)}
                       </div>
                     </div>
