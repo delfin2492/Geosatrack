@@ -2951,7 +2951,7 @@ export default function PlannerPage() {
                       title={`Switch to ${floorName}`}
                     >
                       <span className="font-mono">L{fl.floorOrder}</span>
-                      <span className="text-[10px] truncate max-w-[70px] font-normal">{floorName}</span>
+                      <span className="text-[10px] truncate max-w-[160px] font-normal">{floorName}</span>
                       {count > 0 && (
                         <span className={`px-1 py-0.2 rounded-full text-[8px] font-bold ${isActive ? 'bg-primary-foreground text-primary' : 'bg-emerald-500 text-white'}`}>
                           {count}
