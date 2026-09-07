@@ -173,12 +173,12 @@ export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widg
           </g>
         ))}
 
-        <text x={cx} y={cy - 12} textAnchor="middle" style={{ fontSize: `${getDynamicFontSize(18)}px` }} className="fill-slate-800 dark:fill-slate-200 font-extrabold">
-          {val.toFixed(decimals)}
-        </text>
-
         <polygon points={needlePoints} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.5" className="transition-all duration-500 ease-out" />
         <circle cx={cx} cy={cy} r="8" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1.5" />
+
+        <text x={cx} y={cy - 12} textAnchor="middle" style={{ fontSize: `${getDynamicFontSize(18)}px` }} className="fill-slate-800 dark:fill-slate-100 font-black tracking-tight">
+          {val.toFixed(decimals)}
+        </text>
       </svg>
 
       {unit && (
