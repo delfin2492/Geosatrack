@@ -303,6 +303,7 @@ export default function InsightsPage() {
   const [activeTab, setActiveTab] = useState('widgets');
   const [isValuesOpen, setIsValuesOpen] = useState(true);
   const [isThresholdsOpen, setIsThresholdsOpen] = useState(true);
+  const [isDisplayOpen, setIsDisplayOpen] = useState(true);
 
   // Select Attributes Modal Popup State (Matching Target Images)
   const [isAttrPickerOpen, setIsAttrPickerOpen] = useState(false);
@@ -646,19 +647,93 @@ export default function InsightsPage() {
           }
         } else {
           const attr = attribute || 'temperature';
-          try {
-            const res = await apiClient.get(`/assets/${assetId}/telemetry?attribute=${attr}&range=24h`);
-            if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-              const latestPoint = res.data[res.data.length - 1];
-              newData[widget.id] = typeof latestPoint.value === 'number' ? latestPoint.value : Number(latestPoint.value);
-            } else {
-              // Fallback: check target asset description JSON attributes
-              const targetAsset = assets.find(a => a.id === assetId);
-              if (targetAsset && targetAsset.description && targetAsset.description.startsWith('{')) {
+          const targetAsset = assets.find(a => a.id === assetId);
+
+          if (widget.type === 'kpi') {
+            const timeframe = widget.config?.timeframe || 'Hour';
+            const rangeMap: Record<string, string> = {
+              Hour: '1h',
+              Day: '1d',
+              Week: '1w',
+              Month: '1m'
+            };
+            const range = rangeMap[timeframe] || '1h';
+
+            try {
+              const res = await apiClient.get(`/assets/${assetId}/telemetry?attribute=${attr}&range=${range}`);
+              let series: { timestamp: string, value: number }[] = [];
+              let latestVal: number | null = null;
+              let latestTimestamp: string | undefined = undefined;
+
+              if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+                series = res.data.map((p: any) => ({
+                  timestamp: p.timestamp || p.createdAt,
+                  value: typeof p.value === 'number' ? p.value : Number(p.value)
+                }));
+                const latestPoint = res.data[res.data.length - 1];
+                latestVal = typeof latestPoint.value === 'number' ? latestPoint.value : Number(latestPoint.value);
+                latestTimestamp = latestPoint.timestamp || latestPoint.createdAt;
+              } else if (targetAsset && targetAsset.description && targetAsset.description.startsWith('{')) {
                 try {
                   const desc = JSON.parse(targetAsset.description);
-                  const descAttrs = desc.attributes || [];
-                  const matched = descAttrs.find((a: any) => a.name === attr);
+                  const matched = (desc.attributes || []).find((a: any) => a.name === attr);
+                  if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
+                    latestVal = Number(matched.value);
+                  }
+                } catch (e) {}
+              }
+
+              newData[widget.id] = {
+                value: latestVal,
+                timestamp: latestTimestamp,
+                series,
+                asset: targetAsset
+              };
+            } catch (e) {
+              newData[widget.id] = { value: null, series: [], asset: targetAsset };
+            }
+          } else if (widget.type === 'valueCard') {
+            try {
+              const res = await apiClient.get(`/assets/${assetId}/telemetry?attribute=${attr}&range=24h`);
+              let latestVal: number | null = null;
+              let latestTimestamp: string | undefined = undefined;
+
+              if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+                const latestPoint = res.data[res.data.length - 1];
+                latestVal = typeof latestPoint.value === 'number' ? latestPoint.value : Number(latestPoint.value);
+                latestTimestamp = latestPoint.timestamp || latestPoint.createdAt;
+              } else if (targetAsset && targetAsset.description && targetAsset.description.startsWith('{')) {
+                try {
+                  const desc = JSON.parse(targetAsset.description);
+                  const matched = (desc.attributes || []).find((a: any) => a.name === attr);
+                  if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
+                    latestVal = Number(matched.value);
+                  }
+                } catch (e) {}
+                if (targetAsset) {
+                  latestTimestamp = targetAsset.updatedAt || targetAsset.createdAt;
+                }
+              }
+
+              newData[widget.id] = {
+                value: latestVal,
+                timestamp: latestTimestamp,
+                asset: targetAsset
+              };
+            } catch (e) {
+              newData[widget.id] = { value: null, timestamp: undefined, asset: targetAsset };
+            }
+          } else {
+            // Gauge widget
+            try {
+              const res = await apiClient.get(`/assets/${assetId}/telemetry?attribute=${attr}&range=24h`);
+              if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+                const latestPoint = res.data[res.data.length - 1];
+                newData[widget.id] = typeof latestPoint.value === 'number' ? latestPoint.value : Number(latestPoint.value);
+              } else if (targetAsset && targetAsset.description && targetAsset.description.startsWith('{')) {
+                try {
+                  const desc = JSON.parse(targetAsset.description);
+                  const matched = (desc.attributes || []).find((a: any) => a.name === attr);
                   if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
                     newData[widget.id] = Number(matched.value);
                   } else {
@@ -670,23 +745,7 @@ export default function InsightsPage() {
               } else {
                 newData[widget.id] = null;
               }
-            }
-          } catch (e) {
-            const targetAsset = assets.find(a => a.id === assetId);
-            if (targetAsset && targetAsset.description && targetAsset.description.startsWith('{')) {
-              try {
-                const desc = JSON.parse(targetAsset.description);
-                const descAttrs = desc.attributes || [];
-                const matched = descAttrs.find((a: any) => a.name === attr);
-                if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
-                  newData[widget.id] = Number(matched.value);
-                } else {
-                  newData[widget.id] = null;
-                }
-              } catch (err) {
-                newData[widget.id] = null;
-              }
-            } else {
+            } catch (e) {
               newData[widget.id] = null;
             }
           }
@@ -1099,13 +1158,26 @@ export default function InsightsPage() {
       }
 
       case 'kpi': {
-        const val = typeof data === 'number' ? data : null;
-        return <KPIWidget data={val} attribute={widget.config.attribute} />;
+        return (
+          <KPIWidget
+            data={data}
+            attribute={widget.config.attribute || ''}
+            widget={widget}
+            dbAssetTypes={dbAssetTypes}
+            primaryAccentColor={primaryAccentColor}
+          />
+        );
       }
 
       case 'valueCard': {
-        const val = typeof data === 'number' ? data : null;
-        return <ValueCardWidget data={val} attribute={widget.config.attribute} />;
+        return (
+          <ValueCardWidget
+            data={data}
+            attribute={widget.config.attribute || ''}
+            widget={widget}
+            primaryAccentColor={primaryAccentColor}
+          />
+        );
       }
 
       case 'maps': {
@@ -1822,6 +1894,132 @@ export default function InsightsPage() {
                                           </>
                                         );
                                       })()}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* KPI Widget Specific Settings: Display (Timeframe & Allow time range) & Values (Show value as & Decimals) */}
+                            {selectedWidget.type === 'kpi' && (
+                              <div className="space-y-4 pt-3 border-t border-border">
+                                {/* DISPLAY SECTION (Collapsible) */}
+                                <div className="space-y-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsDisplayOpen(!isDisplayOpen)}
+                                    className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                                  >
+                                    <ChevronDown className={`w-4 h-4 transition-transform ${isDisplayOpen ? '' : '-rotate-90'}`} />
+                                    <span>Display</span>
+                                  </button>
+
+                                  {isDisplayOpen && (
+                                    <div className="space-y-3 pl-2 animate-in fade-in duration-150">
+                                      <div className="space-y-1">
+                                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Timeframe</label>
+                                        <select
+                                          value={selectedWidget.config.timeframe || 'Hour'}
+                                          onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, timeframe: e.target.value })}
+                                          className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
+                                        >
+                                          <option value="Hour">Hour</option>
+                                          <option value="Day">Day</option>
+                                          <option value="Week">Week</option>
+                                          <option value="Month">Month</option>
+                                        </select>
+                                      </div>
+
+                                      <div className="flex items-center justify-between pt-1">
+                                        <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Allow time range selection</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => updateWidgetConfig({ ...selectedWidget.config, allowTimeRange: !(selectedWidget.config.allowTimeRange ?? true) })}
+                                          className={`w-9 h-5 rounded-full p-0.5 transition-colors relative cursor-pointer ${
+                                            (selectedWidget.config.allowTimeRange ?? true) ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'
+                                          }`}
+                                          style={{ backgroundColor: (selectedWidget.config.allowTimeRange ?? true) ? primaryAccentColor : undefined }}
+                                        >
+                                          <div
+                                            className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                                              (selectedWidget.config.allowTimeRange ?? true) ? 'translate-x-4' : 'translate-x-0'
+                                            }`}
+                                          />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* VALUES SECTION (Collapsible) */}
+                                <div className="space-y-2 pt-2 border-t border-border">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsValuesOpen(!isValuesOpen)}
+                                    className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                                  >
+                                    <ChevronDown className={`w-4 h-4 transition-transform ${isValuesOpen ? '' : '-rotate-90'}`} />
+                                    <span>Values</span>
+                                  </button>
+
+                                  {isValuesOpen && (
+                                    <div className="space-y-3 pl-2 animate-in fade-in duration-150">
+                                      <div className="space-y-1">
+                                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Show value as</label>
+                                        <select
+                                          value={selectedWidget.config.showValueAs || 'Absolute'}
+                                          onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, showValueAs: e.target.value })}
+                                          className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
+                                        >
+                                          <option value="Absolute">Absolute</option>
+                                          <option value="Delta">Delta</option>
+                                          <option value="Percentage">Percentage</option>
+                                        </select>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Decimals</label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="5"
+                                          value={selectedWidget.config.decimals !== undefined ? selectedWidget.config.decimals : 0}
+                                          onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, decimals: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) })}
+                                          className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Value Card Specific Settings: Values (Decimals) */}
+                            {selectedWidget.type === 'valueCard' && (
+                              <div className="space-y-4 pt-3 border-t border-border">
+                                <div className="space-y-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsValuesOpen(!isValuesOpen)}
+                                    className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                                  >
+                                    <ChevronDown className={`w-4 h-4 transition-transform ${isValuesOpen ? '' : '-rotate-90'}`} />
+                                    <span>Values</span>
+                                  </button>
+
+                                  {isValuesOpen && (
+                                    <div className="space-y-3 pl-2 animate-in fade-in duration-150">
+                                      <div className="space-y-1">
+                                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Decimals</label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="5"
+                                          value={selectedWidget.config.decimals !== undefined ? selectedWidget.config.decimals : 1}
+                                          onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, decimals: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) })}
+                                          className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
+                                        />
+                                      </div>
                                     </div>
                                   )}
                                 </div>
