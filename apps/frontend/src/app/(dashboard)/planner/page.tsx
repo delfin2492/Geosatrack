@@ -233,6 +233,28 @@ export default function PlannerPage() {
     }
   }, [zones, buildingGroups.length, tenantId]);
 
+  // Keep Building Group floor names in sync with latest zone/denah names
+  useEffect(() => {
+    if (zones.length > 0 && buildingGroups.length > 0) {
+      let needsUpdate = false;
+      const updated = buildingGroups.map((g) => ({
+        ...g,
+        floors: g.floors.map((fl) => {
+          const z = zones.find((item) => item.id === fl.zoneId);
+          if (z && z.name && z.name !== fl.floorName) {
+            needsUpdate = true;
+            return { ...fl, floorName: z.name };
+          }
+          return fl;
+        })
+      }));
+
+      if (needsUpdate) {
+        saveBuildingGroupsState(updated);
+      }
+    }
+  }, [zones]);
+
   const saveBuildingGroupsState = (groups: BuildingGroup[]) => {
     setBuildingGroups(groups);
     if (typeof window !== 'undefined') {
@@ -1159,6 +1181,15 @@ export default function PlannerPage() {
         }),
       });
       if (res.ok) {
+        // Sync buildingGroups floorName with updated zone name immediately
+        const updatedGroups = buildingGroups.map((g) => ({
+          ...g,
+          floors: g.floors.map((fl) =>
+            fl.zoneId === editingZoneId ? { ...fl, floorName: editZoneName } : fl
+          )
+        }));
+        saveBuildingGroupsState(updatedGroups);
+
         setEditingZoneId(null);
         fetchSitesAndZones();
         if (selectedZoneId === editingZoneId) {
@@ -2826,7 +2857,7 @@ export default function PlannerPage() {
                             <Badge variant="secondary" className="font-mono text-xs">
                               Lantai {fl.floorOrder}
                             </Badge>
-                            <span className="font-bold text-xs text-foreground">{fl.floorName}</span>
+                            <span className="font-bold text-xs text-foreground">{zone?.name || fl.floorName}</span>
                           </div>
                           <Badge className="bg-primary text-primary-foreground text-[10px]">
                             {totalAssetCount} Asset Placed ({floorAnchors.length} Anchor · {floorMesh.length} Mesh)
@@ -2837,7 +2868,7 @@ export default function PlannerPage() {
                           {zone?.floorPlanUrl ? (
                             <img
                               src={`${getBackendUrl()}${zone.floorPlanUrl}`}
-                              alt={fl.floorName}
+                              alt={zone?.name || fl.floorName}
                               className="w-full h-full object-contain"
                             />
                           ) : (
@@ -2905,6 +2936,8 @@ export default function PlannerPage() {
                 {sortedFloors.map((fl) => {
                   const isActive = selectedZoneId === fl.zoneId;
                   const count = allTenantMesh.filter(m => m.zoneId === fl.zoneId || m.zone?.id === fl.zoneId).length;
+                  const targetZone = zones.find(z => z.id === fl.zoneId);
+                  const floorName = targetZone?.name || fl.floorName;
 
                   return (
                     <button
@@ -2915,10 +2948,10 @@ export default function PlannerPage() {
                         ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                         : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:bg-secondary'
                         }`}
-                      title={`Switch to ${fl.floorName}`}
+                      title={`Switch to ${floorName}`}
                     >
                       <span className="font-mono">L{fl.floorOrder}</span>
-                      <span className="text-[10px] truncate max-w-[70px] font-normal">{fl.floorName}</span>
+                      <span className="text-[10px] truncate max-w-[70px] font-normal">{floorName}</span>
                       {count > 0 && (
                         <span className={`px-1 py-0.2 rounded-full text-[8px] font-bold ${isActive ? 'bg-primary-foreground text-primary' : 'bg-emerald-500 text-white'}`}>
                           {count}
