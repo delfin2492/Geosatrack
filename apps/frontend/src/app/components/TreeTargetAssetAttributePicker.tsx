@@ -162,33 +162,102 @@ export default function TreeTargetAssetAttributePicker({
     setCollapsedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Helper: extract attributes for active asset
+  // Helper: extract attributes for active asset strictly matching selected asset
   const getAttributesForAsset = (assetId: string): AttributeOption[] => {
     const attrMap = new Map<string, AttributeOption>();
-    DEFAULT_ATTRIBUTES.forEach((at) => attrMap.set(at.name.toLowerCase(), at));
 
-    if (assetId !== 'all') {
-      const asset = assets.find((a) => a.id === assetId);
-      if (asset?.description) {
-        try {
-          const desc = JSON.parse(asset.description);
-          const registered = desc.attributes || [];
-          registered.forEach((at: any) => {
-            if (at.name && !attrMap.has(at.name.toLowerCase())) {
+    if (assetId === 'all') {
+      DEFAULT_ATTRIBUTES.forEach((at) => attrMap.set(at.name.toLowerCase(), at));
+      assets.forEach((a) => {
+        if (a.description) {
+          try {
+            const desc = JSON.parse(a.description);
+            const registered = desc.attributes || [];
+            registered.forEach((at: any) => {
+              if (at.name && !attrMap.has(at.name.toLowerCase())) {
+                let labelName = at.name
+                  .replace(/_/g, ' ')
+                  .replace(/([A-Z])/g, ' $1')
+                  .replace(/^./, (str: string) => str.toUpperCase());
+
+                attrMap.set(at.name.toLowerCase(), {
+                  name: at.name,
+                  label: labelName + (at.unit ? ` (${at.unit})` : ''),
+                  unit: at.unit || ''
+                });
+              }
+            });
+          } catch (e) {}
+        }
+      });
+      return Array.from(attrMap.values());
+    }
+
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset) return [];
+
+    // A. Check asset.description JSON
+    if (asset.description) {
+      try {
+        const desc = JSON.parse(asset.description);
+        const registered: any[] = desc.attributes || [];
+        registered.forEach((at: any) => {
+          if (at.name) {
+            const norm = at.name.toLowerCase();
+            const defaultMatch = DEFAULT_ATTRIBUTES.find((d) => d.name.toLowerCase() === norm);
+            if (defaultMatch) {
+              attrMap.set(norm, defaultMatch);
+            } else {
               let labelName = at.name
                 .replace(/_/g, ' ')
                 .replace(/([A-Z])/g, ' $1')
                 .replace(/^./, (str: string) => str.toUpperCase());
 
-              attrMap.set(at.name.toLowerCase(), {
+              attrMap.set(norm, {
                 name: at.name,
                 label: labelName + (at.unit ? ` (${at.unit})` : ''),
                 unit: at.unit || ''
               });
             }
-          });
-        } catch (e) {}
-      }
+          }
+        });
+      } catch (e) {}
+    }
+
+    // B. Check asset.attributes array
+    if (Array.isArray(asset.attributes)) {
+      asset.attributes.forEach((at: any) => {
+        const attrName = at.name || at.attr;
+        if (attrName) {
+          const norm = String(attrName).toLowerCase();
+          if (!attrMap.has(norm)) {
+            const defaultMatch = DEFAULT_ATTRIBUTES.find((d) => d.name.toLowerCase() === norm);
+            if (defaultMatch) {
+              attrMap.set(norm, defaultMatch);
+            } else {
+              attrMap.set(norm, {
+                name: attrName,
+                label: attrName + (at.unit ? ` (${at.unit})` : ''),
+                unit: at.unit || ''
+              });
+            }
+          }
+        }
+      });
+    }
+
+    // C. Check asset.tag telemetry properties
+    if (asset.tag) {
+      const t = asset.tag;
+      if (t.temperature !== undefined && t.temperature !== null) attrMap.set('temperature', DEFAULT_ATTRIBUTES[0]);
+      if (t.humidity !== undefined && t.humidity !== null) attrMap.set('humidity', DEFAULT_ATTRIBUTES[1]);
+      if (t.battery !== undefined && t.battery !== null) attrMap.set('battery', DEFAULT_ATTRIBUTES[2]);
+      if (t.rssi !== undefined && t.rssi !== null) attrMap.set('rssi', DEFAULT_ATTRIBUTES[3]);
+    }
+
+    // D. If asset is a telemetry sensor/tag type and no explicit attributes registered yet, default to standard telemetry attributes
+    if (attrMap.size === 0 && (asset.type === 'MESH_EYE_SENSOR' || asset.type === 'TAG' || asset.tagId)) {
+      DEFAULT_ATTRIBUTES.forEach((at) => attrMap.set(at.name.toLowerCase(), at));
     }
 
     return Array.from(attrMap.values());
@@ -441,80 +510,90 @@ export default function TreeTargetAssetAttributePicker({
 
                 {/* Attributes Checkbox List */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-1.5 text-xs scrollbar-thin">
-                  {/* Option: All Attributes */}
-                  {(() => {
-                    const allAttrNames = currentAssetAttributes.map((a) => a.name);
-                    const isAllChecked =
-                      activeAttributes.includes('all') ||
-                      (allAttrNames.length > 0 && allAttrNames.every((name) => activeAttributes.includes(name)));
-                    return (
-                      <div
-                        onClick={() => toggleAttribute('all')}
-                        style={
-                          isAllChecked
-                            ? {
-                                backgroundColor: `${accentColor}18`,
-                                color: accentColor,
-                                borderColor: `${accentColor}40`,
-                              }
-                            : undefined
-                        }
-                        className={`px-3 py-2.5 rounded-lg cursor-pointer transition-all flex items-center justify-between border ${
-                          isAllChecked ? 'font-bold shadow-xs' : 'border-transparent hover:bg-secondary/60 text-foreground'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
+                  {currentAssetAttributes.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-slate-400 py-16 select-none">
+                      <Tag className="w-8 h-8 opacity-30 mb-2 text-muted-foreground" />
+                      <p className="text-xs font-semibold text-muted-foreground">Asset ini tidak memiliki attribute</p>
+                      <p className="text-[10px] text-muted-foreground/70 mt-0.5">Tidak ada atribut terdaftar pada aset terpilih</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Option: All Attributes */}
+                      {(() => {
+                        const allAttrNames = currentAssetAttributes.map((a) => a.name);
+                        const isAllChecked =
+                          activeAttributes.includes('all') ||
+                          (allAttrNames.length > 0 && allAttrNames.every((name) => activeAttributes.includes(name)));
+                        return (
                           <div
-                            className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
-                              isAllChecked ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
+                            onClick={() => toggleAttribute('all')}
+                            style={
+                              isAllChecked
+                                ? {
+                                    backgroundColor: `${accentColor}18`,
+                                    color: accentColor,
+                                    borderColor: `${accentColor}40`,
+                                  }
+                                : undefined
+                            }
+                            className={`px-3 py-2.5 rounded-lg cursor-pointer transition-all flex items-center justify-between border ${
+                              isAllChecked ? 'font-bold shadow-xs' : 'border-transparent hover:bg-secondary/60 text-foreground'
                             }`}
-                            style={isAllChecked ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
                           >
-                            {isAllChecked && <Check className="w-3 h-3 stroke-[3] text-white" />}
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
+                                  isAllChecked ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
+                                }`}
+                                style={isAllChecked ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
+                              >
+                                {isAllChecked && <Check className="w-3 h-3 stroke-[3] text-white" />}
+                              </div>
+                              <span className="font-bold">Semua Attribute (All Attributes)</span>
+                            </div>
                           </div>
-                          <span className="font-bold">Semua Attribute (All Attributes)</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                        );
+                      })()}
 
-                  <div className="border-t border-border/40 my-1" />
+                      <div className="border-t border-border/40 my-1" />
 
-                  {/* Individual Attributes with Checkboxes (Multiple Selection Support) */}
-                  {currentAssetAttributes.map((attr) => {
-                    const isChecked = activeAttributes.includes(attr.name) || activeAttributes.includes('all');
+                      {/* Individual Attributes with Checkboxes (Multiple Selection Support) */}
+                      {currentAssetAttributes.map((attr) => {
+                        const isChecked = activeAttributes.includes('all') || activeAttributes.includes(attr.name);
 
-                    return (
-                      <div
-                        key={attr.name}
-                        onClick={() => toggleAttribute(attr.name)}
-                        style={
-                          isChecked
-                            ? {
-                                backgroundColor: `${accentColor}18`,
-                                color: accentColor,
-                                borderColor: `${accentColor}40`,
-                              }
-                            : undefined
-                        }
-                        className={`px-3 py-2.5 rounded-lg cursor-pointer transition-all flex items-center justify-between border ${
-                          isChecked ? 'font-bold shadow-xs' : 'border-transparent hover:bg-secondary/60 text-foreground'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
+                        return (
                           <div
-                            className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
-                              isChecked ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
+                            key={attr.name}
+                            onClick={() => toggleAttribute(attr.name)}
+                            style={
+                              isChecked
+                                ? {
+                                    backgroundColor: `${accentColor}18`,
+                                    color: accentColor,
+                                    borderColor: `${accentColor}40`,
+                                  }
+                                : undefined
+                            }
+                            className={`px-3 py-2.5 rounded-lg cursor-pointer transition-all flex items-center justify-between border ${
+                              isChecked ? 'font-bold shadow-xs' : 'border-transparent hover:bg-secondary/60 text-foreground'
                             }`}
-                            style={isChecked ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
                           >
-                            {isChecked && <Check className="w-3 h-3 stroke-[3] text-white" />}
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
+                                  isChecked ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
+                                }`}
+                                style={isChecked ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
+                              >
+                                {isChecked && <Check className="w-3 h-3 stroke-[3] text-white" />}
+                              </div>
+                              <span>{attr.label}</span>
+                            </div>
                           </div>
-                          <span>{attr.label}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
