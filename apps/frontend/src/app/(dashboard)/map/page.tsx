@@ -105,7 +105,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
 };
 
 export default function MapPage() {
-  const { tenantId, token } = useAuth();
+  const { tenantId, token, user } = useAuth();
   const { assets, simulationActive, setSimulationActive } = useSocket();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [dbAnchors, setDbAnchors] = useState<any[]>([]);
@@ -559,6 +559,8 @@ export default function MapPage() {
             selectedAssetId={selectedAssetId}
             onSelectAsset={(asset) => setSelectedAssetId(asset ? asset.id : null)}
             onAnchorUpdate={handleAnchorUpdate}
+            primaryAccentColor={user?.tenantThemeColor || '#10b981'}
+            showPopover={false}
           />
 
           {/* Floating Map Legend & Category Layer Filter Panel (placed top-16 to avoid overlapping map style buttons) */}

@@ -56,6 +56,7 @@ interface FloorMapProps {
   thresholds?: any[];
   targetAttribute?: string;
   showUnits?: boolean;
+  showPopover?: boolean;
 }
 
 
@@ -71,6 +72,7 @@ export default function FloorMap({
   thresholds = [],
   targetAttribute = 'humidity',
   showUnits = true,
+  showPopover = true,
 }: FloorMapProps) {
   const { token, tenantId, user } = useAuth();
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -354,7 +356,7 @@ export default function FloorMap({
         className: 'custom-asset-icon',
         html: `
           <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
-            ${isSelected ? `
+            ${(isSelected && showPopover) ? `
               <div style="position: absolute; bottom: 100%; margin-bottom: 6px; left: 50%; transform: translateX(-50%); background-color: rgba(15, 23, 42, 0.95); color: #ffffff; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 10px; min-width: 170px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 9999; backdrop-filter: blur(8px); border: 1px solid rgba(51, 65, 85, 0.8); white-space: nowrap; pointer-events: none;">
                 <div style="font-weight: 800; font-size: 12px; border-bottom: 1px solid #334155; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; color: #f8fafc;">
                   <span>${asset.name.split(':')[0]}</span>
