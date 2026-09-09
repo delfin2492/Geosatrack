@@ -557,7 +557,7 @@ export default function MapPage() {
             assets={visibleMapAssets}
             anchors={visibleAnchors}
             selectedAssetId={selectedAssetId}
-            onSelectAsset={(asset) => setSelectedAssetId(asset.id)}
+            onSelectAsset={(asset) => setSelectedAssetId(asset ? asset.id : null)}
             onAnchorUpdate={handleAnchorUpdate}
           />
 

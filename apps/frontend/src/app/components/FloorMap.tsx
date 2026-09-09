@@ -45,7 +45,7 @@ interface FloorMapProps {
   assets: MapAsset[];
   anchors?: MapAnchor[];
   onAnchorUpdate?: (id: string, x: number, y: number) => void;
-  onSelectAsset?: (asset: MapAsset) => void;
+  onSelectAsset?: (asset: MapAsset | null) => void;
   selectedAssetId?: string | null;
   widthMeters?: number;
   heightMeters?: number;
@@ -129,6 +129,9 @@ export default function FloorMap({
       worldCopyJump: false,
     });
     mapRef.current = map;
+    map.on('click', () => {
+      if (onSelectAsset) onSelectAsset(null);
+    });
 
     // Set up default Layer
     const defaultLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
@@ -347,25 +350,6 @@ export default function FloorMap({
       const labelBorderColor = isSelected ? highlightColor : '#cbd5e1';
       const activePinColor = isSelected ? highlightColor : pinColor;
 
-      const popupContent = `
-        <div style="padding: 4px 6px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px; color: #0f172a; min-width: 170px;">
-          <div style="font-weight: 800; font-size: 12px; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
-            <span>${asset.name.split(':')[0]}</span>
-            <span style="font-size: 9px; padding: 1px 6px; border-radius: 4px; background-color: ${thresholdStatusColor}22; color: ${thresholdStatusColor}; font-weight: 700;">
-              ${isThresholdExceeded ? '⚠️ Warning' : '✓ Normal'}
-            </span>
-          </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; color: #64748b;">
-            <span>Last Update:</span>
-            <span style="font-family: monospace; font-weight: 700; color: #1e293b;">${formattedDateStr} ${formattedTimeStr}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px; border-top: 1px solid #f1f5f9; color: #64748b;">
-            <span>Threshold:</span>
-            <span style="font-weight: 700; color: ${thresholdStatusColor};">${thresholdStatusText}</span>
-          </div>
-        </div>
-      `;
-
       const customIcon = L.divIcon({
         className: 'custom-asset-icon',
         html: `
@@ -413,10 +397,19 @@ export default function FloorMap({
 
       const existingMarker = markersRef.current.get(asset.id);
       if (existingMarker) {
+        existingMarker.unbindPopup();
         existingMarker.setLatLng([lat, lon]);
         existingMarker.setIcon(customIcon);
         existingMarker.setZIndexOffset(isSelected ? 1000 : 0);
         existingMarker.options.assetColor = pinColor;
+        existingMarker.off('click');
+        existingMarker.on('click', (e: any) => {
+          if (e && e.originalEvent) e.originalEvent.stopPropagation();
+          map.panTo([lat, lon]);
+          if (onSelectAsset) {
+            onSelectAsset(isSelected ? null : asset);
+          }
+        });
       } else {
         const marker = L.marker([lat, lon], {
           icon: customIcon,
@@ -425,10 +418,11 @@ export default function FloorMap({
           zIndexOffset: isSelected ? 1000 : 0
         });
 
-        marker.on('click', () => {
+        marker.on('click', (e: any) => {
+          if (e && e.originalEvent) e.originalEvent.stopPropagation();
           map.panTo([lat, lon]);
           if (onSelectAsset) {
-            onSelectAsset(asset);
+            onSelectAsset(isSelected ? null : asset);
           }
         });
 

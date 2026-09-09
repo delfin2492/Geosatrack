@@ -250,7 +250,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
             assets={mapAssetsList}
             anchors={[]}
             selectedAssetId={selectedMapAssetId}
-            onSelectAsset={(a) => setSelectedMapAssetId(selectedMapAssetId === a.id ? null : a.id)}
+            onSelectAsset={(a) => setSelectedMapAssetId(a ? (selectedMapAssetId === a.id ? null : a.id) : null)}
             disableClustering={true}
             readOnly={false}
             hideMarkerOutline={true}
@@ -321,7 +321,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
         <span>RTLS Denah 2D ({currentZone.name || 'Floorplan'})</span>
       </div>
 
-      <div className="flex-1 w-full relative overflow-hidden bg-card border rounded-lg border-border">
+      <div className="flex-1 w-full relative overflow-hidden bg-card border rounded-lg border-border" onClick={() => setSelectedMapAssetId(null)}>
         {/* Floorplan Background Image */}
         <img
           src={`${getBackendUrl()}${currentZone.floorPlanUrl}`}
