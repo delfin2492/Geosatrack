@@ -509,6 +509,97 @@ export class AssetService {
   }
 
 
+  async getTelemetryExport(
+    tenantId: string,
+    query: {
+      assetId?: string;
+      tagId?: string;
+      attribute?: string;
+      startDate?: string;
+      endDate?: string;
+      limit?: number;
+    },
+  ) {
+    const tenantAssets = await this.prisma.asset.findMany({
+      where: { tenantId },
+      include: { tag: true },
+    });
+
+    const assetByTagMap = new Map<string, { id: string; name: string; type: string }>();
+    const assetByIdMap = new Map<string, { id: string; name: string; tagId: string | null }>();
+
+    tenantAssets.forEach((a) => {
+      assetByIdMap.set(a.id, { id: a.id, name: a.name, tagId: a.tagId });
+      if (a.tagId) {
+        assetByTagMap.set(a.tagId, { id: a.id, name: a.name, type: a.type });
+      }
+    });
+
+    const whereClause: any = {};
+    if (query.tagId) {
+      whereClause.tagId = query.tagId;
+    } else if (query.assetId && assetByIdMap.has(query.assetId)) {
+      const targetTagId = assetByIdMap.get(query.assetId)?.tagId;
+      if (targetTagId) whereClause.tagId = targetTagId;
+    } else {
+      const tenantTagIds = Array.from(assetByTagMap.keys());
+      if (tenantTagIds.length > 0) {
+        whereClause.tagId = { in: tenantTagIds };
+      }
+    }
+
+    if (query.startDate || query.endDate) {
+      whereClause.timestamp = {};
+      if (query.startDate) whereClause.timestamp.gte = new Date(query.startDate);
+      if (query.endDate) whereClause.timestamp.lte = new Date(query.endDate);
+    }
+
+    const limitNum = Math.min(query.limit ? Number(query.limit) : 5000, 50000);
+
+    const rawLogs = (await this.prisma.telemetry.findMany({
+      where: whereClause,
+      orderBy: { timestamp: 'desc' },
+      take: limitNum,
+    })) as any[];
+
+    const results: any[] = [];
+    const attrFilter = (query.attribute || '').toLowerCase();
+
+    rawLogs.forEach((row: any) => {
+      const assetInfo = assetByTagMap.get(row.tagId) || { id: '', name: `Tag [${row.tagId}]`, type: 'UNKNOWN' };
+      const ts = row.timestamp ? new Date(row.timestamp).toISOString() : new Date().toISOString();
+
+      const addAttr = (attrName: string, val: number | null | undefined, unit: string) => {
+        if (val === null || val === undefined) return;
+        if (attrFilter && attrFilter !== 'all' && !attrName.toLowerCase().includes(attrFilter)) return;
+
+        results.push({
+          id: `${row.tagId}-${new Date(row.timestamp).getTime()}-${attrName}`,
+          timestamp: ts,
+          tagId: row.tagId,
+          assetId: assetInfo.id,
+          assetName: assetInfo.name,
+          assetType: assetInfo.type,
+          attribute: attrName,
+          value: Number(val),
+          unit: unit,
+        });
+      };
+
+      addAttr('temperature', row.temperature, '°C');
+      addAttr('humidity', row.humidity, '%');
+      addAttr('battery', row.battery, '%');
+      addAttr('rssi', row.rssi, 'dBm');
+      addAttr('accelX', row.accelX, 'g');
+      addAttr('accelY', row.accelY, 'g');
+      addAttr('accelZ', row.accelZ, 'g');
+      addAttr('pitch', row.pitch, '°');
+      addAttr('roll', row.roll, '°');
+    });
+
+    return results;
+  }
+
   async getAnchors(tenantId: string) {
     const assetAnchors = await this.prisma.asset.findMany({
       where: { tenantId, type: 'ANCHOR' },

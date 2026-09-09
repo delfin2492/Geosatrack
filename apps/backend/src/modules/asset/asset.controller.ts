@@ -49,6 +49,26 @@ export class AssetController {
     return this.assetService.getAnchors(tenantId);
   }
 
+  @Get('telemetry/export')
+  exportTelemetry(
+    @GetTenantId() tenantId: string,
+    @Query('assetId') assetId?: string,
+    @Query('tagId') tagId?: string,
+    @Query('attribute') attribute?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.assetService.getTelemetryExport(tenantId, {
+      assetId,
+      tagId,
+      attribute,
+      startDate,
+      endDate,
+      limit: limit ? Number(limit) : 5000,
+    });
+  }
+
   @Get(':id')
   findOne(@GetTenantId() tenantId: string, @Param('id') id: string) {
     return this.assetService.findOne(tenantId, id);

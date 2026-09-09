@@ -27,7 +27,8 @@ import {
   Palette,
   Loader2,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  FileSpreadsheet
 } from 'lucide-react';
 import NotificationDropdown from '../components/NotificationDropdown';
 
@@ -200,6 +201,7 @@ function getContrastColor(hexColor: string): string {
     { name: 'Automation Rules', href: '/rules', icon: ShieldAlert },
     { name: 'Live Logs', href: '/logs', icon: Terminal },
     { name: 'Insights', href: '/insights', icon: Activity },
+    { name: 'Data Export', href: '/data-export', icon: FileSpreadsheet },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
 

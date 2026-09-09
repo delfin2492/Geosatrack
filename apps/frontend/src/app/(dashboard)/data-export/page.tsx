@@ -1,0 +1,612 @@
+'use client';
+
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
+import { getApiUrl } from '../../lib/api';
+import {
+  FileSpreadsheet,
+  Download,
+  Calendar,
+  Filter,
+  Search,
+  Pause,
+  Play,
+  RefreshCw,
+  Boxes,
+  Activity,
+  ShieldAlert,
+  CheckCircle2,
+  Database,
+  ArrowUpDown,
+  FileJson,
+  Radio
+} from 'lucide-react';
+
+interface TelemetryRow {
+  id: string;
+  timestamp: string;
+  assetId: string;
+  assetName: string;
+  assetType?: string;
+  tagId: string;
+  attribute: string;
+  value: number;
+  unit?: string;
+  status?: string;
+}
+
+export default function DataExportPage() {
+  const { socket, assets: contextAssets } = useSocket();
+  const { token, tenantId } = useAuth();
+
+  // State Filters
+  const [fetchedAssets, setFetchedAssets] = useState<any[]>([]);
+  const [selectedAssetId, setSelectedAssetId] = useState<string>('all');
+  const [selectedAttribute, setSelectedAttribute] = useState<string>('all');
+  const [timeRange, setTimeRange] = useState<string>('24h');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Live Stream & Loading States
+  const [isLiveStream, setIsLiveStream] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [logs, setLogs] = useState<TelemetryRow[]>([]);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const rowsPerPage = 25;
+
+  const assetsList = fetchedAssets.length > 0 ? fetchedAssets : contextAssets;
+
+  // 1. Fetch Assets List
+  useEffect(() => {
+    if (tenantId) {
+      const headers: Record<string, string> = { 'x-tenant-id': tenantId };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      fetch(`${getApiUrl()}/assets`, { headers })
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) setFetchedAssets(data);
+        })
+        .catch(console.error);
+    }
+  }, [tenantId, token]);
+
+  // 2. Fetch Telemetry Log History from API
+  const fetchTelemetryHistory = async () => {
+    if (!tenantId) return;
+    setIsLoading(true);
+
+    try {
+      const headers: Record<string, string> = { 'x-tenant-id': tenantId };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      let startIso = startDate;
+      let endIso = endDate;
+
+      if (timeRange !== 'custom') {
+        const now = new Date();
+        endIso = now.toISOString();
+        const start = new Date();
+
+        if (timeRange === '1h') start.setHours(now.getHours() - 1);
+        else if (timeRange === '24h') start.setHours(now.getHours() - 24);
+        else if (timeRange === '7d') start.setDate(now.getDate() - 7);
+        else if (timeRange === '30d') start.setDate(now.getDate() - 30);
+
+        startIso = start.toISOString();
+      }
+
+      const params = new URLSearchParams();
+      if (selectedAssetId !== 'all') params.append('assetId', selectedAssetId);
+      if (selectedAttribute !== 'all') params.append('attribute', selectedAttribute);
+      if (startIso) params.append('startDate', startIso);
+      if (endIso) params.append('endDate', endIso);
+      params.append('limit', '5000');
+
+      const res = await fetch(`${getApiUrl()}/assets/telemetry/export?${params.toString()}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setLogs(data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch telemetry logs:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTelemetryHistory();
+  }, [tenantId, token, selectedAssetId, selectedAttribute, timeRange, startDate, endDate]);
+
+  // 3. Socket.io Realtime Telemetry Stream
+  const isLiveRef = useRef(isLiveStream);
+  useEffect(() => {
+    isLiveRef.current = isLiveStream;
+  }, [isLiveStream]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleTelemetryNew = (telemetry: any) => {
+      if (!isLiveRef.current) return;
+
+      const tagId = telemetry.tagId || 'TAG_UNKNOWN';
+      const matchedAsset = assetsList.find((a) => a.tagId === tagId || a.tag?.id === tagId);
+      const assetName = matchedAsset?.name || `Tag [${tagId}]`;
+      const assetType = matchedAsset?.type || 'SENSOR';
+      const ts = telemetry.timestamp || new Date().toISOString();
+
+      const newRows: TelemetryRow[] = [];
+      const addRow = (attr: string, val: any, unit: string) => {
+        if (val === null || val === undefined) return;
+        const numVal = Number(val);
+        if (isNaN(numVal)) return;
+
+        newRows.push({
+          id: `${tagId}-${Date.now()}-${attr}-${Math.random()}`,
+          timestamp: ts,
+          assetId: matchedAsset?.id || '',
+          assetName,
+          assetType,
+          tagId,
+          attribute: attr,
+          value: numVal,
+          unit,
+          status: 'Normal'
+        });
+      };
+
+      addRow('temperature', telemetry.temperature, '°C');
+      addRow('humidity', telemetry.humidity, '%');
+      addRow('battery', telemetry.battery, '%');
+      addRow('rssi', telemetry.rssi, 'dBm');
+
+      if (newRows.length > 0) {
+        setLogs((prev) => [...newRows, ...prev].slice(0, 10000));
+      }
+    };
+
+    socket.on('telemetryNew', handleTelemetryNew);
+    return () => {
+      socket.off('telemetryNew', handleTelemetryNew);
+    };
+  }, [socket, assetsList]);
+
+  // 4. Filtering & Search Logic
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (selectedAssetId !== 'all' && log.assetId !== selectedAssetId) return false;
+      if (selectedAttribute !== 'all' && !log.attribute.toLowerCase().includes(selectedAttribute.toLowerCase())) return false;
+      if (searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase();
+        const matchName = log.assetName.toLowerCase().includes(q);
+        const matchTag = log.tagId.toLowerCase().includes(q);
+        const matchAttr = log.attribute.toLowerCase().includes(q);
+        if (!matchName && !matchTag && !matchAttr) return false;
+      }
+      return true;
+    });
+  }, [logs, selectedAssetId, selectedAttribute, searchQuery]);
+
+  // Paginator slice
+  const totalPages = Math.ceil(filteredLogs.length / rowsPerPage) || 1;
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage;
+    return filteredLogs.slice(start, start + rowsPerPage);
+  }, [filteredLogs, currentPage]);
+
+  // Summary Metrics
+  const summaryStats = useMemo(() => {
+    const totalCount = filteredLogs.length;
+    const uniqueAssets = new Set(filteredLogs.map((l) => l.assetName)).size;
+    const values = filteredLogs.map((l) => l.value);
+    const avgVal = values.length > 0 ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1) : '--';
+    const alertCount = filteredLogs.filter((l) => l.status === 'Alert' || l.status === 'Warning').length;
+
+    return { totalCount, uniqueAssets, avgVal, alertCount };
+  }, [filteredLogs]);
+
+  // 5. CSV Export Handler
+  const handleExportCSV = () => {
+    if (filteredLogs.length === 0) return;
+
+    const headers = ['Timestamp', 'Asset Name', 'Tag ID', 'Asset Type', 'Attribute', 'Value', 'Unit', 'Status'];
+    const csvRows = filteredLogs.map((l) => [
+      `"${new Date(l.timestamp).toLocaleString('id-ID')}"`,
+      `"${l.assetName}"`,
+      `"${l.tagId}"`,
+      `"${l.assetType || ''}"`,
+      `"${l.attribute}"`,
+      l.value,
+      `"${l.unit || ''}"`,
+      `"${l.status || 'Normal'}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...csvRows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `geomesh_telemetry_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 6. JSON Export Handler
+  const handleExportJSON = () => {
+    if (filteredLogs.length === 0) return;
+
+    const jsonStr = JSON.stringify(filteredLogs, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `geomesh_telemetry_export_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="flex-1 w-full h-full p-6 overflow-y-auto space-y-6 bg-background text-foreground">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+              <FileSpreadsheet className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold tracking-tight">Data Export & Telemetry Logger</h1>
+              <p className="text-xs text-muted-foreground">
+                Ekspor dan kelola riwayat log telemetri atribut aset secara real-time maupun historis.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsLiveStream(!isLiveStream)}
+            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer shadow-xs ${
+              isLiveStream
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25'
+                : 'bg-secondary/40 border-border text-muted-foreground hover:bg-secondary/70'
+            }`}
+          >
+            {isLiveStream ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                <Pause className="w-3.5 h-3.5" /> Live Stream (Active)
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5" /> Paused
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={fetchTelemetryHistory}
+            className="p-2 rounded-xl border border-border bg-card hover:bg-secondary/50 text-foreground transition-colors cursor-pointer"
+            title="Refresh Data"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-primary' : ''}`} />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportJSON}
+            disabled={filteredLogs.length === 0}
+            className="px-3 py-2 rounded-xl text-xs font-bold border border-border bg-card hover:bg-secondary/50 text-foreground flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            <FileJson className="w-4 h-4 text-blue-500" />
+            <span>JSON</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            disabled={filteredLogs.length === 0}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export CSV ({filteredLogs.length})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-xs flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500 border border-blue-500/20">
+            <Database className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total Log Entries</p>
+            <h3 className="text-xl font-mono font-extrabold mt-0.5">{summaryStats.totalCount.toLocaleString()}</h3>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-xs flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/20">
+            <Boxes className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Monitored Assets</p>
+            <h3 className="text-xl font-mono font-extrabold mt-0.5">{summaryStats.uniqueAssets} Assets</h3>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-xs flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+            <Activity className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Avg Telemetry Value</p>
+            <h3 className="text-xl font-mono font-extrabold mt-0.5">{summaryStats.avgVal}</h3>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-xs flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            <ShieldAlert className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Alert Events</p>
+            <h3 className="text-xl font-mono font-extrabold mt-0.5">{summaryStats.alertCount}</h3>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Control Bar */}
+      <div className="p-4 rounded-2xl border border-border bg-card shadow-xs space-y-4">
+        <div className="flex items-center gap-2 pb-2 border-b border-border text-xs font-bold text-muted-foreground">
+          <Filter className="w-4 h-4 text-primary" />
+          <span>Filter Data & Range Tanggal</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Asset Select */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-muted-foreground">Target Asset</label>
+            <select
+              value={selectedAssetId}
+              onChange={(e) => {
+                setSelectedAssetId(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full text-xs font-semibold p-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+            >
+              <option value="all">Semua Asset (All Assets)</option>
+              {assetsList.map((a: any) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.type})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Attribute Select */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-muted-foreground">Attribute Telemetry</label>
+            <select
+              value={selectedAttribute}
+              onChange={(e) => {
+                setSelectedAttribute(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full text-xs font-semibold p-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+            >
+              <option value="all">Semua Attribute (All)</option>
+              <option value="temperature">🌡️ Temperature (°C)</option>
+              <option value="humidity">💧 Humidity (%)</option>
+              <option value="battery">🔋 Battery (%)</option>
+              <option value="rssi">📶 Signal RSSI (dBm)</option>
+              <option value="accelX">📐 Accel X</option>
+              <option value="accelY">📐 Accel Y</option>
+              <option value="accelZ">📐 Accel Z</option>
+            </select>
+          </div>
+
+          {/* Time Range Select */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-muted-foreground">Rentang Waktu</label>
+            <select
+              value={timeRange}
+              onChange={(e) => {
+                setTimeRange(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full text-xs font-semibold p-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+            >
+              <option value="1h">1 Jam Terakhir</option>
+              <option value="24h">24 Jam Terakhir</option>
+              <option value="7d">7 Hari Terakhir</option>
+              <option value="30d">30 Hari Terakhir</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+          </div>
+
+          {/* Search Input */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-muted-foreground">Cari Tag / Asset</label>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full text-xs font-semibold pl-9 pr-3 py-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Custom Date Range Pickers (if custom selected) */}
+        {timeRange === 'custom' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/60 animate-in fade-in">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-muted-foreground">Tanggal Mulai (Start Date)</label>
+              <input
+                type="datetime-local"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full text-xs font-semibold p-2 rounded-xl border border-border bg-secondary/20 text-foreground"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-muted-foreground">Tanggal Selesai (End Date)</label>
+              <input
+                type="datetime-local"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full text-xs font-semibold p-2 rounded-xl border border-border bg-secondary/20 text-foreground"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Data Table */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs flex flex-col">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Radio className="w-4 h-4 text-emerald-500 animate-pulse" />
+            <span className="text-xs font-bold">Telemetry Data Logs</span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+              Showing {paginatedLogs.length} of {filteredLogs.length} entries
+            </span>
+          </div>
+
+          <span className="text-[11px] text-muted-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-secondary/40 border-b border-border text-muted-foreground font-bold uppercase text-[10px] tracking-wider select-none">
+              <tr>
+                <th className="py-3 px-4">Waktu (Timestamp)</th>
+                <th className="py-3 px-4">Nama Asset</th>
+                <th className="py-3 px-4">Tag ID</th>
+                <th className="py-3 px-4">Attribute</th>
+                <th className="py-3 px-4">Nilai (Value)</th>
+                <th className="py-3 px-4">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {paginatedLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <FileSpreadsheet className="w-8 h-8 opacity-40" />
+                      <span className="text-xs font-semibold">Tidak ada log telemetri yang cocok dengan filter</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-secondary/30 transition-colors">
+                    <td className="py-3 px-4 font-mono font-medium text-foreground/90 whitespace-nowrap">
+                      {new Date(log.timestamp).toLocaleString('id-ID', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                      })}
+                    </td>
+                    <td className="py-3 px-4 font-bold text-foreground whitespace-nowrap">
+                      {log.assetName}
+                      {log.assetType && <span className="ml-1.5 text-[9px] font-normal text-muted-foreground">({log.assetType})</span>}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-muted-foreground whitespace-nowrap">
+                      {log.tagId}
+                    </td>
+                    <td className="py-3 px-4 font-semibold capitalize whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-md bg-secondary/60 text-foreground border border-border/50">
+                        {log.attribute}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-mono font-extrabold text-foreground whitespace-nowrap">
+                      {typeof log.value === 'number' ? log.value.toFixed(1) : log.value}
+                      <span className="text-muted-foreground text-[10px] ml-1">{log.unit}</span>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          log.status === 'Alert' || log.status === 'Warning'
+                            ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
+                            : 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        {log.status || 'Normal'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Paginator Footer */}
+        {totalPages > 1 && (
+          <div className="p-3 border-t border-border flex items-center justify-between text-xs bg-card">
+            <button
+              type="button"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/60 disabled:opacity-50 cursor-pointer font-semibold"
+            >
+              Previous
+            </button>
+
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }).map((_, idx) => {
+                const pageNum = idx + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    type="button"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      currentPage === pageNum ? 'bg-primary text-primary-foreground' : 'hover:bg-secondary/50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/60 disabled:opacity-50 cursor-pointer font-semibold"
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
