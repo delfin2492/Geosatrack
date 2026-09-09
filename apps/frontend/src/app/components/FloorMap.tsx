@@ -52,6 +52,10 @@ interface FloorMapProps {
   disableClustering?: boolean;
   readOnly?: boolean;
   hideMarkerOutline?: boolean;
+  primaryAccentColor?: string;
+  thresholds?: any[];
+  targetAttribute?: string;
+  showUnits?: boolean;
 }
 
 
@@ -63,6 +67,10 @@ export default function FloorMap({
   disableClustering = false,
   readOnly = false,
   hideMarkerOutline = false,
+  primaryAccentColor = '#10b981',
+  thresholds = [],
+  targetAttribute = 'humidity',
+  showUnits = true,
 }: FloorMapProps) {
   const { token, tenantId, user } = useAuth();
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -302,26 +310,93 @@ export default function FloorMap({
       let pinColor = (asset as any).color || (asset as any).pinColor || markerIconInfo.color;
 
       const isSelected = selectedAssetId === asset.id;
-      const highlightColor = user?.tenantThemeColor || '#f59e0b'; // Primary Accent or fallback
+      const highlightColor = primaryAccentColor || user?.tenantThemeColor || '#10b981';
 
-      const labelClass = (isSelected && !hideMarkerOutline && !readOnly)
-        ? 'text-slate-950 font-black scale-110 shadow-lg'
-        : (isSelected ? 'bg-slate-900 text-white font-extrabold scale-105 shadow-xl border-slate-700' : 'bg-white text-slate-800 border-none font-bold shadow-md');
+      // Evaluate Threshold Exceeded status for Popup
+      const val = (asset as any).attributeVal !== undefined ? (asset as any).attributeVal : null;
+      let thresholdStatusText = 'Normal';
+      let thresholdStatusColor = '#10b981';
+      let isThresholdExceeded = false;
 
-      const labelStyle = (isSelected && !hideMarkerOutline && !readOnly)
-        ? `background-color: ${highlightColor}; border-color: ${highlightColor};`
-        : '';
+      if (val !== null && val !== undefined && typeof val === 'number' && thresholds && thresholds.length > 0) {
+        const sortedThresholds = [...thresholds].sort((a: any, b: any) => b.value - a.value);
+        const highest = sortedThresholds[0];
+        if (highest && val >= highest.value) {
+          isThresholdExceeded = true;
+          thresholdStatusText = `Melebihi Threshold (≥ ${highest.value})`;
+          thresholdStatusColor = highest.color || '#ef4444';
+        } else {
+          const matched = sortedThresholds.find((t: any) => val >= t.value);
+          if (matched) {
+            if (matched.value > 0) {
+              isThresholdExceeded = true;
+              thresholdStatusText = `Melebihi Threshold (≥ ${matched.value})`;
+            }
+            thresholdStatusColor = matched.color || '#10b981';
+          }
+        }
+      }
+
+      // Format last update date & time
+      const dateForUpdate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : new Date();
+      const formattedDateStr = dateForUpdate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+      const formattedTimeStr = dateForUpdate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      const labelBgColor = isSelected ? highlightColor : '#ffffff';
+      const labelTextColor = isSelected ? '#ffffff' : '#1e293b';
+      const labelBorderColor = isSelected ? highlightColor : '#cbd5e1';
+      const activePinColor = isSelected ? highlightColor : pinColor;
+
+      const popupContent = `
+        <div style="padding: 4px 6px; font-family: system-ui, -apple-system, sans-serif; font-size: 11px; color: #0f172a; min-width: 170px;">
+          <div style="font-weight: 800; font-size: 12px; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+            <span>${asset.name.split(':')[0]}</span>
+            <span style="font-size: 9px; padding: 1px 6px; border-radius: 4px; background-color: ${thresholdStatusColor}22; color: ${thresholdStatusColor}; font-weight: 700;">
+              ${isThresholdExceeded ? '⚠️ Warning' : '✓ Normal'}
+            </span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; color: #64748b;">
+            <span>Last Update:</span>
+            <span style="font-family: monospace; font-weight: 700; color: #1e293b;">${formattedDateStr} ${formattedTimeStr}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 4px; border-top: 1px solid #f1f5f9; color: #64748b;">
+            <span>Threshold:</span>
+            <span style="font-weight: 700; color: ${thresholdStatusColor};">${thresholdStatusText}</span>
+          </div>
+        </div>
+      `;
 
       const customIcon = L.divIcon({
         className: 'custom-asset-icon',
         html: `
           <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
-            <div class="${labelClass} border px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap mb-1 z-10 transition-all" style="${labelStyle}">
+            ${isSelected ? `
+              <div style="position: absolute; bottom: 100%; margin-bottom: 6px; left: 50%; transform: translateX(-50%); background-color: rgba(15, 23, 42, 0.95); color: #ffffff; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 10px; min-width: 170px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); z-index: 9999; backdrop-filter: blur(8px); border: 1px solid rgba(51, 65, 85, 0.8); white-space: nowrap; pointer-events: none;">
+                <div style="font-weight: 800; font-size: 12px; border-bottom: 1px solid #334155; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 8px; color: #f8fafc;">
+                  <span>${asset.name.split(':')[0]}</span>
+                  <span style="font-size: 9px; padding: 1px 6px; border-radius: 4px; font-family: monospace; font-weight: 700; background-color: ${thresholdStatusColor}33; color: ${thresholdStatusColor};">
+                    ${isThresholdExceeded ? '⚠️ Warning' : '✓ Normal'}
+                  </span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px; color: #cbd5e1;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <span style="color: #94a3b8;">Last Update:</span>
+                    <span style="font-family: monospace; font-weight: 600; color: #ffffff;">${formattedDateStr} ${formattedTimeStr}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid rgba(30, 41, 59, 0.8);">
+                    <span style="color: #94a3b8;">Threshold:</span>
+                    <span style="font-weight: 700; color: ${thresholdStatusColor};">${thresholdStatusText}</span>
+                  </div>
+                </div>
+              </div>
+            ` : ''}
+
+            <div class="border px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10 transition-all ${isSelected ? 'scale-110 shadow-lg' : ''}" style="background-color: ${labelBgColor}; color: ${labelTextColor}; border-color: ${labelBorderColor}; ${isSelected ? 'box-shadow: 0 0 12px ' + highlightColor + '66;' : ''}">
               ${asset.name}
             </div>
             <div style="position: relative; width: 34px; height: 34px;">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.15));">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="${(hideMarkerOutline || readOnly) ? 'none' : ((isSelected && !readOnly) ? highlightColor : '#ffffff')}" stroke-width="${(hideMarkerOutline || readOnly) ? '0' : ((isSelected && !readOnly) ? '2.5' : '1.5')}"/>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${activePinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.15));">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.5"/>
               </svg>
               <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
                 ${markerIconInfo.svg}

@@ -603,17 +603,20 @@ export default function PlannerPage() {
       }).addTo(map);
     }
 
-    // 3. Recalculate Leaflet size & bounds
+    // 3. Recalculate Leaflet size & bounds with padding to prevent clipping/excessive zoom
     map.invalidateSize();
-    map.fitBounds(bounds);
-    map.setMaxBounds(bounds);
+    const padY = h * 0.5;
+    const padX = w * 0.5;
+    const paddedBounds: [[number, number], [number, number]] = [[-padY, -padX], [h + padY, w + padX]];
+    map.setMaxBounds(paddedBounds);
+    map.fitBounds(bounds, { padding: [30, 30] });
 
     setTimeout(() => {
       if (mapRef.current) {
         mapRef.current.invalidateSize();
-        const minZ = mapRef.current.getBoundsZoom(bounds, false);
-        mapRef.current.setMinZoom(minZ);
-        mapRef.current.fitBounds(bounds);
+        const boundsZoom = mapRef.current.getBoundsZoom(bounds, false);
+        mapRef.current.setMinZoom(Math.max(-4, boundsZoom - 2));
+        mapRef.current.fitBounds(bounds, { padding: [30, 30] });
       }
     }, 100);
 

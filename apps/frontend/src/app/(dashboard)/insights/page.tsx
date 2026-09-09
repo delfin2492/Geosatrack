@@ -1947,7 +1947,7 @@ export default function InsightsPage() {
                           return (
                             <div className="space-y-4 pt-1">
                               {/* 0. Denah/Zone (Only for RTLS) */}
-                              {selectedWidget.type === 'rtls_map' ? (
+                              {selectedWidget.type === 'rtls_map' && (
                                 <div className="space-y-1.5 pb-3 border-b border-border">
                                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 block">Denah / Zone</label>
                                   <CustomSidebarSelect
@@ -1960,8 +1960,7 @@ export default function InsightsPage() {
                                     primaryAccentColor={primaryAccentColor}
                                   />
                                 </div>
-                              ) : (
-                                <>
+                              )}
                                   {/* 1. Asset type */}
                                   <div className="space-y-1.5">
                                 <div className="flex items-center gap-1.5">
@@ -2151,8 +2150,6 @@ export default function InsightsPage() {
                                </div>
                              )}
                              </div>
-                          </>
-                        )}
                            </div>
                        );
                        })() : isChart ? (

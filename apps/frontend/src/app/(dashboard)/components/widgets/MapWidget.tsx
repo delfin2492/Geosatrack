@@ -13,6 +13,16 @@ interface MapWidgetProps {
   zones?: any[];
 }
 
+const getAttributeIcon = (attrName: string) => {
+  const n = (attrName || '').toLowerCase();
+  if (n.includes('temp')) return '🌡️';
+  if (n.includes('hum')) return '💧';
+  if (n.includes('batt') || n.includes('volt')) return '🔋';
+  if (n.includes('rssi')) return '📶';
+  if (n.includes('co2')) return '☁️';
+  return '📊';
+};
+
 const getAttributeUnit = (attrName: string) => {
   const n = (attrName || '').toLowerCase();
   if (n.includes('temp')) return '°C';
@@ -162,6 +172,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
 }) => {
   const [selectedMapAssetId, setSelectedMapAssetId] = React.useState<string | null>(null);
 
+
   const mapData = data || {};
   const asset = mapData.asset || {};
   const zone = asset.zone || {};
@@ -215,6 +226,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
         id: a.id,
         name: labelText,
         meshLabel: labelText,
+        attributeVal: attrVal,
         type: a.type || 'MESH_EYE_SENSOR',
         status: 'static' as const,
         x: a.planX || 10,
@@ -238,10 +250,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
             assets={mapAssetsList}
             anchors={[]}
             selectedAssetId={selectedMapAssetId}
-            onSelectAsset={(a) => setSelectedMapAssetId(a.id)}
+            onSelectAsset={(a) => setSelectedMapAssetId(selectedMapAssetId === a.id ? null : a.id)}
             disableClustering={true}
             readOnly={false}
             hideMarkerOutline={true}
+            primaryAccentColor={primaryAccentColor}
+            thresholds={thresholds}
+            targetAttribute={targetAttribute}
+            showUnits={showUnits}
           />
         </div>
       </div>
@@ -300,7 +316,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
   return (
     <div className="w-full h-full flex flex-col justify-between p-2 relative overflow-hidden bg-secondary/10 rounded-lg border border-border select-none">
       {/* Header Tag */}
-      <div className="absolute top-3 left-3 z-20 bg-card/90 backdrop-blur-sm border border-border px-2.5 py-1 rounded-md text-[10px] font-bold text-foreground flex items-center gap-1.5 shadow-xs pointer-events-none">
+      <div className="absolute top-3 left-3 z-20 bg-card/95 backdrop-blur-md border border-border/80 px-2.5 py-1 rounded-lg text-[10px] font-bold text-foreground flex items-center gap-1.5 shadow-sm">
         <Layers className="w-3.5 h-3.5 text-primary" />
         <span>RTLS Denah 2D ({currentZone.name || 'Floorplan'})</span>
       </div>
@@ -369,6 +385,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
           const pctX = (posX / zoneW) * 100;
           const pctY = ((zoneH - posY) / zoneH) * 100;
 
+          const isSelected = selectedMapAssetId === asset.id;
           const markerIconInfo = getAssetMarkerIcon(asset.type || 'MESH_EYE_SENSOR', asset.name, dbAssetTypes);
           const isOnline = (() => {
             if (asset.tag?.lastSeen) {
@@ -381,22 +398,73 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
 
           const val = getLatestAssetAttributeValue(asset, targetAttribute, mapData);
           const unit = showUnits ? getAttributeUnit(targetAttribute) : '';
-          const assetAttrs = val !== null && val !== undefined ? [{ attr: targetAttribute, val: `${val}${unit ? ' ' + unit : ''}` }] : [];
+          const attrValFormatted = val !== null && val !== undefined ? (typeof val === 'number' ? val.toFixed(1) : val) : '--';
+
+          // Evaluate Threshold Exceeded status
+          let thresholdStatusText = 'Normal';
+          let thresholdStatusColor = '#10b981';
+          let isThresholdExceeded = false;
+
+          if (val !== null && val !== undefined && typeof val === 'number' && thresholds && thresholds.length > 0) {
+            const sortedThresholds = [...thresholds].sort((a: any, b: any) => b.value - a.value);
+            const highest = sortedThresholds[0];
+            if (highest && val >= highest.value) {
+              isThresholdExceeded = true;
+              thresholdStatusText = `Melebihi Threshold (≥ ${highest.value}${unit ? ' ' + unit : ''})`;
+              thresholdStatusColor = highest.color || '#ef4444';
+            } else {
+              const matched = sortedThresholds.find((t: any) => val >= t.value);
+              if (matched) {
+                if (matched.value > 0) {
+                  isThresholdExceeded = true;
+                  thresholdStatusText = `Melebihi Threshold (≥ ${matched.value}${unit ? ' ' + unit : ''})`;
+                }
+                thresholdStatusColor = matched.color || '#10b981';
+              }
+            }
+          }
+
+          // Format last update date & time
+          const lastSeenDate = asset.tag?.lastSeen ? new Date(asset.tag.lastSeen) : new Date();
+          const formattedDateStr = lastSeenDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+          const formattedTimeStr = lastSeenDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+          const pinFillColor = isSelected ? primaryAccentColor : markerIconInfo.color;
 
           return (
             <div
               key={`mesh-${asset.id}`}
-              className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center group cursor-pointer transition-all duration-300 z-15"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedMapAssetId(isSelected ? null : asset.id);
+              }}
+              className={`absolute -translate-x-1/2 -translate-y-full flex flex-col items-center group cursor-pointer transition-all duration-300 ${
+                isSelected ? 'z-30 scale-110' : 'z-15 hover:scale-105'
+              }`}
               style={{ left: `${pctX}%`, top: `${pctY}%` }}
             >
-              {/* Name Tag Badge */}
-              <div className="bg-white/95 dark:bg-slate-900/95 text-slate-800 dark:text-slate-100 border border-slate-200/80 dark:border-slate-700 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-0.5 transition-all">
-                {asset.name}
+              {/* White Background Label Badge (Highlight with Primary Accent when selected) */}
+              <div
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-0.5 transition-all flex items-center gap-1 border ${
+                  isSelected ? 'ring-2 scale-110 shadow-lg' : 'border-slate-200 dark:border-slate-700'
+                }`}
+                style={{
+                  backgroundColor: isSelected ? primaryAccentColor : '#ffffff',
+                  color: isSelected ? '#ffffff' : '#1e293b',
+                  borderColor: isSelected ? primaryAccentColor : '#cbd5e1',
+                  boxShadow: isSelected ? `0 0 12px ${primaryAccentColor}66` : undefined
+                }}
+              >
+                <span>{asset.name}</span>
+                <span className={isSelected ? 'opacity-60' : 'text-slate-400'}>:</span>
+                <span className="font-mono font-extrabold">
+                  {attrValFormatted}{unit ? ` ${unit}` : ''}
+                </span>
               </div>
 
-              {/* Pin */}
+              {/* Pin Icon (Highlights with Primary Accent when selected) */}
               <div className="relative w-8 h-8 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={markerIconInfo.color} width="32" height="32" className="drop-shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={pinFillColor} width="32" height="32" className="drop-shadow-md transition-all">
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" strokeWidth="1.5" />
                 </svg>
                 <div
@@ -409,18 +477,27 @@ export const MapWidget: React.FC<MapWidgetProps> = ({
               </div>
               <div className="w-4 h-1 bg-black/20 rounded-full blur-[1px] -mt-1" />
 
-              {/* Tooltip on Hover */}
-              {(showLabels || assetAttrs.length > 0) && (
-                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white rounded-lg p-2 flex flex-col gap-1 text-[10px] min-w-[120px] shadow-md z-30 backdrop-blur-md border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                  {showLabels && <span className="font-bold border-b border-slate-700 pb-1 mb-0.5">{asset.name}</span>}
-                  {assetAttrs.map((at: any, idx: number) => (
-                    <div key={idx} className="flex justify-between gap-3">
-                      <span className="capitalize text-slate-400">{at.attr}:</span>
-                      <span className="font-mono font-bold" style={{ color: markerIconInfo.color }}>
-                        {at.val}
+              {/* Card Popover (Displays ONLY when asset marker is clicked) */}
+              {isSelected && (
+                <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white rounded-xl p-2.5 flex flex-col gap-1.5 text-[10px] min-w-[170px] shadow-xl z-40 backdrop-blur-md border border-slate-700/80 animate-in fade-in duration-150 whitespace-nowrap">
+                  <div className="font-bold border-b border-slate-700 pb-1 text-slate-100 text-xs flex justify-between items-center gap-2">
+                    <span>{asset.name}</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-md font-mono" style={{ backgroundColor: thresholdStatusColor + '33', color: thresholdStatusColor }}>
+                      {isThresholdExceeded ? '⚠️ Warning' : '✓ Normal'}
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-slate-300">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-slate-400">Last Update:</span>
+                      <span className="font-mono font-semibold">{formattedDateStr} {formattedTimeStr}</span>
+                    </div>
+                    <div className="flex justify-between items-center gap-2 pt-0.5 border-t border-slate-800">
+                      <span className="text-slate-400">Threshold:</span>
+                      <span className="font-semibold" style={{ color: thresholdStatusColor }}>
+                        {thresholdStatusText}
                       </span>
                     </div>
-                  ))}
+                  </div>
                 </div>
               )}
             </div>
