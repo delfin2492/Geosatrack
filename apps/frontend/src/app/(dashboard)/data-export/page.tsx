@@ -387,6 +387,7 @@ export default function DataExportPage() {
           <div className="md:col-span-6">
             <TreeTargetAssetAttributePicker
               assets={assetsList}
+              logs={logs}
               selectedAssetId={selectedAssetId}
               selectedAttribute={selectedAttributes}
               onChange={(assetId, attributes) => {

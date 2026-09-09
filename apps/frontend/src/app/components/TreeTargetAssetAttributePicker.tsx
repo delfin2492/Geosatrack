@@ -45,6 +45,7 @@ export interface AssetItem {
 
 interface TreeTargetAssetAttributePickerProps {
   assets: AssetItem[];
+  logs?: any[];
   selectedAssetId: string;
   selectedAttribute: string | string[];
   onChange: (assetId: string, attributes: string[], assetName?: string) => void;
@@ -123,6 +124,7 @@ const buildAssetTree = (flatAssets: AssetItem[]): AssetItem[] => {
 
 export default function TreeTargetAssetAttributePicker({
   assets,
+  logs = [],
   selectedAssetId,
   selectedAttribute,
   onChange,
@@ -166,8 +168,34 @@ export default function TreeTargetAssetAttributePicker({
   const getAttributesForAsset = (assetId: string): AttributeOption[] => {
     const attrMap = new Map<string, AttributeOption>();
 
+    const formatLabel = (name: string, unit?: string) => {
+      const defaultMatch = DEFAULT_ATTRIBUTES.find((d) => d.name.toLowerCase() === name.toLowerCase());
+      if (defaultMatch) return defaultMatch.label;
+
+      let labelName = name
+        .replace(/_/g, ' ')
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, (str: string) => str.toUpperCase());
+      return labelName + (unit ? ` (${unit})` : '');
+    };
+
     if (assetId === 'all') {
       DEFAULT_ATTRIBUTES.forEach((at) => attrMap.set(at.name.toLowerCase(), at));
+
+      // Collect custom attributes from logs
+      if (Array.isArray(logs)) {
+        logs.forEach((l) => {
+          if (l.attribute && !attrMap.has(l.attribute.toLowerCase())) {
+            attrMap.set(l.attribute.toLowerCase(), {
+              name: l.attribute,
+              label: formatLabel(l.attribute, l.unit),
+              unit: l.unit || ''
+            });
+          }
+        });
+      }
+
+      // Collect custom attributes from asset descriptions
       assets.forEach((a) => {
         if (a.description) {
           try {
@@ -175,14 +203,9 @@ export default function TreeTargetAssetAttributePicker({
             const registered = desc.attributes || [];
             registered.forEach((at: any) => {
               if (at.name && !attrMap.has(at.name.toLowerCase())) {
-                let labelName = at.name
-                  .replace(/_/g, ' ')
-                  .replace(/([A-Z])/g, ' $1')
-                  .replace(/^./, (str: string) => str.toUpperCase());
-
                 attrMap.set(at.name.toLowerCase(), {
                   name: at.name,
-                  label: labelName + (at.unit ? ` (${at.unit})` : ''),
+                  label: formatLabel(at.name, at.unit),
                   unit: at.unit || ''
                 });
               }
@@ -194,70 +217,73 @@ export default function TreeTargetAssetAttributePicker({
     }
 
     const asset = assets.find((a) => a.id === assetId);
-    if (!asset) return [];
 
-    // A. Check asset.description JSON
-    if (asset.description) {
-      try {
-        const desc = JSON.parse(asset.description);
-        const registered: any[] = desc.attributes || [];
-        registered.forEach((at: any) => {
-          if (at.name) {
-            const norm = at.name.toLowerCase();
-            const defaultMatch = DEFAULT_ATTRIBUTES.find((d) => d.name.toLowerCase() === norm);
-            if (defaultMatch) {
-              attrMap.set(norm, defaultMatch);
-            } else {
-              let labelName = at.name
-                .replace(/_/g, ' ')
-                .replace(/([A-Z])/g, ' $1')
-                .replace(/^./, (str: string) => str.toUpperCase());
+    // 1. Collect attributes present in telemetry logs for this asset
+    if (Array.isArray(logs)) {
+      logs.forEach((l) => {
+        const matchByAsset = asset && (l.assetId === asset.id || l.assetName === asset.name);
+        const matchByTag = asset && (l.tagId === asset.tagId || (asset.tag && l.tagId === asset.tag.id));
+        const matchById = l.assetId === assetId || l.tagId === assetId;
 
-              attrMap.set(norm, {
-                name: at.name,
-                label: labelName + (at.unit ? ` (${at.unit})` : ''),
-                unit: at.unit || ''
-              });
-            }
-          }
-        });
-      } catch (e) {}
-    }
-
-    // B. Check asset.attributes array
-    if (Array.isArray(asset.attributes)) {
-      asset.attributes.forEach((at: any) => {
-        const attrName = at.name || at.attr;
-        if (attrName) {
-          const norm = String(attrName).toLowerCase();
+        if ((matchByAsset || matchByTag || matchById) && l.attribute) {
+          const norm = l.attribute.toLowerCase();
           if (!attrMap.has(norm)) {
-            const defaultMatch = DEFAULT_ATTRIBUTES.find((d) => d.name.toLowerCase() === norm);
-            if (defaultMatch) {
-              attrMap.set(norm, defaultMatch);
-            } else {
-              attrMap.set(norm, {
-                name: attrName,
-                label: attrName + (at.unit ? ` (${at.unit})` : ''),
-                unit: at.unit || ''
-              });
-            }
+            attrMap.set(norm, {
+              name: l.attribute,
+              label: formatLabel(l.attribute, l.unit),
+              unit: l.unit || ''
+            });
           }
         }
       });
     }
 
-    // C. Check asset.tag telemetry properties
-    if (asset.tag) {
-      const t = asset.tag;
-      if (t.temperature !== undefined && t.temperature !== null) attrMap.set('temperature', DEFAULT_ATTRIBUTES[0]);
-      if (t.humidity !== undefined && t.humidity !== null) attrMap.set('humidity', DEFAULT_ATTRIBUTES[1]);
-      if (t.battery !== undefined && t.battery !== null) attrMap.set('battery', DEFAULT_ATTRIBUTES[2]);
-      if (t.rssi !== undefined && t.rssi !== null) attrMap.set('rssi', DEFAULT_ATTRIBUTES[3]);
-    }
+    if (asset) {
+      // 2. Collect from asset.description JSON
+      if (asset.description) {
+        try {
+          const desc = JSON.parse(asset.description);
+          const registered: any[] = desc.attributes || [];
+          registered.forEach((at: any) => {
+            if (at.name) {
+              const norm = at.name.toLowerCase();
+              if (!attrMap.has(norm)) {
+                attrMap.set(norm, {
+                  name: at.name,
+                  label: formatLabel(at.name, at.unit),
+                  unit: at.unit || ''
+                });
+              }
+            }
+          });
+        } catch (e) {}
+      }
 
-    // D. If asset is a telemetry sensor/tag type and no explicit attributes registered yet, default to standard telemetry attributes
-    if (attrMap.size === 0 && (asset.type === 'MESH_EYE_SENSOR' || asset.type === 'TAG' || asset.tagId)) {
-      DEFAULT_ATTRIBUTES.forEach((at) => attrMap.set(at.name.toLowerCase(), at));
+      // 3. Collect from asset.attributes array
+      if (Array.isArray(asset.attributes)) {
+        asset.attributes.forEach((at: any) => {
+          const attrName = at.name || at.attr;
+          if (attrName) {
+            const norm = String(attrName).toLowerCase();
+            if (!attrMap.has(norm)) {
+              attrMap.set(norm, {
+                name: attrName,
+                label: formatLabel(attrName, at.unit),
+                unit: at.unit || ''
+              });
+            }
+          }
+        });
+      }
+
+      // 4. Collect from asset.tag object (only non-null fields)
+      if (asset.tag) {
+        const t = asset.tag;
+        if (t.temperature !== undefined && t.temperature !== null) attrMap.set('temperature', DEFAULT_ATTRIBUTES[0]);
+        if (t.humidity !== undefined && t.humidity !== null) attrMap.set('humidity', DEFAULT_ATTRIBUTES[1]);
+        if (t.battery !== undefined && t.battery !== null) attrMap.set('battery', DEFAULT_ATTRIBUTES[2]);
+        if (t.rssi !== undefined && t.rssi !== null) attrMap.set('rssi', DEFAULT_ATTRIBUTES[3]);
+      }
     }
 
     return Array.from(attrMap.values());
@@ -265,7 +291,7 @@ export default function TreeTargetAssetAttributePicker({
 
   const currentAssetAttributes = useMemo(() => {
     return getAttributesForAsset(activeAssetId);
-  }, [activeAssetId, assets]);
+  }, [activeAssetId, assets, logs]);
 
   // Toggle selection of an individual attribute or 'all'
   const toggleAttribute = (attrName: string) => {
