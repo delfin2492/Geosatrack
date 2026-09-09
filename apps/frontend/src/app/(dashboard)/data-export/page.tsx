@@ -46,7 +46,7 @@ export default function DataExportPage() {
   // State Filters
   const [fetchedAssets, setFetchedAssets] = useState<any[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string>('all');
-  const [selectedAttribute, setSelectedAttribute] = useState<string>('all');
+  const [selectedAttributes, setSelectedAttributes] = useState<string[]>(['all']);
   const [timeRange, setTimeRange] = useState<string>('24h');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -103,7 +103,9 @@ export default function DataExportPage() {
 
       const params = new URLSearchParams();
       if (selectedAssetId !== 'all') params.append('assetId', selectedAssetId);
-      if (selectedAttribute !== 'all') params.append('attribute', selectedAttribute);
+      if (selectedAttributes.length > 0 && !selectedAttributes.includes('all')) {
+        params.append('attribute', selectedAttributes.join(','));
+      }
       if (startIso) params.append('startDate', startIso);
       if (endIso) params.append('endDate', endIso);
       params.append('limit', '5000');
@@ -124,7 +126,7 @@ export default function DataExportPage() {
 
   useEffect(() => {
     fetchTelemetryHistory();
-  }, [tenantId, token, selectedAssetId, selectedAttribute, timeRange, startDate, endDate]);
+  }, [tenantId, token, selectedAssetId, selectedAttributes, timeRange, startDate, endDate]);
 
   // 3. Socket.io Realtime Telemetry Stream
   const isLiveRef = useRef(isLiveStream);
@@ -184,7 +186,10 @@ export default function DataExportPage() {
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       if (selectedAssetId !== 'all' && log.assetId !== selectedAssetId) return false;
-      if (selectedAttribute !== 'all' && !log.attribute.toLowerCase().includes(selectedAttribute.toLowerCase())) return false;
+      if (selectedAttributes.length > 0 && !selectedAttributes.includes('all')) {
+        const matchAttr = selectedAttributes.some((attr) => log.attribute.toLowerCase().includes(attr.toLowerCase()));
+        if (!matchAttr) return false;
+      }
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase();
         const matchName = log.assetName.toLowerCase().includes(q);
@@ -194,7 +199,7 @@ export default function DataExportPage() {
       }
       return true;
     });
-  }, [logs, selectedAssetId, selectedAttribute, searchQuery]);
+  }, [logs, selectedAssetId, selectedAttributes, searchQuery]);
 
   // Paginator slice
   const totalPages = Math.ceil(filteredLogs.length / rowsPerPage) || 1;
@@ -383,10 +388,10 @@ export default function DataExportPage() {
             <TreeTargetAssetAttributePicker
               assets={assetsList}
               selectedAssetId={selectedAssetId}
-              selectedAttribute={selectedAttribute}
-              onChange={(assetId, attribute) => {
+              selectedAttribute={selectedAttributes}
+              onChange={(assetId, attributes) => {
                 setSelectedAssetId(assetId);
-                setSelectedAttribute(attribute);
+                setSelectedAttributes(attributes);
                 setCurrentPage(1);
               }}
             />

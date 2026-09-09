@@ -563,7 +563,7 @@ export class AssetService {
     })) as any[];
 
     const results: any[] = [];
-    const attrFilter = (query.attribute || '').toLowerCase();
+    const attrFilters = (query.attribute || '').toLowerCase().split(',').map((s: string) => s.trim()).filter(Boolean);
 
     rawLogs.forEach((row: any) => {
       const assetInfo = assetByTagMap.get(row.tagId) || { id: '', name: `Tag [${row.tagId}]`, type: 'UNKNOWN' };
@@ -571,7 +571,9 @@ export class AssetService {
 
       const addAttr = (attrName: string, val: number | null | undefined, unit: string) => {
         if (val === null || val === undefined) return;
-        if (attrFilter && attrFilter !== 'all' && !attrName.toLowerCase().includes(attrFilter)) return;
+        if (attrFilters.length > 0 && !attrFilters.includes('all')) {
+          if (!attrFilters.some((f: string) => attrName.toLowerCase().includes(f))) return;
+        }
 
         results.push({
           id: `${row.tagId}-${new Date(row.timestamp).getTime()}-${attrName}`,

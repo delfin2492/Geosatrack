@@ -22,8 +22,6 @@ import {
   Battery,
   Wifi,
   Compass,
-  CheckSquare,
-  Square,
   Filter
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -48,8 +46,8 @@ export interface AssetItem {
 interface TreeTargetAssetAttributePickerProps {
   assets: AssetItem[];
   selectedAssetId: string;
-  selectedAttribute: string;
-  onChange: (assetId: string, attribute: string, assetName?: string) => void;
+  selectedAttribute: string | string[];
+  onChange: (assetId: string, attributes: string[], assetName?: string) => void;
   primaryAccentColor?: string;
   className?: string;
 }
@@ -135,27 +133,36 @@ export default function TreeTargetAssetAttributePicker({
   const accentColor = user?.tenantThemeColor || primaryAccentColor || '#f43f5e';
 
   const [modalOpen, setModalOpen] = useState(false);
-  
-  // Temporary Modal Selection State
+
+  // Parse prop into string array
+  const parsedSelectedAttributes = useMemo(() => {
+    if (Array.isArray(selectedAttribute)) return selectedAttribute;
+    if (typeof selectedAttribute === 'string' && selectedAttribute.trim()) {
+      return selectedAttribute.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return ['all'];
+  }, [selectedAttribute]);
+
+  // Temporary Modal State
   const [activeAssetId, setActiveAssetId] = useState<string>(selectedAssetId || 'all');
-  const [activeAttribute, setActiveAttribute] = useState<string>(selectedAttribute || 'all');
-  
+  const [activeAttributes, setActiveAttributes] = useState<string[]>(parsedSelectedAttributes);
+
   const [filterText, setFilterText] = useState('');
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (modalOpen) {
       setActiveAssetId(selectedAssetId || 'all');
-      setActiveAttribute(selectedAttribute || 'all');
+      setActiveAttributes(parsedSelectedAttributes);
     }
-  }, [modalOpen, selectedAssetId, selectedAttribute]);
+  }, [modalOpen, selectedAssetId, parsedSelectedAttributes]);
 
   const toggleExpand = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setCollapsedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Extract attributes for a specific asset
+  // Helper: extract attributes for active asset
   const getAttributesForAsset = (assetId: string): AttributeOption[] => {
     const attrMap = new Map<string, AttributeOption>();
     DEFAULT_ATTRIBUTES.forEach((at) => attrMap.set(at.name.toLowerCase(), at));
@@ -191,35 +198,62 @@ export default function TreeTargetAssetAttributePicker({
     return getAttributesForAsset(activeAssetId);
   }, [activeAssetId, assets]);
 
-  // Compute Current Selection Display Text for Trigger Button
+  // Toggle selection of an individual attribute or 'all'
+  const toggleAttribute = (attrName: string) => {
+    if (attrName === 'all') {
+      setActiveAttributes(['all']);
+      return;
+    }
+
+    let updated = activeAttributes.filter((a) => a !== 'all');
+    if (updated.includes(attrName)) {
+      updated = updated.filter((a) => a !== attrName);
+    } else {
+      updated.push(attrName);
+    }
+
+    if (updated.length === 0) {
+      updated = ['all'];
+    }
+
+    setActiveAttributes(updated);
+  };
+
+  // Display Text on Trigger Button
   const currentSelectionText = useMemo(() => {
-    if (selectedAssetId === 'all' && selectedAttribute === 'all') {
+    const isAllAsset = selectedAssetId === 'all';
+    const isAllAttr = parsedSelectedAttributes.includes('all') || parsedSelectedAttributes.length === 0;
+
+    if (isAllAsset && isAllAttr) {
       return 'Semua Asset & Attribute (All)';
     }
 
-    if (selectedAssetId === 'all' && selectedAttribute !== 'all') {
-      const foundAttr = DEFAULT_ATTRIBUTES.find((a) => a.name.toLowerCase() === selectedAttribute.toLowerCase());
-      return `Semua Asset ➔ ${foundAttr ? foundAttr.label : selectedAttribute}`;
-    }
-
     const matchedAsset = assets.find((a) => a.id === selectedAssetId);
-    const assetLabel = matchedAsset ? `${matchedAsset.name}` : `Asset [${selectedAssetId}]`;
+    const assetPrefix = isAllAsset ? 'Semua Asset' : matchedAsset ? matchedAsset.name : `Asset [${selectedAssetId}]`;
 
-    if (selectedAttribute === 'all') {
-      return `${assetLabel} (Semua Attribute)`;
+    if (isAllAttr) {
+      return `${assetPrefix} (Semua Attribute)`;
     }
 
-    const foundAttr = DEFAULT_ATTRIBUTES.find((a) => a.name.toLowerCase() === selectedAttribute.toLowerCase());
-    return `${assetLabel} ➔ ${foundAttr ? foundAttr.label : selectedAttribute}`;
-  }, [selectedAssetId, selectedAttribute, assets]);
+    const attrLabels = parsedSelectedAttributes.map((attrKey) => {
+      const found = DEFAULT_ATTRIBUTES.find((a) => a.name.toLowerCase() === attrKey.toLowerCase());
+      return found ? found.name : attrKey;
+    });
+
+    if (attrLabels.length > 2) {
+      return `${assetPrefix} ➔ ${attrLabels.slice(0, 2).join(', ')} (+${attrLabels.length - 2} more)`;
+    }
+
+    return `${assetPrefix} ➔ ${attrLabels.join(', ')}`;
+  }, [selectedAssetId, parsedSelectedAttributes, assets]);
 
   const handleApplySelection = () => {
     const matchedAsset = assets.find((a) => a.id === activeAssetId);
-    onChange(activeAssetId, activeAttribute, matchedAsset?.name);
+    onChange(activeAssetId, activeAttributes, matchedAsset?.name);
     setModalOpen(false);
   };
 
-  // Tree View Traversal for Left Assets Panel
+  // Tree View Traversal for Assets Panel
   const treeData = useMemo(() => buildAssetTree(assets), [assets]);
 
   const matchesFilter = (node: AssetItem, text: string): boolean => {
@@ -249,10 +283,7 @@ export default function TreeTargetAssetAttributePicker({
     return (
       <div key={node.id} className="space-y-0.5">
         <div
-          onClick={() => {
-            setActiveAssetId(node.id);
-            // Default to 'all' or keep current attribute
-          }}
+          onClick={() => setActiveAssetId(node.id)}
           style={{
             paddingLeft: `${level * 14 + 10}px`,
             borderLeftColor: isSelected ? accentColor : 'transparent',
@@ -399,46 +430,13 @@ export default function TreeTargetAssetAttributePicker({
                 {/* Attributes Checkbox List */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-1.5 text-xs scrollbar-thin">
                   {/* Option: All Attributes */}
-                  <div
-                    onClick={() => setActiveAttribute('all')}
-                    style={
-                      activeAttribute === 'all'
-                        ? {
-                            backgroundColor: `${accentColor}18`,
-                            color: accentColor,
-                            borderColor: `${accentColor}40`,
-                          }
-                        : undefined
-                    }
-                    className={`px-3 py-2.5 rounded-lg cursor-pointer transition-all flex items-center justify-between border ${
-                      activeAttribute === 'all' ? 'font-bold shadow-xs' : 'border-transparent hover:bg-secondary/60 text-foreground'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
-                          activeAttribute === 'all' ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
-                        }`}
-                        style={activeAttribute === 'all' ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
-                      >
-                        {activeAttribute === 'all' && <Check className="w-3 h-3 stroke-[3] text-white" />}
-                      </div>
-                      <span className="font-bold">Semua Attribute (All Attributes)</span>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-border/40 my-1" />
-
-                  {/* Individual Attributes */}
-                  {currentAssetAttributes.map((attr) => {
-                    const isSelected = activeAttribute.toLowerCase() === attr.name.toLowerCase();
-
+                  {(() => {
+                    const isAllChecked = activeAttributes.includes('all');
                     return (
                       <div
-                        key={attr.name}
-                        onClick={() => setActiveAttribute(attr.name)}
+                        onClick={() => toggleAttribute('all')}
                         style={
-                          isSelected
+                          isAllChecked
                             ? {
                                 backgroundColor: `${accentColor}18`,
                                 color: accentColor,
@@ -447,17 +445,55 @@ export default function TreeTargetAssetAttributePicker({
                             : undefined
                         }
                         className={`px-3 py-2.5 rounded-lg cursor-pointer transition-all flex items-center justify-between border ${
-                          isSelected ? 'font-bold shadow-xs' : 'border-transparent hover:bg-secondary/60 text-foreground'
+                          isAllChecked ? 'font-bold shadow-xs' : 'border-transparent hover:bg-secondary/60 text-foreground'
                         }`}
                       >
                         <div className="flex items-center gap-2.5">
                           <div
                             className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
-                              isSelected ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
+                              isAllChecked ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
                             }`}
-                            style={isSelected ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
+                            style={isAllChecked ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
                           >
-                            {isSelected && <Check className="w-3 h-3 stroke-[3] text-white" />}
+                            {isAllChecked && <Check className="w-3 h-3 stroke-[3] text-white" />}
+                          </div>
+                          <span className="font-bold">Semua Attribute (All Attributes)</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="border-t border-border/40 my-1" />
+
+                  {/* Individual Attributes with Checkboxes (Multiple Selection Support) */}
+                  {currentAssetAttributes.map((attr) => {
+                    const isChecked = activeAttributes.includes(attr.name) || activeAttributes.includes('all');
+
+                    return (
+                      <div
+                        key={attr.name}
+                        onClick={() => toggleAttribute(attr.name)}
+                        style={
+                          isChecked
+                            ? {
+                                backgroundColor: `${accentColor}18`,
+                                color: accentColor,
+                                borderColor: `${accentColor}40`,
+                              }
+                            : undefined
+                        }
+                        className={`px-3 py-2.5 rounded-lg cursor-pointer transition-all flex items-center justify-between border ${
+                          isChecked ? 'font-bold shadow-xs' : 'border-transparent hover:bg-secondary/60 text-foreground'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
+                              isChecked ? 'bg-primary border-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
+                            }`}
+                            style={isChecked ? { backgroundColor: accentColor, borderColor: accentColor } : undefined}
+                          >
+                            {isChecked && <Check className="w-3 h-3 stroke-[3] text-white" />}
                           </div>
                           <span>{attr.label}</span>
                         </div>
