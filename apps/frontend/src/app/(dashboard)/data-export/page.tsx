@@ -20,8 +20,11 @@ import {
   Database,
   ArrowUpDown,
   FileJson,
-  Radio
+  Radio,
+  Clock
 } from 'lucide-react';
+import CustomSelect from '../../components/ui/CustomSelect';
+import TreeTargetAssetAttributePicker from '../../components/TreeTargetAssetAttributePicker';
 
 interface TelemetryRow {
   id: string;
@@ -374,70 +377,42 @@ export default function DataExportPage() {
           <span>Filter Data & Range Tanggal</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Asset Select */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-muted-foreground">Target Asset</label>
-            <select
-              value={selectedAssetId}
-              onChange={(e) => {
-                setSelectedAssetId(e.target.value);
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+          {/* Combined Tree Target Asset & Attribute Picker */}
+          <div className="md:col-span-6">
+            <TreeTargetAssetAttributePicker
+              assets={assetsList}
+              selectedAssetId={selectedAssetId}
+              selectedAttribute={selectedAttribute}
+              onChange={(assetId, attribute) => {
+                setSelectedAssetId(assetId);
+                setSelectedAttribute(attribute);
                 setCurrentPage(1);
               }}
-              className="w-full text-xs font-semibold p-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-            >
-              <option value="all">Semua Asset (All Assets)</option>
-              {assetsList.map((a: any) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({a.type})
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
-          {/* Attribute Select */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-muted-foreground">Attribute Telemetry</label>
-            <select
-              value={selectedAttribute}
-              onChange={(e) => {
-                setSelectedAttribute(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full text-xs font-semibold p-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-            >
-              <option value="all">Semua Attribute (All)</option>
-              <option value="temperature">🌡️ Temperature (°C)</option>
-              <option value="humidity">💧 Humidity (%)</option>
-              <option value="battery">🔋 Battery (%)</option>
-              <option value="rssi">📶 Signal RSSI (dBm)</option>
-              <option value="accelX">📐 Accel X</option>
-              <option value="accelY">📐 Accel Y</option>
-              <option value="accelZ">📐 Accel Z</option>
-            </select>
-          </div>
-
-          {/* Time Range Select */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-muted-foreground">Rentang Waktu</label>
-            <select
+          {/* Time Range Custom Select */}
+          <div className="md:col-span-3">
+            <CustomSelect
+              label="Rentang Waktu"
               value={timeRange}
-              onChange={(e) => {
-                setTimeRange(e.target.value);
+              onChange={(val) => {
+                setTimeRange(val);
                 setCurrentPage(1);
               }}
-              className="w-full text-xs font-semibold p-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-            >
-              <option value="1h">1 Jam Terakhir</option>
-              <option value="24h">24 Jam Terakhir</option>
-              <option value="7d">7 Hari Terakhir</option>
-              <option value="30d">30 Hari Terakhir</option>
-              <option value="custom">Custom Date Range</option>
-            </select>
+              options={[
+                { value: '1h', label: '1 Jam Terakhir', icon: Clock, badge: '1H' },
+                { value: '24h', label: '24 Jam Terakhir', icon: Clock, badge: '24H' },
+                { value: '7d', label: '7 Hari Terakhir', icon: Calendar, badge: '7D' },
+                { value: '30d', label: '30 Hari Terakhir', icon: Calendar, badge: '30D' },
+                { value: 'custom', label: 'Custom Date Range', icon: Filter, badge: 'Custom' },
+              ]}
+            />
           </div>
 
           {/* Search Input */}
-          <div className="space-y-1">
+          <div className="space-y-1 md:col-span-3">
             <label className="text-[11px] font-semibold text-muted-foreground">Cari Tag / Asset</label>
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -449,7 +424,7 @@ export default function DataExportPage() {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full text-xs font-semibold pl-9 pr-3 py-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full text-xs font-semibold pl-9 pr-3 py-2.5 rounded-xl border border-border bg-secondary/20 text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-[40px]"
               />
             </div>
           </div>
