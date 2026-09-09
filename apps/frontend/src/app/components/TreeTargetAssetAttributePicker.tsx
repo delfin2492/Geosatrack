@@ -200,23 +200,34 @@ export default function TreeTargetAssetAttributePicker({
 
   // Toggle selection of an individual attribute or 'all'
   const toggleAttribute = (attrName: string) => {
+    const allAttrNames = currentAssetAttributes.map((a) => a.name);
+
     if (attrName === 'all') {
-      setActiveAttributes(['all']);
+      const isAllActive =
+        activeAttributes.includes('all') ||
+        (allAttrNames.length > 0 && allAttrNames.every((name) => activeAttributes.includes(name)));
+
+      if (isAllActive) {
+        setActiveAttributes([]);
+      } else {
+        setActiveAttributes(['all']);
+      }
       return;
     }
 
-    let updated = activeAttributes.filter((a) => a !== 'all');
-    if (updated.includes(attrName)) {
-      updated = updated.filter((a) => a !== attrName);
+    let currentList = activeAttributes.includes('all') ? [...allAttrNames] : [...activeAttributes];
+
+    if (currentList.includes(attrName)) {
+      currentList = currentList.filter((a) => a !== attrName);
     } else {
-      updated.push(attrName);
+      currentList.push(attrName);
     }
 
-    if (updated.length === 0) {
-      updated = ['all'];
+    if (allAttrNames.length > 0 && allAttrNames.every((name) => currentList.includes(name))) {
+      setActiveAttributes(['all']);
+    } else {
+      setActiveAttributes(currentList);
     }
-
-    setActiveAttributes(updated);
   };
 
   // Display Text on Trigger Button
@@ -248,8 +259,9 @@ export default function TreeTargetAssetAttributePicker({
   }, [selectedAssetId, parsedSelectedAttributes, assets]);
 
   const handleApplySelection = () => {
+    const finalAttrs = activeAttributes.length === 0 ? ['all'] : activeAttributes;
     const matchedAsset = assets.find((a) => a.id === activeAssetId);
-    onChange(activeAssetId, activeAttributes, matchedAsset?.name);
+    onChange(activeAssetId, finalAttrs, matchedAsset?.name);
     setModalOpen(false);
   };
 
@@ -431,7 +443,10 @@ export default function TreeTargetAssetAttributePicker({
                 <div className="flex-1 overflow-y-auto p-3 space-y-1.5 text-xs scrollbar-thin">
                   {/* Option: All Attributes */}
                   {(() => {
-                    const isAllChecked = activeAttributes.includes('all');
+                    const allAttrNames = currentAssetAttributes.map((a) => a.name);
+                    const isAllChecked =
+                      activeAttributes.includes('all') ||
+                      (allAttrNames.length > 0 && allAttrNames.every((name) => activeAttributes.includes(name)));
                     return (
                       <div
                         onClick={() => toggleAttribute('all')}
