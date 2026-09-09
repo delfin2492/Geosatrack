@@ -110,14 +110,14 @@ export default function LoginPage() {
             <div>
               <label className="block text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
                 <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                Email Pengguna
+                Email
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="nama@perusahaan.com"
+                placeholder="name@example.com"
                 className="w-full bg-secondary/30 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary transition-all placeholder:text-muted-foreground/50"
               />
             </div>
@@ -125,7 +125,7 @@ export default function LoginPage() {
             <div>
               <label className="block text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
                 <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                Kata Sandi
+                Password
               </label>
               <input
                 type="password"
@@ -145,11 +145,11 @@ export default function LoginPage() {
               {loading ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                  Memverifikasi...
+                  Verification...
                 </span>
               ) : (
                 <>
-                  <span>Masuk ke Konsol</span>
+                  <span>Sign In</span>
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}

@@ -2836,9 +2836,28 @@ export default function PlannerPage() {
 
                   return currentGroup.floors.map((fl) => {
                     const zone = zones.find(z => z.id === fl.zoneId);
-                    const floorAnchors = allTenantAnchors.filter(a => a.zoneId === fl.zoneId || a.zone?.id === fl.zoneId);
-                    const floorMesh = allTenantMesh.filter(m => m.zoneId === fl.zoneId || m.zone?.id === fl.zoneId);
-                    const totalAssetCount = floorAnchors.length + floorMesh.length;
+
+                    const floorAssetsFromSocket = assets.filter(
+                      (a: any) =>
+                        (a.zoneId === fl.zoneId || (a.zone as any)?.id === fl.zoneId || ((zone as any)?.assets && (zone as any).assets.some((za: any) => za.id === a.id))) &&
+                        a.type?.toUpperCase() !== 'ANCHOR' &&
+                        !a.type?.toUpperCase().startsWith('AGENT_') &&
+                        !a.name?.toUpperCase().includes('ANCHOR')
+                    );
+
+                    const socketIds = new Set(floorAssetsFromSocket.map((a) => a.id));
+                    const fallbackMesh = (allTenantMesh || []).filter(
+                      (m) =>
+                        (m.zoneId === fl.zoneId || m.zone?.id === fl.zoneId) &&
+                        !socketIds.has(m.id) &&
+                        m.type?.toUpperCase() !== 'ANCHOR' &&
+                        !m.type?.toUpperCase().startsWith('AGENT_')
+                    );
+
+                    const floorMeshRealtime = [...floorAssetsFromSocket, ...fallbackMesh];
+                    const zoneAnchors = (zone?.anchors && zone.anchors.length > 0)
+                      ? zone.anchors
+                      : allTenantAnchors.filter((a) => a.zoneId === fl.zoneId || a.zone?.id === fl.zoneId);
 
                     return (
                       <div
@@ -2859,12 +2878,12 @@ export default function PlannerPage() {
                             </Badge>
                             <span className="font-bold text-xs text-foreground">{zone?.name || fl.floorName}</span>
                           </div>
-                          <Badge className="bg-primary text-primary-foreground text-[10px]">
-                            {totalAssetCount} Asset Placed ({floorAnchors.length} Anchor · {floorMesh.length} Mesh)
+                          <Badge className="bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5 shadow-xs">
+                            {floorMeshRealtime.length} Mesh Assets
                           </Badge>
                         </div>
 
-                        <div className="w-full h-56 bg-secondary/30 rounded-xl border border-border relative overflow-hidden flex items-center justify-center">
+                        <div className="w-full h-72 bg-secondary/30 rounded-xl border border-border relative overflow-hidden flex items-center justify-center">
                           {zone?.floorPlanUrl ? (
                             <img
                               src={`${getBackendUrl()}${zone.floorPlanUrl}`}
@@ -2875,36 +2894,64 @@ export default function PlannerPage() {
                             <span className="text-xs text-muted-foreground font-mono">No floorplan image</span>
                           )}
 
-                          {/* Placed Anchors */}
-                          {floorAnchors.map((anc) => {
-                            const ancX = (anc as any).planX ?? anc.x ?? (zone?.width ? zone.width / 2 : 0);
-                            const ancY = (anc as any).planY ?? anc.y ?? (zone?.height ? zone.height / 2 : 0);
-                            const posX = zone?.width ? Math.min(95, Math.max(5, (ancX / zone.width) * 100)) : 50;
-                            const posY = zone?.height ? Math.min(95, Math.max(5, (ancY / zone.height) * 100)) : 50;
-                            return (
-                              <div
-                                key={`anc-${anc.id}`}
-                                className="absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 bg-rose-500/90 text-white px-1.5 py-0.5 rounded border border-rose-400/50 shadow-sm text-[9px] font-bold z-10"
-                                style={{ left: `${posX}%`, top: `${posY}%` }}
-                              >
-                                <Anchor className="h-3 w-3" />
-                                <span>{anc.name}</span>
-                              </div>
-                            );
-                          })}
+                          {/* Placed Mesh Assets Only (Real-time Socket & RSSI-based positioning) */}
+                          {floorMeshRealtime.map((m) => {
+                            const rssiPos = computeRssiPosition(m, zoneAnchors);
+                            let realX = m.planX !== null && m.planX !== undefined ? Number(m.planX) : (zone?.width ? zone.width / 2 : 50);
+                            let realY = m.planY !== null && m.planY !== undefined ? Number(m.planY) : (zone?.height ? zone.height / 2 : 50);
 
-                          {/* Placed Mesh / Asset Tags */}
-                          {floorMesh.map((m) => {
-                            const posX = zone?.width ? Math.min(95, Math.max(5, ((m.planX || zone.width / 2) / zone.width) * 100)) : 50;
-                            const posY = zone?.height ? Math.min(95, Math.max(5, ((m.planY || zone.height / 2) / zone.height) * 100)) : 50;
+                            if (rssiPos) {
+                              realX = rssiPos.x;
+                              realY = rssiPos.y;
+                            }
+
+                            const posX = zone?.width ? Math.min(95, Math.max(5, ((realX / zone.width) * 100))) : 50;
+                            const posY = zone?.height ? Math.min(95, Math.max(5, (((zone.height - realY) / zone.height) * 100))) : 50;
+
+                            const markerInfo = getAssetMarkerIcon(m.type || 'MESH_EYE_SENSOR', m.name, dbAssetTypes);
+                            const pinColor = markerInfo.color || '#10b981';
+
+                            const isOnline = (() => {
+                              if (m.tag?.lastSeen) {
+                                const diffMs = Date.now() - new Date(m.tag.lastSeen).getTime();
+                                return diffMs < 300000;
+                              }
+                              return m.status === 'moving' || m.status === 'static';
+                            })();
+                            const statusColor = isOnline ? '#10b981' : '#ef4444';
+
                             return (
                               <div
                                 key={`m-${m.id}`}
-                                className="absolute transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 bg-emerald-500/90 text-white px-1.5 py-0.5 rounded border border-emerald-400/50 shadow-sm text-[9px] font-bold z-10"
+                                title={`${m.name} (${m.type || 'Mesh'}) - (${realX.toFixed(1)}m, ${realY.toFixed(1)}m)`}
+                                className="absolute transform -translate-x-1/2 -translate-y-[85%] flex flex-col items-center z-20 hover:scale-110 transition-all cursor-pointer"
                                 style={{ left: `${posX}%`, top: `${posY}%` }}
                               >
-                                <Eye className="h-3 w-3" />
-                                <span>{m.name}</span>
+                                {/* Name Badge */}
+                                <div className="bg-white/95 text-slate-800 border border-slate-200/90 px-1.5 py-0.5 rounded-full text-[9px] font-bold shadow-xs whitespace-nowrap mb-0.5 pointer-events-none select-none">
+                                  {m.name}
+                                </div>
+
+                                {/* Pin Body */}
+                                <div className="relative w-7 h-7 flex items-center justify-center">
+                                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={pinColor} width="28" height="28" className="drop-shadow-xs">
+                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" strokeWidth="1.5" />
+                                  </svg>
+                                  {/* Inner SVG Icon */}
+                                  <div className="absolute top-[4px] left-1/2 -translate-x-1/2 text-white flex items-center justify-center z-10 scale-75">
+                                    <div dangerouslySetInnerHTML={{ __html: markerInfo.svg }} />
+                                  </div>
+                                  {/* Status Indicator Dot */}
+                                  <div
+                                    className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full border border-white shadow-xs z-20"
+                                    style={{ backgroundColor: statusColor }}
+                                  >
+                                    {isOnline && <div className="absolute inset-0 rounded-full animate-ping bg-emerald-400 opacity-60" />}
+                                  </div>
+                                </div>
+
+                                {/* Pin Tip Shadow */}
+                                <div className="w-3.5 h-1 bg-black/25 rounded-full blur-[1px] -mt-0.5" />
                               </div>
                             );
                           })}

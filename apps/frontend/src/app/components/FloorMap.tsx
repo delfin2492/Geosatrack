@@ -43,12 +43,15 @@ export interface MapAnchor {
 
 interface FloorMapProps {
   assets: MapAsset[];
-  anchors: MapAnchor[];
+  anchors?: MapAnchor[];
   onAnchorUpdate?: (id: string, x: number, y: number) => void;
   onSelectAsset?: (asset: MapAsset) => void;
   selectedAssetId?: string | null;
   widthMeters?: number;
   heightMeters?: number;
+  disableClustering?: boolean;
+  readOnly?: boolean;
+  hideMarkerOutline?: boolean;
 }
 
 
@@ -57,6 +60,9 @@ export default function FloorMap({
   assets,
   onSelectAsset,
   selectedAssetId,
+  disableClustering = false,
+  readOnly = false,
+  hideMarkerOutline = false,
 }: FloorMapProps) {
   const { token, tenantId, user } = useAuth();
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -116,12 +122,11 @@ export default function FloorMap({
     });
     mapRef.current = map;
 
-    // Set up default Google Roadmap Layer
+    // Set up default Layer
     const defaultLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
       attribution: '© Google Maps',
       maxZoom: 20,
-      minZoom: 5,
-      bounds: indonesiaBounds,
+      minZoom: 3,
       noWrap: true,
     }).addTo(map);
     
@@ -129,10 +134,13 @@ export default function FloorMap({
 
     // Initialize Leaflet MarkerCluster Group with Donut Ring Icon
     require('leaflet.markercluster');
-    const clusterGroup = L.markerClusterGroup({
-      maxClusterRadius: 50,
-      spiderfyOnMaxZoom: true,
+    
+    const clusterOptions: any = {
+      maxClusterRadius: disableClustering ? 0 : 50,
+      spiderfyOnMaxZoom: !disableClustering,
+      spiderLegPolylineOptions: { weight: 0, opacity: 0 },
       showCoverageOnHover: false,
+      polygonOptions: { weight: 0, opacity: 0, fillOpacity: 0 },
       zoomToBoundsOnClick: true,
       animate: true,
       iconCreateFunction: (cluster: any) => {
@@ -199,7 +207,11 @@ export default function FloorMap({
           iconAnchor: [22, 22],
         });
       },
-    });
+    };
+
+    // maxClusterRadius is sufficient to disable clustering if set to 0.
+
+    const clusterGroup = L.markerClusterGroup(clusterOptions);
 
     map.addLayer(clusterGroup);
     clusterGroupRef.current = clusterGroup;
@@ -230,19 +242,26 @@ export default function FloorMap({
       map.removeLayer((map as any)._tileLayer);
     }
 
-    const url = mapStyle === 'osm_standard'
-      ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' // OSM Standard (Leaflet default)
-      : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'; // Google Roadmap
+    const isOsm = mapStyle === 'osm_standard';
+    const url = isOsm
+      ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+      : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
 
     const newLayer = L.tileLayer(url, {
-      attribution: mapStyle === 'osm_standard' ? '© OpenStreetMap contributors' : '© Google Maps',
+      attribution: isOsm ? '© OpenStreetMap contributors' : '© Google Maps',
       maxZoom: 20,
-      minZoom: 5,
-      bounds: indonesiaBounds,
+      minZoom: 3,
+      subdomains: isOsm ? ['a', 'b', 'c'] : [],
       noWrap: true,
     }).addTo(map);
 
     (map as any)._tileLayer = newLayer;
+
+    setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 50);
   }, [mapStyle, mapReady]);
 
     // Sync Markers dynamically on the map using Leaflet MarkerCluster (Incremental Updates)
@@ -280,21 +299,29 @@ export default function FloorMap({
       const statusColor = isOnline ? '#10b981' : '#ef4444';
 
       const markerIconInfo = getAssetMarkerIcon(asset.type, asset.name, dbAssetTypes);
-      let pinColor = markerIconInfo.color;
+      let pinColor = (asset as any).color || (asset as any).pinColor || markerIconInfo.color;
 
       const isSelected = selectedAssetId === asset.id;
       const highlightColor = user?.tenantThemeColor || '#f59e0b'; // Primary Accent or fallback
-      
+
+      const labelClass = (isSelected && !hideMarkerOutline && !readOnly)
+        ? 'text-slate-950 font-black scale-110 shadow-lg'
+        : (isSelected ? 'bg-slate-900 text-white font-extrabold scale-105 shadow-xl border-slate-700' : 'bg-white text-slate-800 border-none font-bold shadow-md');
+
+      const labelStyle = (isSelected && !hideMarkerOutline && !readOnly)
+        ? `background-color: ${highlightColor}; border-color: ${highlightColor};`
+        : '';
+
       const customIcon = L.divIcon({
         className: 'custom-asset-icon',
         html: `
           <div style="display: flex; flex-direction: column; align-items: center; position: relative; width: 60px; height: 60px;">
-            <div class="${isSelected ? `text-slate-950 font-black scale-110 shadow-lg` : 'bg-white text-slate-800 border-slate-200/80'} border px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md whitespace-nowrap mb-1 z-10 transition-all" style="${isSelected ? `background-color: ${highlightColor}; border-color: ${highlightColor};` : ''}">
+            <div class="${labelClass} border px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap mb-1 z-10 transition-all" style="${labelStyle}">
               ${asset.name}
             </div>
             <div style="position: relative; width: 34px; height: 34px;">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="${isSelected ? highlightColor : '#ffffff'}" stroke-width="${isSelected ? '2.5' : '1.5'}"/>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="34" height="34" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.15));">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="${(hideMarkerOutline || readOnly) ? 'none' : ((isSelected && !readOnly) ? highlightColor : '#ffffff')}" stroke-width="${(hideMarkerOutline || readOnly) ? '0' : ((isSelected && !readOnly) ? '2.5' : '1.5')}"/>
               </svg>
               <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
                 ${markerIconInfo.svg}
@@ -303,7 +330,6 @@ export default function FloorMap({
                 ${isOnline ? `<div class="absolute inset-0 rounded-full animate-ping bg-emerald-400 opacity-60"></div>` : ''}
               </div>
             </div>
-            <div style="width: 18px; height: 5px; background: rgba(0,0,0,0.25); border-radius: 50%; filter: blur(2px); margin-top: 1px;"></div>
           </div>
         `,
         iconSize: [60, 60],
@@ -314,16 +340,21 @@ export default function FloorMap({
       if (existingMarker) {
         existingMarker.setLatLng([lat, lon]);
         existingMarker.setIcon(customIcon);
+        existingMarker.setZIndexOffset(isSelected ? 1000 : 0);
         existingMarker.options.assetColor = pinColor;
       } else {
         const marker = L.marker([lat, lon], {
           icon: customIcon,
           assetColor: pinColor,
+          interactive: true,
+          zIndexOffset: isSelected ? 1000 : 0
         });
 
         marker.on('click', () => {
           map.panTo([lat, lon]);
-          if (onSelectAsset) onSelectAsset(asset);
+          if (onSelectAsset) {
+            onSelectAsset(asset);
+          }
         });
 
         clusterGroup.addLayer(marker);

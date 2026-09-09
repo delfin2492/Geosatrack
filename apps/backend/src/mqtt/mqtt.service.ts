@@ -129,7 +129,57 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.logger.log('Disconnected all MQTT clients.');
+  }
 
+  /**
+   * Publish an MQTT message to a target topic.
+   * If agentId is provided and an agent client exists, publishes via that agent's client.
+   * Otherwise publishes via defaultClient or any active connected client.
+   */
+  public async publishMessage(
+    topic: string,
+    payload: any,
+    agentId?: string
+  ): Promise<{ success: boolean; topic: string; payload: string }> {
+    const payloadStr = typeof payload === 'object' ? JSON.stringify(payload) : String(payload);
+    let targetClient: mqtt.MqttClient | undefined = undefined;
+
+    if (agentId && this.clients.has(agentId)) {
+      const agentClient = this.clients.get(agentId);
+      if (agentClient && agentClient.connected) {
+        targetClient = agentClient;
+      } else {
+        this.logger.warn(`Specified MQTT Agent (${agentId}) is not connected. Attempting fallback connected client...`);
+      }
+    }
+    // Check connected agent clients first (e.g. custom MQTT brokers like vantara)
+    if (!targetClient) {
+      for (const client of this.clients.values()) {
+        if (client.connected) {
+          targetClient = client;
+          break;
+        }
+      }
+    }
+    if (!targetClient && this.defaultClient && this.defaultClient.connected) {
+      targetClient = this.defaultClient;
+    }
+
+    if (!targetClient) {
+      throw new Error('No active connected MQTT client available to publish message to topic: ' + topic);
+    }
+
+    return new Promise((resolve, reject) => {
+      targetClient!.publish(topic, payloadStr, (err) => {
+        if (err) {
+          this.logger.error(`Failed to publish MQTT message to topic "${topic}":`, err);
+          reject(err);
+        } else {
+          this.logger.log(`Successfully published MQTT message to topic "${topic}": ${payloadStr}`);
+          resolve({ success: true, topic, payload: payloadStr });
+        }
+      });
+    });
   }
 
 

@@ -4,6 +4,7 @@ interface GaugeWidgetProps {
   value: number;
   attribute: string;
   widget?: any;
+  targetAsset?: any;
 }
 
 const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
@@ -24,7 +25,7 @@ const getArcPath = (x: number, y: number, radius: number, startAngle: number, en
   ].join(" ");
 };
 
-const getSpeedometerConfig = (attributeName: string, value: number, widgetConfig: any) => {
+const getSpeedometerConfig = (attributeName: string, value: number, widgetConfig: any, targetAsset?: any) => {
   const attr = (attributeName || 'temperature').toLowerCase();
 
   let minVal = widgetConfig?.min !== undefined && widgetConfig?.min !== null && widgetConfig?.min !== ''
@@ -35,11 +36,20 @@ const getSpeedometerConfig = (attributeName: string, value: number, widgetConfig
     ? Number(widgetConfig.max)
     : (attr === 'humidity' ? 100 : attr === 'battery' ? 4.0 : attr.startsWith('rssi') ? -30 : 100);
 
-  let unit = '°C';
-  if (attr === 'humidity') unit = '%';
-  else if (attr === 'battery') unit = 'V';
-  else if (attr === 'rssi' || attr.startsWith('rssi_')) unit = 'dBm';
-  else unit = widgetConfig?.unit || '';
+  let assetUnit = '';
+  if (targetAsset) {
+    if (targetAsset.description && typeof targetAsset.description === 'string' && targetAsset.description.startsWith('{')) {
+      try {
+        const desc = JSON.parse(targetAsset.description);
+        const matched = (desc.attributes || []).find((a: any) => a.name === attributeName || a.value === attributeName);
+        if (matched && matched.unit) assetUnit = matched.unit;
+      } catch (e) { }
+    }
+  }
+
+  let unit = widgetConfig?.unit !== undefined && widgetConfig?.unit !== null && widgetConfig?.unit !== ''
+    ? widgetConfig.unit
+    : (assetUnit || (attr === 'humidity' ? '%' : attr === 'battery' ? 'V' : (attr === 'rssi' || attr.startsWith('rssi')) ? 'dBm' : (attr === 'temperature' || attr.includes('temp')) ? '°C' : ''));
 
   let ticks = [minVal, minVal + (maxVal - minVal) * 0.3, minVal + (maxVal - minVal) * 0.7, maxVal];
   let tickAngles = [180, 126, 54, 0];
@@ -73,25 +83,28 @@ const getSpeedometerConfig = (attributeName: string, value: number, widgetConfig
   return { minVal, maxVal, unit, ticks, tickAngles, colors, val, needleAngle };
 };
 
-export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widget }) => {
+export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widget, targetAsset }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(200);
+  const [dimensions, setDimensions] = useState({ width: 200, height: 140 });
 
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
       for (let entry of entries) {
-        setWidth(entry.contentRect.width || 200);
+        setDimensions({
+          width: entry.contentRect.width || 200,
+          height: entry.contentRect.height || 140
+        });
       }
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
+  const scaleMetric = Math.min(dimensions.width, dimensions.height * 1.4);
   const getDynamicFontSize = (baseSize: number) => {
-    if (width > 220) return baseSize;
-    if (width > 160) return baseSize * 0.8;
-    return baseSize * 0.6;
+    const scale = Math.max(0.55, Math.min(2.5, scaleMetric / 200));
+    return baseSize * scale;
   };
 
   const widgetConfig = widget?.config || {};
@@ -99,7 +112,7 @@ export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widg
     ? Math.max(0, Number(widgetConfig.decimals))
     : 0;
 
-  const { minVal, maxVal, unit, ticks, tickAngles, colors, val, needleAngle } = getSpeedometerConfig(attribute, value, widgetConfig);
+  const { minVal, maxVal, unit, ticks, tickAngles, colors, val, needleAngle } = getSpeedometerConfig(attribute, value, widgetConfig, targetAsset);
 
   const cx = 100;
   const cy = 100;
@@ -158,8 +171,8 @@ export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widg
   });
 
   return (
-    <div ref={containerRef} className="w-full h-full flex flex-col items-center justify-center p-0.5 select-none overflow-hidden relative">
-      <svg viewBox="0 0 200 130" className="w-full h-full max-h-[140px] object-contain overflow-visible">
+    <div ref={containerRef} className="w-full h-full flex flex-col items-center justify-center p-1 select-none overflow-hidden relative">
+      <svg viewBox="0 0 200 130" className="w-full h-full object-contain overflow-visible flex-1">
         {segments.map(seg => (
           <path key={seg.key} d={seg.path} fill="none" stroke={seg.color} strokeWidth="12" strokeLinecap="round" />
         ))}
@@ -176,16 +189,15 @@ export const GaugeWidget: React.FC<GaugeWidgetProps> = ({ value, attribute, widg
         <polygon points={needlePoints} fill="#cbd5e1" stroke="#94a3b8" strokeWidth="0.5" className="transition-all duration-500 ease-out" />
         <circle cx={cx} cy={cy} r="8" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1.5" />
 
-        <text x={cx} y={cy - 12} textAnchor="middle" style={{ fontSize: `${getDynamicFontSize(18)}px` }} className="fill-slate-800 dark:fill-slate-100 font-black tracking-tight">
-          {val.toFixed(decimals)}
+        <text x={cx} y={cy - 12} textAnchor="middle" className="fill-slate-800 dark:fill-slate-100 font-black tracking-tight">
+          <tspan style={{ fontSize: `${getDynamicFontSize(18)}px` }}>{val.toFixed(decimals)}</tspan>
+          {unit && (
+            <tspan dx="4" style={{ fontSize: `${getDynamicFontSize(11)}px` }} className="fill-slate-500 dark:fill-slate-400 font-light">
+              {unit}
+            </tspan>
+          )}
         </text>
       </svg>
-
-      {unit && (
-        <span style={{ fontSize: `${getDynamicFontSize(11)}px` }} className="font-extrabold text-slate-500 -mt-1 shrink-0">
-          {unit}
-        </span>
-      )}
     </div>
   );
 };

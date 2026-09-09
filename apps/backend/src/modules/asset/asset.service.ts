@@ -1,13 +1,16 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, Optional, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-
 import { WebsocketGateway } from '../websocket/websocket.gateway';
+import { MqttService } from '../../mqtt/mqtt.service';
 
 @Injectable()
 export class AssetService {
+  private readonly logger = new Logger(AssetService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly websocketGateway: WebsocketGateway,
+    @Optional() private readonly mqttService?: MqttService,
   ) {}
 
   async getQuota(tenantId: string) {
@@ -542,5 +545,107 @@ export class AssetService {
     }));
 
     return [...mappedAssetAnchors, ...mappedTableAnchors];
+  }
+
+  async sendCommand(
+    tenantId: string,
+    id: string,
+    body: { attributeName?: string; publishTopic?: string; payload: any; agentId?: string },
+  ) {
+    const asset = await this.findOne(tenantId, id);
+    if (!asset) {
+      throw new NotFoundException(`Asset with ID "${id}" not found.`);
+    }
+
+    let publishTopic = body.publishTopic;
+    let agentId = body.agentId;
+    let attributeName = body.attributeName;
+
+    let parsedDesc: any = {};
+    if (asset.description && asset.description.startsWith('{')) {
+      try {
+        parsedDesc = JSON.parse(asset.description);
+      } catch (e) {}
+    }
+
+    if (!agentId && parsedDesc.mqttAgentId) {
+      agentId = parsedDesc.mqttAgentId;
+    }
+
+    if (!publishTopic && attributeName && parsedDesc.attributes && Array.isArray(parsedDesc.attributes)) {
+      const matchedAttr = parsedDesc.attributes.find((a: any) => a.name === attributeName);
+      if (matchedAttr && matchedAttr.mqttPublishTopic) {
+        publishTopic = matchedAttr.mqttPublishTopic;
+      }
+    }
+
+    if (!publishTopic && parsedDesc.mqttPublishTopic) {
+      publishTopic = parsedDesc.mqttPublishTopic;
+    }
+
+    if (!publishTopic) {
+      publishTopic = `commands/${asset.name.toLowerCase()}/${attributeName || 'downlink'}`;
+    }
+
+    // Update attribute value and lastUpdated timestamp in description
+    if (attributeName && parsedDesc.attributes && Array.isArray(parsedDesc.attributes)) {
+      const nowIso = new Date().toISOString();
+      let updated = false;
+      parsedDesc.attributes = parsedDesc.attributes.map((a: any) => {
+        if (a.name === attributeName) {
+          updated = true;
+          return { ...a, value: body.payload, lastUpdated: nowIso };
+        }
+        return a;
+      });
+      if (!updated) {
+        parsedDesc.attributes.push({
+          name: attributeName,
+          value: body.payload,
+          lastUpdated: nowIso,
+        });
+      }
+
+      await this.prisma.asset.update({
+        where: { id },
+        data: { description: JSON.stringify(parsedDesc) },
+      });
+    }
+
+    // Save to dynamic TelemetryLog if applicable
+    if (attributeName && asset.tagId) {
+      try {
+        const valNum = typeof body.payload === 'number' ? body.payload : parseFloat(String(body.payload));
+        await (this.prisma as any).telemetryLog.create({
+          data: {
+            tenantId,
+            tagId: asset.tagId,
+            attribute: attributeName,
+            value: isNaN(valNum) ? 0 : valNum,
+            timestamp: new Date(),
+          },
+        });
+      } catch (e) {
+        // Ignore telemetry log insert error for non-numeric commands
+      }
+    }
+
+    // Publish to MQTT broker via MqttService
+    let publishResult: any = { success: false, message: 'MQTT Service not available' };
+    if (this.mqttService) {
+      try {
+        publishResult = await this.mqttService.publishMessage(publishTopic, body.payload, agentId);
+      } catch (err: any) {
+        this.logger.warn(`MQTT publish error for topic ${publishTopic}: ${err.message}`);
+        throw new BadRequestException(`Gagal mempublish command ke MQTT topic "${publishTopic}": ${err.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      topic: publishTopic,
+      payload: body.payload,
+      message: `Successfully published command to MQTT topic "${publishTopic}".`,
+    };
   }
 }

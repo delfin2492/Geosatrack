@@ -332,7 +332,9 @@ export default function MapPage() {
     const baseLat = -6.168911;
     const baseLon = 106.899709;
 
-    return displayableAssets.map((a) => {
+    const result: MapAsset[] = [];
+
+    displayableAssets.forEach((a) => {
       let x = 30;
       let y = 20;
       if (a.planX !== null && a.planX !== undefined) x = Number(a.planX);
@@ -379,52 +381,6 @@ export default function MapPage() {
         if (rssi !== undefined && rssi !== '') tagData.rssi = Number(rssi);
       }
 
-      let rssiList: { x: number; y: number; rssi: number }[] = [];
-      attrs.forEach((attr: any) => {
-        if (attr.name.startsWith('rssi_') && attr.value !== undefined && attr.value !== null && attr.value !== '') {
-          const rssiVal = Number(attr.value);
-          if (!isNaN(rssiVal)) {
-            let anchorId = '';
-            if (attr.name === 'rssi_anchor_1' || attr.name === 'rssi_anchor_2') {
-              if (attr.mqttValuePath && attr.mqttValuePath.includes('rssi_')) {
-                anchorId = attr.mqttValuePath.split('rssi_')[1];
-              }
-            } else {
-              anchorId = attr.name.replace('rssi_', '');
-            }
-
-            if (anchorId) {
-              const matchedAnchor = currentAnchors.find((an) => an.anchorId === anchorId);
-              if (matchedAnchor) {
-                rssiList.push({
-                  x: matchedAnchor.x,
-                  y: matchedAnchor.y,
-                  rssi: rssiVal,
-                });
-              }
-            }
-          }
-        }
-      });
-
-      if (rssiList.length > 0) {
-        let totalWeight = 0;
-        let weightedX = 0;
-        let weightedY = 0;
-        
-        rssiList.forEach((item) => {
-          const weight = Math.pow(item.rssi + 100, 2);
-          weightedX += item.x * weight;
-          weightedY += item.y * weight;
-          totalWeight += weight;
-        });
-        
-        if (totalWeight > 0) {
-          x = weightedX / totalWeight;
-          y = weightedY / totalWeight;
-        }
-      }
-
       let statusVal: 'static' | 'moving' | 'tilt_warning' | 'fall_detected' = 'static';
       const motion = attrs.find((at: any) => at.name === 'motion')?.value;
       const isStatic = attrs.find((at: any) => at.name === 'is_static')?.value;
@@ -437,27 +393,40 @@ export default function MapPage() {
       }
 
       // Determine GPS lat/lon for the global Leaflet map
-      let realLat = baseLat;
-      let realLon = baseLon;
+      let realLat: number | null = null;
+      let realLon: number | null = null;
 
-      // 1. If asset has valid explicitly set GPS coordinates
-      const hasExplicitGps = 
-        a.latitude !== null && a.latitude !== undefined && 
+      // 1. Check explicit asset.latitude & asset.longitude
+      if (
+        a.latitude !== null && a.latitude !== undefined &&
         a.longitude !== null && a.longitude !== undefined &&
-        !isNaN(Number(a.latitude)) && !isNaN(Number(a.longitude)) &&
-        (Number(a.latitude) <= 15 && Number(a.latitude) >= -15 && Number(a.longitude) >= 90 && Number(a.longitude) <= 145);
-
-      if (hasExplicitGps) {
+        !isNaN(Number(a.latitude)) && !isNaN(Number(a.longitude))
+      ) {
         realLat = Number(a.latitude);
         realLon = Number(a.longitude);
-      } else {
-        // 2. Relative offset from site base GPS using calculated/assigned indoor meter coordinates (x, y)
-        // 1 meter in latitude ~ 0.000009 degrees, in longitude ~ 0.000009 degrees
-        realLat = baseLat + (y * 0.000009);
-        realLon = baseLon + (x * 0.000009);
       }
 
-      return {
+      // 2. Check GeoPoint / location attribute in description.attributes
+      const locAttr = attrs.find((at: any) => at.dataType === 'GeoPoint' || at.name === 'location' || at.name === 'coordinates');
+      if (locAttr && locAttr.value) {
+        const rawVal = typeof locAttr.value === 'object' && locAttr.value !== null
+          ? `${locAttr.value.lat ?? ''}, ${locAttr.value.lng ?? ''}`
+          : String(locAttr.value);
+        if (rawVal.includes(',')) {
+          const parts = rawVal.split(',').map((s: string) => parseFloat(s.trim()));
+          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            realLat = parts[0];
+            realLon = parts[1];
+          }
+        }
+      }
+
+      // If no valid coordinates exist, do NOT create a marker on the map!
+      if (realLat === null || realLon === null) {
+        return;
+      }
+
+      result.push({
         id: a.id,
         name: a.name,
         meshLabel: a.tagId ? `Node ${a.tagId}` : a.name,
@@ -467,11 +436,13 @@ export default function MapPage() {
         y,
         lat: realLat,
         lon: realLon,
-        latitude: a.latitude !== null && a.latitude !== undefined ? Number(a.latitude) : null,
-        longitude: a.longitude !== null && a.longitude !== undefined ? Number(a.longitude) : null,
+        latitude: realLat,
+        longitude: realLon,
         tag: tagData,
-      };
+      });
     });
+
+    return result;
   };
 
   const mapAssets = getMapAssets();
@@ -781,12 +752,6 @@ export default function MapPage() {
                         { label: 'Humidity', value: selectedAsset.tag && selectedAsset.tag.humidity !== null ? `${selectedAsset.tag.humidity}${getUnit(['humidity'], ' %')}` : '--' },
                         { label: 'Battery/Voltage', value: selectedAsset.tag && selectedAsset.tag.battery !== null ? `${selectedAsset.tag.battery}${getUnit(['battery', 'voltage'], ' V')}` : '--' },
                         { label: 'RSSI', value: selectedAsset.tag && selectedAsset.tag.rssi !== null ? `${selectedAsset.tag.rssi}${getUnit(['rssi', 'gateway_rssi'], ' dBm')}` : '--' },
-                        { 
-                          label: 'Coordinates (Lat, Lon)', 
-                          value: selectedAsset.latitude !== null && selectedAsset.latitude !== undefined && selectedAsset.longitude !== null && selectedAsset.longitude !== undefined
-                            ? `${Number(selectedAsset.latitude).toFixed(6)}, ${Number(selectedAsset.longitude).toFixed(6)}`
-                            : '--' 
-                        },
                       ];
 
                     customAttrs.forEach((attr: any) => {

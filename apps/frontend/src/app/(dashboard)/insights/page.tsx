@@ -1,21 +1,77 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Responsive, Layout } from 'react-grid-layout';
+import { Responsive, Layout, cloneLayoutItem, collides } from 'react-grid-layout';
 const ResponsiveReactGridLayout = Responsive as any;
+
+// Helper: resolve all collisions in a layout without compacting upward.
+// Two-pass: moved items first (keep dropped position), then others top-to-bottom.
+function resolveLayoutCollisions(layout: any[], movedItemId?: string): any[] {
+  const out: any[] = new Array(layout.length);
+  const resolved: any[] = [];
+
+  const pushDown = (item: any) => {
+    let hasCollision = true;
+    while (hasCollision) {
+      hasCollision = false;
+      for (const r of resolved) {
+        if (collides(item, r)) {
+          item.y = r.y + r.h;
+          hasCollision = true;
+          break;
+        }
+      }
+    }
+  };
+
+  // Pass 1: Place static + moved (dragged) items first
+  for (let i = 0; i < layout.length; i++) {
+    const item = layout[i];
+    const isMoved = movedItemId ? item.i === movedItemId : (item.moved || false);
+    if (item.static || isMoved) {
+      const l = cloneLayoutItem(item);
+      if (isMoved) pushDown(l);
+      resolved.push(l);
+      out[i] = l;
+    }
+  }
+
+  // Pass 2: Remaining items, sorted top-to-bottom
+  const remaining: number[] = [];
+  for (let i = 0; i < layout.length; i++) {
+    const item = layout[i];
+    const isMoved = movedItemId ? item.i === movedItemId : (item.moved || false);
+    if (!item.static && !isMoved) remaining.push(i);
+  }
+  remaining.sort((a, b) => {
+    if (layout[a].y !== layout[b].y) return layout[a].y - layout[b].y;
+    return layout[a].x - layout[b].x;
+  });
+
+  for (const idx of remaining) {
+    const l = cloneLayoutItem(layout[idx]);
+    pushDown(l);
+    resolved.push(l);
+    out[idx] = l;
+  }
+
+  for (const item of out) { if (item) item.moved = false; }
+  return out;
+}
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import {
-  Activity, LayoutGrid, Settings2, Plus, GripHorizontal, Settings, LineChart, Hash, MapPin, Tablet, Edit2, Trash2, Check, X, RefreshCw, Eye, EyeOff, LayoutTemplate, ExternalLink, Save, Lock, ChevronDown, Search, Filter, SlidersHorizontal, ChevronRight, ArrowLeftRight,
+  Activity, LayoutGrid, Settings2, Plus, GripHorizontal, Settings, LineChart, Hash, MapPin, Tablet, Edit2, Trash2, Check, X, RefreshCw, Eye, EyeOff, LayoutTemplate, ExternalLink, Minimize2, Save, Lock, ChevronDown, Search, Filter, SlidersHorizontal, ChevronRight, ArrowLeftRight,
   HardDrive, Building, Boxes, Radio, Truck, Wrench, Battery, Tag, Tv, Navigation, Layers, Wifi, Database, Server, Anchor, Gauge, Compass, DoorClosed, Box, Plug, Monitor, Lightbulb, Zap, Folder, Globe, Car, Cpu
 } from 'lucide-react';
 import { getApiUrl, getBackendUrl } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ConfirmModal from '../../components/ConfirmModal';
 import { useSocket } from '../../context/SocketContext';
+import { getAssetMarkerIcon } from '../../lib/icon-utils';
 import { ValueCardWidget } from '../components/widgets/ValueCardWidget';
 import { KPIWidget } from '../components/widgets/KPIWidget';
 import { GaugeWidget } from '../components/widgets/GaugeWidget';
@@ -194,12 +250,99 @@ const SearchableSelect = ({ options, value, onChange, placeholder = "Select...",
 };
 
 
+const CustomSidebarSelect = ({
+  value,
+  onChange,
+  options,
+  primaryAccentColor
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string; icon?: React.ReactNode | string }[];
+  primaryAccentColor?: string;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const selectedOpt = options.find(o => o.value === value) || options[0];
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full text-xs font-bold p-2.5 border border-border rounded-xl bg-card text-foreground flex items-center justify-between shadow-xs transition-all hover:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/50 cursor-pointer"
+      >
+        <div className="flex items-center gap-2 truncate min-w-0">
+          {selectedOpt?.icon && (
+            <span className="w-4 h-4 shrink-0 flex items-center justify-center text-primary" style={primaryAccentColor ? { color: primaryAccentColor } : undefined}>
+              {typeof selectedOpt.icon === 'string' ? (
+                <span dangerouslySetInnerHTML={{ __html: selectedOpt.icon }} className="w-4 h-4 flex items-center justify-center [&>svg]:w-4 [&>svg]:h-4" />
+              ) : (
+                selectedOpt.icon
+              )}
+            </span>
+          )}
+          <span className="truncate">{selectedOpt?.label}</span>
+        </div>
+        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-xl max-h-48 overflow-y-auto backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 z-50 p-1 custom-scrollbar">
+          {options.map((opt) => {
+            const isSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-foreground'
+                  }`}
+                style={isSelected && primaryAccentColor ? { color: primaryAccentColor } : undefined}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {opt.icon && (
+                    <span className="w-4 h-4 shrink-0 flex items-center justify-center" style={primaryAccentColor ? { color: primaryAccentColor } : undefined}>
+                      {typeof opt.icon === 'string' ? (
+                        <span dangerouslySetInnerHTML={{ __html: opt.icon }} className="w-4 h-4 flex items-center justify-center [&>svg]:w-4 [&>svg]:h-4" />
+                      ) : (
+                        opt.icon
+                      )}
+                    </span>
+                  )}
+                  <span className="truncate">{opt.label}</span>
+                </div>
+                {isSelected && <Check className="w-3.5 h-3.5" style={primaryAccentColor ? { color: primaryAccentColor } : undefined} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const WIDGET_TEMPLATES = [
   { type: 'valueCard', label: 'Value Card', icon: Hash, w: 3, h: 2, minW: 2, minH: 2 },
   { type: 'kpi', label: 'KPI', icon: Plus, w: 3, h: 2, minW: 2, minH: 2 },
   { type: 'gauge', label: 'Gauge', icon: Activity, w: 3, h: 3, minW: 2, minH: 2 },
   { type: 'chart', label: 'Chart', icon: LineChart, w: 8, h: 5, minW: 4, minH: 3 },
-  { type: 'maps', label: 'Maps', icon: MapPin, w: 8, h: 5, minW: 4, minH: 3 },
+  { type: 'rtls_map', label: 'Denah RTLS', icon: Layers, w: 8, h: 5, minW: 4, minH: 3 },
+  { type: 'gis_map', label: 'Map View GIS', icon: Globe, w: 8, h: 5, minW: 4, minH: 3 },
 ];
 
 type WidgetData = { id: string, type: string, config: any };
@@ -214,8 +357,19 @@ const ATTRIBUTES = [
 
 export default function InsightsPage() {
   const { tenantId, token, user, isSuperAdmin } = useAuth();
-  const { socket } = useSocket();
+  const { socket, assets: socketAssets } = useSocket();
   const router = useRouter();
+
+  const searchParams = useSearchParams();
+  const isFullView = searchParams.get('fullscreen') === 'true' || searchParams.get('fullview') === 'true';
+
+  const handleOpenFullView = () => {
+    if (isFullView) {
+      router.push('/insights');
+    } else {
+      router.push('/insights?fullview=true');
+    }
+  };
 
   // Branding & Theme state (White Label Tenant vs Global System Branding)
   const [platformThemeColor, setPlatformThemeColor] = useState<string | null>(null);
@@ -246,7 +400,7 @@ export default function InsightsPage() {
           setDbAssetTypes(data);
           globalDbAssetTypesCache = data;
         }
-      } catch (e) {}
+      } catch (e) { }
     };
     fetchBrandingAndAssetTypes();
     return () => { isMounted = false; };
@@ -305,6 +459,32 @@ export default function InsightsPage() {
   const [isThresholdsOpen, setIsThresholdsOpen] = useState(true);
   const [isDisplayOpen, setIsDisplayOpen] = useState(true);
 
+  const ToggleSwitch: React.FC<{
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    primaryColor?: string;
+  }> = ({ checked, onChange, primaryColor = '#10b981' }) => {
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={(e) => {
+          e.stopPropagation();
+          onChange(!checked);
+        }}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'
+          }`}
+        style={checked ? { backgroundColor: primaryColor } : undefined}
+      >
+        <span
+          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-5' : 'translate-x-0'
+            }`}
+        />
+      </button>
+    );
+  };
+
   // Select Attributes Modal Popup State (Matching Target Images)
   const [isAttrPickerOpen, setIsAttrPickerOpen] = useState(false);
   const [pickerSelectedAssetId, setPickerSelectedAssetId] = useState('');
@@ -312,6 +492,13 @@ export default function InsightsPage() {
   const [assetSearchFilter, setAssetSearchFilter] = useState('');
   const [collapsedAssetIds, setCollapsedAssetIds] = useState<Record<string, boolean>>({});
   const [isAttributesSectionOpen, setIsAttributesSectionOpen] = useState(true);
+
+  // Linked Assets Modal Popup State for Map Widgets
+  const [isLinkedAssetsOpen, setIsLinkedAssetsOpen] = useState(false);
+  const [linkedAssetsSelectedIds, setLinkedAssetsSelectedIds] = useState<Set<string>>(new Set());
+  const [linkedAssetsFilter, setLinkedAssetsFilter] = useState('');
+  const [collapsedLinkedAssetIds, setCollapsedLinkedAssetIds] = useState<Record<string, boolean>>({});
+  const [isAxisConfigOpen, setIsAxisConfigOpen] = useState(true);
 
   const toggleExpandAsset = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -333,6 +520,42 @@ export default function InsightsPage() {
   const [containerWidth, setContainerWidth] = useState(1200);
 
   const draggingWidgetRef = useRef<string | null>(null);
+
+  // Drag state refs for dynamic preview collision resolution
+  const isDraggingGridRef = useRef(false);
+  const draggedItemIdRef = useRef<string | null>(null);
+  const dragStartLayoutRef = useRef<any[] | null>(null);
+  const skipNextLayoutChangeRef = useRef(false);
+
+  // Compactor: during drag → compute preview based on initial layout before drag started
+  const gridCompactor = useMemo(() => ({
+    type: null,
+    allowOverlap: false,
+    preventCollision: false,
+    compact(layout: any[], _cols: number) {
+      if (isDraggingGridRef.current && dragStartLayoutRef.current) {
+        const movedId = draggedItemIdRef.current;
+        const movedItemInCurrent = layout.find((l: any) => l.i === movedId);
+
+        if (movedItemInCurrent && movedId) {
+          const candidate = dragStartLayoutRef.current.map((startItem: any) => {
+            if (startItem.i === movedId) {
+              const l = cloneLayoutItem(startItem);
+              l.x = movedItemInCurrent.x;
+              l.y = movedItemInCurrent.y;
+              l.w = movedItemInCurrent.w;
+              l.h = movedItemInCurrent.h;
+              l.moved = true;
+              return l;
+            }
+            return cloneLayoutItem(startItem);
+          });
+          return resolveLayoutCollisions(candidate, movedId);
+        }
+      }
+      return resolveLayoutCollisions(layout);
+    }
+  }), []);
 
   // Helper to extract attributes registered on the asset (JSON description or Tag model standard fields)
   const getAssetAttributes = (assetId: string) => {
@@ -375,22 +598,19 @@ export default function InsightsPage() {
       });
     }
 
-    // 3. Fallback to basic list if absolutely empty
-    if (list.length === 0) {
-      return [
-        { value: 'temperature', label: 'Temperature (°C)' },
-        { value: 'humidity', label: 'Humidity (%)' },
-        { value: 'battery', label: 'Battery (V)' },
-        { value: 'rssi', label: 'RSSI (dBm)' }
-      ];
-    }
-
     return list;
   };
 
   // Asset and telemetry state
   const [assets, setAssets] = useState<any[]>([]);
+  const [zones, setZones] = useState<any[]>([]);
   const [telemetryData, setTelemetryData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (socketAssets && socketAssets.length > 0) {
+      setAssets(socketAssets);
+    }
+  }, [socketAssets]);
 
   // Unified asset-attribute options list for single attribute selectors
   const allAssetAttributeOptions = useMemo(() => {
@@ -526,6 +746,9 @@ export default function InsightsPage() {
       apiClient.get('/assets')
         .then(res => setAssets(res.data))
         .catch(err => console.error('Failed to fetch assets', err));
+      apiClient.get('/zones')
+        .then(res => setZones(res.data))
+        .catch(err => console.error('Failed to fetch zones', err));
     }
   }, [tenantId]);
 
@@ -565,8 +788,26 @@ export default function InsightsPage() {
   };
 
   const activeSection = sections.find(s => s.id === activeSectionId);
-  const layout = activeSection?.layout || [];
+  const rawLayout = activeSection?.layout || [];
+  const layout = useMemo(() => {
+    return rawLayout.map((item: any) => ({
+      ...item,
+      resizeHandles: isEditMode ? ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] : []
+    }));
+  }, [rawLayout, isEditMode]);
   const widgets = activeSection?.widgets || [];
+
+  // Compute maximum row index of current widgets
+  const maxRow = useMemo(() => {
+    if (!layout || layout.length === 0) return 10;
+    return Math.max(...layout.map((item: any) => (Number(item.y) || 0) + (Number(item.h) || 1)));
+  }, [layout]);
+
+  // Compute dynamic canvas height (extends with extra buffer rows in edit mode)
+  const dynamicCanvasHeight = useMemo(() => {
+    const totalRows = isEditMode ? Math.max(24, maxRow + 15) : Math.max(12, maxRow + 2);
+    return totalRows * 48 + 24; // 40px rowHeight + 8px margin + 24px padding
+  }, [maxRow, isEditMode]);
 
   // Update input name whenever active section changes
   const activeSectionName = activeSection?.name;
@@ -582,9 +823,11 @@ export default function InsightsPage() {
       id: w.id,
       assetId: w.config?.assetId,
       attribute: w.config?.attribute,
-      attributes: w.config?.attributes
+      attributes: w.config?.attributes,
+      timeframe: w.config?.timeframe
     }))
   );
+
 
   const widgetRangesDependency = JSON.stringify(widgetRanges);
 
@@ -625,23 +868,40 @@ export default function InsightsPage() {
             })
           );
           newData[widget.id] = results;
-        } else if (widget.type === 'maps') {
+        } else if (widget.type === 'maps' || widget.type === 'gis_map' || widget.type === 'rtls_map') {
           try {
-            const res = await apiClient.get(`/assets/${assetId}`);
-            const assetDetails = res.data;
-            const attrs = attributes || ['temperature'];
-            const attrValues = await Promise.all(
-              attrs.map(async (attr: string) => {
+            const targetAttribute = widget.config?.attribute || 'humidity';
+            const normAttr = targetAttribute.toLowerCase();
+            const assetType = widget.config?.assetType || '';
+            const allAssetsOfType = widget.config?.allAssetsOfType ?? true;
+            const selectedAssetIds: string[] = widget.config?.selectedAssetIds || (widget.config?.assetId ? [widget.config?.assetId] : []);
+
+            let targetAssets = assets;
+            if (assetType) {
+              targetAssets = assets.filter(a => String(a.type || '').toUpperCase() === String(assetType).toUpperCase());
+            }
+            if (!allAssetsOfType && selectedAssetIds.length > 0) {
+              targetAssets = assets.filter(a => selectedAssetIds.includes(a.id));
+            }
+
+            const telemetryByAsset: Record<string, Record<string, any>> = {};
+
+            await Promise.all(
+              targetAssets.map(async (a: any) => {
                 try {
-                  const r = await apiClient.get(`/assets/${assetId}/telemetry?attribute=${attr}&range=1h`);
-                  const lastVal = r.data.length > 0 ? r.data[r.data.length - 1].value : null;
-                  return { attr, value: lastVal };
+                  const r = await apiClient.get(`/assets/${a.id}/telemetry?attribute=${targetAttribute}&range=1h`);
+                  if (r.data && Array.isArray(r.data) && r.data.length > 0) {
+                    const lastVal = r.data[r.data.length - 1].value;
+                    if (!telemetryByAsset[a.id]) telemetryByAsset[a.id] = {};
+                    telemetryByAsset[a.id][normAttr] = lastVal;
+                  }
                 } catch (e) {
-                  return { attr, value: null };
+                  // Ignore telemetry fetch failure for individual asset
                 }
               })
             );
-            newData[widget.id] = { asset: assetDetails, attributes: attrValues };
+
+            newData[widget.id] = { telemetryByAsset };
           } catch (e) {
             console.error(e);
           }
@@ -680,7 +940,7 @@ export default function InsightsPage() {
                   if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
                     latestVal = Number(matched.value);
                   }
-                } catch (e) {}
+                } catch (e) { }
               }
 
               newData[widget.id] = {
@@ -695,21 +955,21 @@ export default function InsightsPage() {
           } else if (widget.type === 'valueCard') {
             try {
               const res = await apiClient.get(`/assets/${assetId}/telemetry?attribute=${attr}&range=24h`);
-              let latestVal: number | null = null;
+              let latestVal: any = null;
               let latestTimestamp: string | undefined = undefined;
 
               if (res.data && Array.isArray(res.data) && res.data.length > 0) {
                 const latestPoint = res.data[res.data.length - 1];
-                latestVal = typeof latestPoint.value === 'number' ? latestPoint.value : Number(latestPoint.value);
+                latestVal = latestPoint.value !== undefined && latestPoint.value !== null ? latestPoint.value : null;
                 latestTimestamp = latestPoint.timestamp || latestPoint.createdAt;
               } else if (targetAsset && targetAsset.description && targetAsset.description.startsWith('{')) {
                 try {
                   const desc = JSON.parse(targetAsset.description);
                   const matched = (desc.attributes || []).find((a: any) => a.name === attr);
                   if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
-                    latestVal = Number(matched.value);
+                    latestVal = matched.value;
                   }
-                } catch (e) {}
+                } catch (e) { }
                 if (targetAsset) {
                   latestTimestamp = targetAsset.updatedAt || targetAsset.createdAt;
                 }
@@ -723,6 +983,7 @@ export default function InsightsPage() {
             } catch (e) {
               newData[widget.id] = { value: null, timestamp: undefined, asset: targetAsset };
             }
+
           } else {
             // Gauge widget
             try {
@@ -777,16 +1038,20 @@ export default function InsightsPage() {
                 const descAttrs = desc.attributes || [];
                 const matched = descAttrs.find((a: any) => a.name === attrName);
                 if (matched && matched.value !== undefined && matched.value !== null && matched.value !== '') {
-                  const val = Number(matched.value);
+                  const rawVal = matched.value;
+                  const numericVal = typeof rawVal === 'number' ? rawVal : Number(rawVal);
                   setTelemetryData(prev => ({
                     ...prev,
-                    [widget.id]: val
+                    [widget.id]: widget.type === 'valueCard'
+                      ? { value: rawVal, timestamp: updatedAsset.updatedAt || new Date().toISOString(), asset: updatedAsset }
+                      : (isNaN(numericVal) ? rawVal : numericVal)
                   }));
                 }
-              } catch (e) {}
+              } catch (e) { }
             }
           }
         } else if (widget.type === 'chart') {
+
           const rangeInfo = widgetRanges[widget.id] || { range: '24h' };
           if (rangeInfo.range === 'realtime') {
             let targets = widget.config.targets || [];
@@ -1030,7 +1295,8 @@ export default function InsightsPage() {
             title: template.label,
             assetId: '',
             attribute: '',
-            attributes: []
+            attributes: [],
+            ...(widgetType === 'rtls_map' && zones.length > 0 ? { zoneId: zones[0].id } : {})
           }
         }
       ];
@@ -1077,6 +1343,12 @@ export default function InsightsPage() {
   const onLayoutChange = useCallback((newLayout: Layout, allLayouts: any) => {
     if (!activeSectionId || !isEditMode) return;
 
+    // Skip the onLayoutChange that fires right after our manual onDragStop resolution
+    if (skipNextLayoutChangeRef.current) {
+      skipNextLayoutChangeRef.current = false;
+      return;
+    }
+
     const serialized = JSON.stringify(newLayout);
     if (serialized === layoutRef.current) return;
     layoutRef.current = serialized;
@@ -1087,22 +1359,98 @@ export default function InsightsPage() {
     setIsDirty(true);
   }, [activeSectionId, isEditMode]);
 
-  const onDragStop = useCallback((newLayout: Layout) => {
+  // Grid drag/resize start: capture initial layout before drag begins
+  const onGridDragStart = useCallback((layout: any, _oldItem: any, newItem: any) => {
+    isDraggingGridRef.current = true;
+    draggedItemIdRef.current = newItem?.i || null;
+    dragStartLayoutRef.current = layout.map((l: any) => cloneLayoutItem(l));
+  }, []);
+
+  const onGridResizeStart = useCallback((layout: any, _oldItem: any, newItem: any) => {
+    isDraggingGridRef.current = true;
+    draggedItemIdRef.current = newItem?.i || null;
+    dragStartLayoutRef.current = layout.map((l: any) => cloneLayoutItem(l));
+  }, []);
+
+  // Grid drag stop: resolve collisions on final layout and reset drag refs
+  const onDragStop = useCallback((newLayout: Layout, _oldItem: any, newItem: any) => {
     if (!activeSectionId || !isEditMode) return;
+    isDraggingGridRef.current = false;
+
+    const movedId = newItem?.i || draggedItemIdRef.current;
+    let candidate = newLayout;
+
+    if (dragStartLayoutRef.current && movedId) {
+      const movedItemInNew = newLayout.find((l: any) => l.i === movedId);
+      if (movedItemInNew) {
+        candidate = dragStartLayoutRef.current.map((startItem: any) => {
+          if (startItem.i === movedId) {
+            const l = cloneLayoutItem(startItem);
+            l.x = movedItemInNew.x;
+            l.y = movedItemInNew.y;
+            l.w = movedItemInNew.w;
+            l.h = movedItemInNew.h;
+            l.moved = true;
+            return l;
+          }
+          return cloneLayoutItem(startItem);
+        });
+      }
+    }
+
+    const resolvedLayout = resolveLayoutCollisions(candidate as any[], movedId);
+
+    dragStartLayoutRef.current = null;
+    draggedItemIdRef.current = null;
+
+    skipNextLayoutChangeRef.current = true;
+    layoutRef.current = JSON.stringify(resolvedLayout);
+
     setIsDirty(true);
     setSections(prev => prev.map(sec =>
-      sec.id === activeSectionId ? { ...sec, layout: newLayout } : sec
+      sec.id === activeSectionId ? { ...sec, layout: resolvedLayout } : sec
     ));
-    saveLayoutToDb(activeSectionId, newLayout, widgets);
+    saveLayoutToDb(activeSectionId, resolvedLayout, widgets);
   }, [activeSectionId, isEditMode, widgets]);
 
-  const onResizeStop = useCallback((newLayout: Layout) => {
+  const onResizeStop = useCallback((newLayout: Layout, _oldItem: any, newItem: any) => {
     if (!activeSectionId || !isEditMode) return;
+    isDraggingGridRef.current = false;
+
+    const resizedId = newItem?.i || draggedItemIdRef.current;
+    let candidate = newLayout;
+
+    if (dragStartLayoutRef.current && resizedId) {
+      const itemInNew = newLayout.find((l: any) => l.i === resizedId);
+      if (itemInNew) {
+        candidate = dragStartLayoutRef.current.map((startItem: any) => {
+          if (startItem.i === resizedId) {
+            const l = cloneLayoutItem(startItem);
+            l.x = itemInNew.x;
+            l.y = itemInNew.y;
+            l.w = itemInNew.w;
+            l.h = itemInNew.h;
+            l.moved = true;
+            return l;
+          }
+          return cloneLayoutItem(startItem);
+        });
+      }
+    }
+
+    const resolvedLayout = resolveLayoutCollisions(candidate as any[], resizedId);
+
+    dragStartLayoutRef.current = null;
+    draggedItemIdRef.current = null;
+
+    skipNextLayoutChangeRef.current = true;
+    layoutRef.current = JSON.stringify(resolvedLayout);
+
     setIsDirty(true);
     setSections(prev => prev.map(sec =>
-      sec.id === activeSectionId ? { ...sec, layout: newLayout } : sec
+      sec.id === activeSectionId ? { ...sec, layout: resolvedLayout } : sec
     ));
-    saveLayoutToDb(activeSectionId, newLayout, widgets);
+    saveLayoutToDb(activeSectionId, resolvedLayout, widgets);
   }, [activeSectionId, isEditMode, widgets]);
 
   const handleDragStart = (e: React.DragEvent, type: string) => {
@@ -1124,9 +1472,12 @@ export default function InsightsPage() {
     const title = widget.config.title || widget.type;
     const data = telemetryData[widget.id];
 
-    const hasDataSource = widget.type === 'chart'
-      ? (widget.config.assetId || (widget.config.targets && widget.config.targets.length > 0))
-      : widget.config.assetId;
+    const isMapWidget = widget.type === 'rtls_map' || widget.type === 'gis_map' || widget.type === 'maps' || widget.type === 'map';
+    const hasDataSource = isMapWidget
+      ? true
+      : (widget.type === 'chart'
+        ? (widget.config.assetId || (widget.config.targets && widget.config.targets.length > 0))
+        : widget.config.assetId);
 
     if (!hasDataSource) {
       return (
@@ -1145,6 +1496,7 @@ export default function InsightsPage() {
           <ChartWidget
             widgetId={widget.id}
             data={data || []}
+            widgetConfig={widget.config}
             rangeInfo={rangeInfo}
             setWidgetRange={setWidgetRange}
             updateCustomRange={updateCustomRange}
@@ -1153,21 +1505,48 @@ export default function InsightsPage() {
       }
 
       case 'gauge': {
-        const val = typeof data === 'number' ? data : 0;
-        return <GaugeWidget value={val} attribute={widget.config.attribute || ''} widget={widget} />;
+        const val = typeof data === 'number' ? data : (data && typeof data === 'object' && typeof data.value === 'number' ? data.value : 0);
+        const targetAsset = assets.find(a => a.id === widget.config.assetId);
+        return <GaugeWidget value={val} attribute={widget.config.attribute || ''} widget={widget} targetAsset={targetAsset} />;
       }
 
       case 'kpi': {
+        const targetAsset = assets.find(a => a.id === widget.config.assetId);
+        const resolvedData = (data && typeof data === 'object')
+          ? { ...data, asset: data.asset || targetAsset }
+          : { value: typeof data === 'number' ? data : null, asset: targetAsset };
+
         return (
           <KPIWidget
-            data={data}
+            data={resolvedData}
             attribute={widget.config.attribute || ''}
             widget={widget}
             dbAssetTypes={dbAssetTypes}
             primaryAccentColor={primaryAccentColor}
+            onUpdateTimeframe={(newTf) => {
+              setSections(prevSections => prevSections.map(sec => {
+                if (sec.id !== activeSectionId) return sec;
+                return {
+                  ...sec,
+                  widgets: sec.widgets.map(w => {
+                    if (w.id !== widget.id) return w;
+                    return {
+                      ...w,
+                      config: { ...w.config, timeframe: newTf }
+                    };
+                  })
+                };
+              }));
+              setIsDirty(true);
+              setTimeout(() => {
+                fetchAllTelemetry();
+              }, 50);
+            }}
+
           />
         );
       }
+
 
       case 'valueCard': {
         return (
@@ -1180,8 +1559,35 @@ export default function InsightsPage() {
         );
       }
 
-      case 'maps': {
-        return <MapWidget data={data} getBackendUrl={getBackendUrl} />;
+      case 'rtls_map':
+      case 'gis_map':
+      case 'maps':
+      case 'map': {
+        const targetAsset = assets.find(a => a.id === widget.config.assetId);
+        const resolvedData = (data && typeof data === 'object')
+          ? { ...data, asset: data.asset || targetAsset }
+          : { asset: targetAsset };
+
+        const mapType = widget.type === 'gis_map' ? 'gis' : (widget.type === 'rtls_map' ? 'rtls' : (widget.config.mapType || 'rtls'));
+        const effectiveWidget = {
+          ...widget,
+          config: {
+            ...widget.config,
+            mapType
+          }
+        };
+
+        return (
+          <MapWidget
+            data={resolvedData}
+            widget={effectiveWidget}
+            allAssets={assets}
+            dbAssetTypes={dbAssetTypes}
+            primaryAccentColor={primaryAccentColor}
+            getBackendUrl={getBackendUrl}
+            zones={zones}
+          />
+        );
       }
 
       default:
@@ -1192,7 +1598,7 @@ export default function InsightsPage() {
   if (isLoading) return <div className="p-8 text-center text-slate-500 font-medium">Loading Dashboard...</div>;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] w-full overflow-hidden bg-background">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-background">
 
       {/* TABS SELECTOR (Top Navigation) */}
       <div className="flex items-center justify-between border-b border-border bg-card px-4 pt-2 shadow-sm z-10">
@@ -1261,23 +1667,11 @@ export default function InsightsPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchAllTelemetry}
-              className="p-2 text-muted-foreground hover:text-primary hover:bg-secondary border border-border rounded-lg transition-colors"
-              title="Refresh"
+              onClick={handleOpenFullView}
+              className="p-2 text-muted-foreground hover:text-primary hover:bg-secondary border border-border rounded-lg transition-colors cursor-pointer"
+              title={isFullView ? "Exit full view" : "Open full view"}
             >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary border border-border rounded-lg transition-colors cursor-not-allowed"
-              title="Pause Updates (Coming soon)"
-            >
-              <EyeOff className="w-4 h-4" />
-            </button>
-            <button
-              className="p-2 text-muted-foreground hover:text-primary hover:bg-secondary border border-border rounded-lg transition-colors"
-              title="Open full view"
-            >
-              <ExternalLink className="w-4 h-4" />
+              {isFullView ? <Minimize2 className="w-4 h-4" /> : <ExternalLink className="w-4 h-4" />}
             </button>
 
             <div className="w-[1px] h-6 bg-slate-200 mx-1" />
@@ -1315,37 +1709,42 @@ export default function InsightsPage() {
 
         {/* LEFT: MAIN CANVAS (Grid Layout) */}
         <div className="flex-1 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] bg-slate-50 dark:bg-slate-950/20 overflow-y-scroll p-0 border-r border-border relative">
-          {(() => {
-            const currentCols = containerWidth > 1200 ? 24 : containerWidth > 996 ? 18 : containerWidth > 768 ? 12 : containerWidth > 480 ? 8 : 4;
-            const gridX = containerWidth ? ((containerWidth - 24 - ((currentCols - 1) * 8)) / currentCols) + 8 : 48;
-            const gridY = 40 + 8; // rowHeight (40) + margin (8)
-            return (
-              <div
-                className="absolute inset-0 pointer-events-none opacity-50 transition-all duration-300"
-                style={isEditMode ? {
-                  backgroundImage: `
-                    linear-gradient(to bottom, rgba(148, 163, 184, 0.35) 1px, transparent 1px),
-                    linear-gradient(to right, rgba(148, 163, 184, 0.35) 1px, transparent 1px)
-                  `,
-                  backgroundSize: `${gridX}px ${gridY}px`,
-                  backgroundPosition: '12px 12px' // container padding offset
-                } : {
-              backgroundImage: 'linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px)',
-              backgroundSize: '20px 20px'
-            }}
-          ></div>
-          );})()}
-
           {!activeSectionId ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 relative z-10">
               <p>No sections found. Create a new section to get started.</p>
               <Button onClick={handleAddSection} className="mt-4"><Plus className="w-4 h-4 mr-2" /> Create Section</Button>
             </div>
           ) : (
-            <div className="min-h-[800px] w-full relative z-10" key={activeSectionId} ref={containerRef}>
+            <div style={{ minHeight: `${dynamicCanvasHeight}px` }} className="w-full relative z-10 transition-all duration-300" key={activeSectionId} ref={containerRef}>
+              {/* Grid Background Pattern */}
+              {(() => {
+                const currentCols = containerWidth > 1200 ? 24 : containerWidth > 996 ? 18 : containerWidth > 768 ? 12 : containerWidth > 480 ? 8 : 4;
+                const gridX = containerWidth ? ((containerWidth - 24 - ((currentCols - 1) * 8)) / currentCols) + 8 : 48;
+                const gridY = 40 + 8; // rowHeight (40) + margin (8)
+                return (
+                  <div
+                    className="absolute top-0 left-0 right-0 w-full pointer-events-none opacity-50 transition-all duration-300 z-0"
+                    style={{
+                      height: `${dynamicCanvasHeight}px`,
+                      ...(isEditMode ? {
+                        backgroundImage: `
+                          linear-gradient(to bottom, rgba(148, 163, 184, 0.35) 1px, transparent 1px),
+                          linear-gradient(to right, rgba(148, 163, 184, 0.35) 1px, transparent 1px)
+                        `,
+                        backgroundSize: `${gridX}px ${gridY}px`,
+                        backgroundPosition: '12px 12px'
+                      } : {
+                        backgroundImage: 'linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px)',
+                        backgroundSize: '20px 20px'
+                      })
+                    }}
+                  />
+                );
+              })()}
+
               <ResponsiveReactGridLayout
                 width={containerWidth}
-                className="layout"
+                className="layout relative z-10"
                 layouts={{ lg: layout }}
                 breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
                 cols={{ lg: 24, md: 18, sm: 12, xs: 8, xxs: 4 }}
@@ -1353,15 +1752,19 @@ export default function InsightsPage() {
                 margin={[8, 8]}
                 containerPadding={[12, 12]}
                 onLayoutChange={(curr: Layout, all: any) => onLayoutChange(curr, all)}
-                onDragStop={(layout: Layout) => onDragStop(layout)}
-                onResizeStop={(layout: Layout) => onResizeStop(layout)}
+                onDragStart={(layout: Layout, oldItem: any, newItem: any) => onGridDragStart(layout, oldItem, newItem)}
+                onDragStop={(layout: Layout, oldItem: any, newItem: any) => onDragStop(layout, oldItem, newItem)}
+                onResizeStart={(layout: Layout, oldItem: any, newItem: any) => onGridResizeStart(layout, oldItem, newItem)}
+                onResizeStop={(layout: Layout, oldItem: any, newItem: any) => onResizeStop(layout, oldItem, newItem)}
+                compactor={gridCompactor}
                 dropConfig={{ enabled: isEditMode }}
                 dragConfig={{ enabled: isEditMode, handle: '.drag-handle' }}
                 resizeConfig={{ enabled: isEditMode }}
+                resizeHandles={isEditMode ? ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] : []}
                 onDrop={onDrop}
                 onDropDragOver={onDropDragOver}
                 useCSSTransforms={true}
-                style={{ minHeight: '800px' }}
+                style={{ minHeight: `${dynamicCanvasHeight}px` }}
               >
                 {widgets.map((widget) => {
                   const l = layout.find(x => x.i === widget.id);
@@ -1456,7 +1859,12 @@ export default function InsightsPage() {
                   }
 
                   const isChart = selectedWidget.type === 'chart';
-                  const isMultiAttribute = ['maps'].includes(selectedWidget.type);
+                  const isMapWidget = ['maps', 'map', 'rtls_map', 'gis_map'].includes(selectedWidget.type);
+                  const isMultiAttribute = ['maps', 'map'].includes(selectedWidget.type);
+
+                  const widgetTitleLabel = selectedWidget.type === 'rtls_map'
+                    ? 'Denah RTLS Config'
+                    : (selectedWidget.type === 'gis_map' ? 'Map View GIS Config' : `${selectedWidget.type} Config`);
 
                   return (
                     <div className="flex flex-col min-h-full justify-between space-y-6">
@@ -1464,7 +1872,7 @@ export default function InsightsPage() {
                         <div className="p-3 bg-secondary/30 border border-border rounded-lg flex items-center gap-3">
                           <Settings2 className="w-5 h-5 text-primary" />
                           <div>
-                            <h3 className="text-sm font-bold capitalize">{selectedWidget.type} Config</h3>
+                            <h3 className="text-sm font-bold capitalize">{widgetTitleLabel}</h3>
                             <p className="text-[10px] text-muted-foreground font-mono truncate w-48 font-bold">ID: {selectedWidget.id}</p>
                           </div>
                         </div>
@@ -1479,125 +1887,463 @@ export default function InsightsPage() {
                           />
                         </div>
 
-                        {isChart ? (
-                          <>
-                            {/* Custom Targets list builder for chart widget */}
-                            {(() => {
-                              const targets = selectedWidget.config.targets || [];
-                              const getAttributeTypeKey = (name: string) => {
-                                const n = name.toLowerCase();
-                                if (n.startsWith('rssi')) return 'rssi';
-                                if (n.includes('temperature') || n.includes('temp')) return 'temperature';
-                                if (n.includes('humidity') || n.includes('hum')) return 'humidity';
-                                if (n.includes('battery') || n.includes('voltage') || n.includes('volt')) return 'battery';
-                                if (n.includes('co2')) return 'co2';
-                                if (n.includes('co')) return 'co';
-                                return n;
-                              };
-                              const activeType = targets.length > 0 ? getAttributeTypeKey(targets[0].attribute) : null;
+                        {isMapWidget ? (() => {
+                          // Only include asset types present on registered assets for this tenant
+                          const tenantTypesSet = new Set(assets.map(a => String(a.type || '').toUpperCase()).filter(Boolean));
+                          const matchedDbTypes = dbAssetTypes.filter((t: any) => tenantTypesSet.has(String(t.code || '').toUpperCase()));
 
-                              const availableAttrs = getAssetAttributes(newTargetAssetId);
-                              const matchingAttrs = availableAttrs.filter(attr => activeType === null || getAttributeTypeKey(attr.value) === activeType);
+                          const mapAssetTypeOption = (code: string, label: string) => {
+                            const iconInfo = getAssetMarkerIcon(code, label, dbAssetTypes);
+                            return {
+                              value: code,
+                              label,
+                              icon: iconInfo.svg
+                            };
+                          };
 
-                              return (
-                                <div className="space-y-4 border-t border-border pt-4">
-                                  {/* List current targets */}
-                                  <div className="space-y-2">
-                                    <label className="text-xs font-semibold text-slate-600">Chart Targets</label>
-                                    {targets.length === 0 ? (
-                                      <p className="text-[11px] text-muted-foreground italic bg-secondary/10 p-2 rounded border border-dashed border-border">
-                                        No targets added yet. Use the fields below to add assets/attributes.
-                                      </p>
-                                    ) : (
-                                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                                        {targets.map((t: any, idx: number) => {
-                                          const assetName = assets.find(a => a.id === t.assetId)?.name || t.assetId;
-                                          return (
-                                            <div key={idx} className="flex items-center justify-between text-[11px] p-2 bg-secondary/35 border border-border rounded-md">
-                                              <div className="font-semibold truncate flex-1 pr-2 text-foreground">
-                                                {assetName} <span className="text-muted-foreground font-medium">({t.attribute})</span>
-                                              </div>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const updated = targets.filter((_: any, i: number) => i !== idx);
-                                                  updateWidgetConfig({
-                                                    ...selectedWidget.config,
-                                                    targets: updated
-                                                  });
-                                                }}
-                                                className="text-destructive hover:text-red-600 transition-colors p-1"
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
+                          let availableAssetTypes: { value: string; label: string; icon?: any }[] = [];
+                          if (matchedDbTypes.length > 0) {
+                            availableAssetTypes = matchedDbTypes.map((t: any) => mapAssetTypeOption(t.code, t.name || t.code));
+                          } else if (tenantTypesSet.size > 0) {
+                            availableAssetTypes = Array.from(tenantTypesSet).map(code => mapAssetTypeOption(
+                              code,
+                              code.charAt(0).toUpperCase() + code.slice(1).toLowerCase().replace(/_/g, ' ')
+                            ));
+                          } else {
+                            availableAssetTypes = dbAssetTypes.map((t: any) => mapAssetTypeOption(t.code, t.name || t.code));
+                          }
+
+                          const currentAssetType = selectedWidget.config.assetType || (availableAssetTypes[0]?.value || '');
+
+                          // Dynamically derive available attributes for selected assets or assets of selected type
+                          const isAllAssets = selectedWidget.config.allAssetsOfType ?? true;
+                          const selectedAssetIds: string[] = selectedWidget.config.selectedAssetIds || (selectedWidget.config.assetId ? [selectedWidget.config.assetId] : []);
+
+                          const assetsOfSelectedType = assets.filter(a => String(a.type || '').toUpperCase() === String(currentAssetType).toUpperCase());
+
+                          let targetAssetsForAttributes = assetsOfSelectedType;
+                          if (!isAllAssets && selectedAssetIds.length > 0) {
+                            targetAssetsForAttributes = assets.filter(a => selectedAssetIds.includes(a.id));
+                          }
+
+                          const attrMap = new Map<string, string>();
+                          (targetAssetsForAttributes.length > 0 ? targetAssetsForAttributes : assetsOfSelectedType).forEach(a => {
+                            const attrs = getAssetAttributes(a.id);
+                            attrs.forEach(at => attrMap.set(at.value, at.label));
+                          });
+
+                          let availableAttributes: { value: string; label: string }[] = [];
+                          if (attrMap.size > 0) {
+                            availableAttributes = Array.from(attrMap.entries()).map(([value, label]) => ({ value, label }));
+                          } else {
+                            availableAttributes = [
+                              { value: 'humidity', label: 'Humidity' },
+                              { value: 'temperature', label: 'Temperature' },
+                              { value: 'battery', label: 'Battery' },
+                              { value: 'rssi', label: 'RSSI' }
+                            ];
+                          }
+
+                          return (
+                            <div className="space-y-4 pt-1">
+                              {/* 0. Denah/Zone (Only for RTLS) */}
+                              {selectedWidget.type === 'rtls_map' ? (
+                                <div className="space-y-1.5 pb-3 border-b border-border">
+                                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 block">Denah / Zone</label>
+                                  <CustomSidebarSelect
+                                    value={selectedWidget.config.zoneId || ''}
+                                    onChange={(val) => updateWidgetConfig({ ...selectedWidget.config, zoneId: val })}
+                                    options={[
+                                      { value: '', label: 'Auto (from Asset)' },
+                                      ...zones.map((z: any) => ({ value: z.id, label: z.name, icon: <Layers className="w-4 h-4"/> }))
+                                    ]}
+                                    primaryAccentColor={primaryAccentColor}
+                                  />
+                                </div>
+                              ) : (
+                                <>
+                                  {/* 1. Asset type */}
+                                  <div className="space-y-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Asset type</label>
+                                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: primaryAccentColor }} />
+                                </div>
+                                <CustomSidebarSelect
+                                  value={currentAssetType}
+                                  onChange={(val) => updateWidgetConfig({ ...selectedWidget.config, assetType: val })}
+                                  options={availableAssetTypes}
+                                  primaryAccentColor={primaryAccentColor}
+                                />
+                              </div>
+
+                              {/* 2. All assets of this type */}
+                              <div className="flex items-center justify-between pt-1">
+                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">All assets of this type</span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateWidgetConfig({
+                                    ...selectedWidget.config,
+                                    allAssetsOfType: !(selectedWidget.config.allAssetsOfType ?? true)
+                                  })}
+                                  className={`w-9 h-5 rounded-full p-0.5 transition-colors relative cursor-pointer ${(selectedWidget.config.allAssetsOfType ?? true) ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'}`}
+                                  style={{ backgroundColor: (selectedWidget.config.allAssetsOfType ?? true) ? primaryAccentColor : undefined }}
+                                >
+                                  <div className={`w-4 h-4 rounded-full bg-white transition-transform ${(selectedWidget.config.allAssetsOfType ?? true) ? 'translate-x-4' : 'translate-x-0'}`} />
+                                </button>
+                              </div>
+
+                              {/* 3. All assets / Specific Asset Select */}
+                              <div className="space-y-1">
+                                {(selectedWidget.config.allAssetsOfType ?? true) ? (
+                                  <div className="w-full text-xs font-semibold p-2.5 border border-border rounded-xl bg-secondary/30 text-muted-foreground flex items-center justify-center select-none cursor-not-allowed">
+                                    All assets
                                   </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const currentSelected = selectedWidget.config.selectedAssetIds || (selectedWidget.config.assetId ? [selectedWidget.config.assetId] : []);
+                                      setLinkedAssetsSelectedIds(new Set(currentSelected));
+                                      setLinkedAssetsFilter('');
+                                      setIsLinkedAssetsOpen(true);
+                                    }}
+                                    style={{ color: primaryAccentColor }}
+                                    className="w-full py-2.5 px-3 border border-border rounded-xl bg-secondary/20 hover:bg-secondary/50 font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-2xs cursor-pointer"
+                                  >
+                                    <span>
+                                      {(() => {
+                                        const ids = selectedWidget.config.selectedAssetIds || (selectedWidget.config.assetId ? [selectedWidget.config.assetId] : []);
+                                        return `${ids.length} Assets`;
+                                      })()}
+                                    </span>
+                                  </button>
+                                )}
+                              </div>
 
-                                  {/* Add Target Section */}
-                                  <div className="space-y-3 bg-secondary/10 border border-border/80 rounded-lg p-3">
-                                    <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Add Target</h4>
+                              {/* 4. Attribute */}
+                              <div className="space-y-1.5 pt-1">
+                                <label className="text-xs font-bold block" style={{ color: primaryAccentColor }}>
+                                  Attribute
+                                </label>
+                                <CustomSidebarSelect
+                                  value={selectedWidget.config.attribute || (availableAttributes[0]?.value || 'humidity')}
+                                  onChange={(val) => updateWidgetConfig({ ...selectedWidget.config, attribute: val })}
+                                  options={availableAttributes}
+                                  primaryAccentColor={primaryAccentColor}
+                                />
+                              </div>
 
-                                    <div className="space-y-1.5">
-                                      <label className="text-[10px] font-semibold text-slate-400">Target Asset</label>
-                                      <SearchableSelect
-                                        value={newTargetAssetId}
-                                        placeholder="Select Asset..."
-                                        options={assets.map(a => ({ value: a.id, label: a.name }))}
-                                        onChange={(val) => {
-                                          setNewTargetAssetId(val);
-                                          const attrs = getAssetAttributes(val);
-                                          const matching = attrs.filter(attr => activeType === null || getAttributeTypeKey(attr.value) === activeType);
-                                          setNewTargetAttribute(matching.length > 0 ? matching[0].value : '');
-                                        }}
-                                      />
-                                    </div>
+                            {/* 5. Show labels */}
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">Show labels</span>
+                              <button
+                                type="button"
+                                onClick={() => updateWidgetConfig({
+                                  ...selectedWidget.config,
+                                  showLabels: !(selectedWidget.config.showLabels ?? true)
+                                })}
+                                className={`w-9 h-5 rounded-full p-0.5 transition-colors relative cursor-pointer ${(selectedWidget.config.showLabels ?? true) ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'}`}
+                                style={{ backgroundColor: (selectedWidget.config.showLabels ?? true) ? primaryAccentColor : undefined }}
+                              >
+                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${(selectedWidget.config.showLabels ?? true) ? 'translate-x-4' : 'translate-x-0'}`} />
+                              </button>
+                            </div>
 
-                                    {newTargetAssetId && (
-                                      <div className="space-y-1.5">
-                                        <label className="text-[10px] font-semibold text-slate-400">Attribute</label>
-                                        {matchingAttrs.length > 0 ? (
-                                          <div className="flex gap-2">
-                                            <div className="flex-1">
-                                              <SearchableSelect
-                                                value={newTargetAttribute}
-                                                placeholder="Select Attribute..."
-                                                options={matchingAttrs}
-                                                onChange={(val) => setNewTargetAttribute(val)}
+                            {/* 6. Show units */}
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">Show units</span>
+                              <button
+                                type="button"
+                                onClick={() => updateWidgetConfig({
+                                  ...selectedWidget.config,
+                                  showUnits: !(selectedWidget.config.showUnits ?? true)
+                                })}
+                                className={`w-9 h-5 rounded-full p-0.5 transition-colors relative cursor-pointer ${(selectedWidget.config.showUnits ?? true) ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'}`}
+                                style={{ backgroundColor: (selectedWidget.config.showUnits ?? true) ? primaryAccentColor : undefined }}
+                              >
+                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${(selectedWidget.config.showUnits ?? true) ? 'translate-x-4' : 'translate-x-0'}`} />
+                              </button>
+                            </div>
+
+                            {/* 7. Thresholds (Collapsible) */}
+                            <div className="space-y-2 pt-3 border-t border-border">
+                              <button
+                                type="button"
+                                onClick={() => setIsThresholdsOpen(!isThresholdsOpen)}
+                                className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                              >
+                                <ChevronDown className={`w-4 h-4 transition-transform ${isThresholdsOpen ? '' : '-rotate-90'}`} />
+                                <span>Thresholds</span>
+                              </button>
+
+                              {isThresholdsOpen && (
+                                <div className="space-y-2.5 pl-2 animate-in fade-in duration-150">
+                                  {(() => {
+                                    const thresholds: { color: string; value: number }[] = selectedWidget.config.thresholds || [
+                                      { color: '#22c55e', value: 0 },
+                                      { color: '#f97316', value: 75 },
+                                      { color: '#ef4444', value: 90 }
+                                    ];
+
+                                    return (
+                                      <>
+                                        <div className="space-y-2">
+                                          {thresholds.map((t, idx) => (
+                                            <div key={idx} className="flex items-center gap-2">
+                                              <div className="w-8 h-8 rounded-lg border border-border overflow-hidden relative shrink-0 cursor-pointer shadow-xs">
+                                                <input
+                                                  type="color"
+                                                  value={t.color || '#10b981'}
+                                                  onChange={(e) => {
+                                                    const updated = [...thresholds];
+                                                    updated[idx] = { ...updated[idx], color: e.target.value };
+                                                    updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
+                                                  }}
+                                                  className="absolute -inset-2 w-12 h-12 opacity-0 cursor-pointer"
+                                                />
+                                                <div className="w-full h-full" style={{ backgroundColor: t.color || '#10b981' }} />
+                                              </div>
+
+                                              <input
+                                                type="number"
+                                                value={t.value !== undefined ? t.value : ''}
+                                                onChange={(e) => {
+                                                  const updated = [...thresholds];
+                                                  updated[idx] = { ...updated[idx], value: e.target.value === '' ? 0 : Number(e.target.value) };
+                                                  updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
+                                                }}
+                                                className="flex-1 text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
                                               />
+
+                                              {thresholds.length > 1 && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const updated = thresholds.filter((_, i) => i !== idx);
+                                                    updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
+                                                  }}
+                                                  className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded-md"
+                                                >
+                                                  <Trash2 className="w-4 h-4" />
+                                                </button>
+                                              )}
                                             </div>
-                                            <Button
+                                          ))}
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const lastVal = thresholds.length > 0 ? thresholds[thresholds.length - 1].value + 15 : 0;
+                                            const defaultColors = ['#22c55e', '#f97316', '#ef4444', '#3b82f6', '#8b5cf6'];
+                                            const nextColor = defaultColors[thresholds.length % defaultColors.length];
+                                            const updated = [...thresholds, { color: nextColor, value: lastVal }];
+                                            updateWidgetConfig({ ...selectedWidget.config, thresholds: updated });
+                                          }}
+                                          style={{ color: primaryAccentColor }}
+                                          className="w-full py-2 px-3 border border-border rounded-xl bg-secondary/30 hover:bg-secondary/60 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                                        >
+                                          <Plus className="w-4 h-4" style={{ color: primaryAccentColor }} /> Threshold
+                                        </button>
+                                      </>
+                                    );
+                                  })()}
+                               </div>
+                             )}
+                             </div>
+                          </>
+                        )}
+                           </div>
+                       );
+                       })() : isChart ? (
+                          <>
+                            {/* Attributes Section for Chart Widget (Using Tree Select Attribute Picker) */}
+                            <div className="space-y-2 pt-2 border-t border-border">
+                              <button
+                                type="button"
+                                onClick={() => setIsAttributesSectionOpen(!isAttributesSectionOpen)}
+                                className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                              >
+                                <ChevronDown className={`w-4 h-4 transition-transform ${isAttributesSectionOpen ? '' : '-rotate-90'}`} />
+                                <span>Attributes</span>
+                              </button>
+
+                              {isAttributesSectionOpen && (
+                                <div className="space-y-3 pl-2 animate-in fade-in duration-150">
+                                  {(() => {
+                                    const targets = selectedWidget.config.targets || [];
+                                    return (
+                                      <div className="space-y-2.5">
+                                        {targets.length > 0 ? (
+                                          <div className="space-y-2">
+                                            {targets.map((t: any, idx: number) => {
+                                              const targetAsset = assets.find(a => a.id === t.assetId);
+                                              const assetName = targetAsset?.name || t.assetId;
+                                              const attrs = targetAsset ? getAssetAttributes(targetAsset.id) : [];
+                                              const attrObj = attrs.find(a => a.value === t.attribute);
+                                              const attrLabel = attrObj ? attrObj.label : (t.attribute.charAt(0).toUpperCase() + t.attribute.slice(1));
+                                              const { IconComp, color: iconColor } = getAssetIconAndColor(targetAsset, assetName, dbAssetTypes);
+
+                                              return (
+                                                <div
+                                                  key={idx}
+                                                  className="flex items-center gap-3 p-2.5 bg-card border border-border hover:border-primary/60 rounded-2xl transition-all shadow-2xs group relative"
+                                                >
+                                                  <div
+                                                    className="w-9 h-9 rounded-2xl flex items-center justify-center shrink-0"
+                                                    style={{
+                                                      backgroundColor: `${iconColor}18`,
+                                                      color: iconColor,
+                                                      border: `1px solid ${iconColor}35`,
+                                                    }}
+                                                  >
+                                                    <IconComp className="w-4 h-4" />
+                                                  </div>
+                                                  <div className="flex flex-col leading-tight min-w-0 flex-1">
+                                                    <span className="text-xs font-bold text-foreground truncate">
+                                                      {assetName}
+                                                    </span>
+                                                    <span className="text-[11px] font-medium text-muted-foreground truncate">
+                                                      {attrLabel}
+                                                    </span>
+                                                  </div>
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      const updated = targets.filter((_: any, i: number) => i !== idx);
+                                                      updateWidgetConfig({
+                                                        ...selectedWidget.config,
+                                                        targets: updated
+                                                      });
+                                                    }}
+                                                    className="text-destructive hover:text-red-600 transition-colors p-1"
+                                                    title="Remove attribute"
+                                                  >
+                                                    <Trash2 className="w-4 h-4" />
+                                                  </button>
+                                                </div>
+                                              );
+                                            })}
+
+                                            <button
                                               type="button"
-                                              className="px-3 text-xs font-bold"
                                               onClick={() => {
-                                                if (newTargetAssetId && newTargetAttribute) {
-                                                  const updatedTargets = [...targets, { assetId: newTargetAssetId, attribute: newTargetAttribute }];
-                                                  updateWidgetConfig({
-                                                    ...selectedWidget.config,
-                                                    targets: updatedTargets
-                                                  });
-                                                  setNewTargetAssetId('');
-                                                  setNewTargetAttribute('');
-                                                }
+                                                setPickerSelectedAssetId(assets[0]?.id || '');
+                                                setPickerSelectedAttribute('temperature');
+                                                setIsAttrPickerOpen(true);
                                               }}
+                                              style={{
+                                                backgroundColor: `${primaryAccentColor}18`,
+                                                borderColor: `${primaryAccentColor}35`,
+                                                color: primaryAccentColor
+                                              }}
+                                              className="px-3.5 py-1.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs hover:opacity-90 w-fit"
                                             >
-                                              Add
-                                            </Button>
+                                              <Plus className="w-4 h-4" style={{ color: primaryAccentColor }} />
+                                              <span>Attribute</span>
+                                            </button>
                                           </div>
                                         ) : (
-                                          <p className="text-[10px] text-amber-500 font-semibold mt-1 bg-amber-500/10 p-1.5 rounded border border-amber-500/20">
-                                            {activeType ? `No matching attributes of type "${activeType}" on this asset.` : 'No attributes available.'}
-                                          </p>
+                                          <div className="space-y-3 pt-1">
+                                            <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                              No attributes connected
+                                            </p>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setPickerSelectedAssetId(assets[0]?.id || '');
+                                                setPickerSelectedAttribute('temperature');
+                                                setIsAttrPickerOpen(true);
+                                              }}
+                                              style={{
+                                                backgroundColor: `${primaryAccentColor}18`,
+                                                borderColor: `${primaryAccentColor}35`,
+                                                color: primaryAccentColor
+                                              }}
+                                              className="px-3.5 py-1.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs hover:opacity-90"
+                                            >
+                                              <Plus className="w-4 h-4" style={{ color: primaryAccentColor }} />
+                                              <span>Attribute</span>
+                                            </button>
+                                          </div>
                                         )}
                                       </div>
-                                    )}
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* AXIS CONFIGURATION SECTION (Matching target UI) */}
+                            <div className="space-y-3 pt-3 border-t border-border">
+                              <button
+                                type="button"
+                                onClick={() => setIsAxisConfigOpen(!isAxisConfigOpen)}
+                                className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
+                              >
+                                <ChevronDown className={`w-4 h-4 transition-transform ${isAxisConfigOpen ? '' : '-rotate-90'}`} />
+                                <span>Axis Configuration</span>
+                              </button>
+
+                              {isAxisConfigOpen && (
+                                <div className="space-y-3 pl-2 animate-in fade-in duration-150">
+                                  {/* Y-AXIS MAX */}
+                                  <div className="flex items-center justify-between gap-3 p-2.5 bg-secondary/20 border border-border rounded-xl">
+                                    <div className="flex-1 space-y-1">
+                                      <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Y-axis Max</label>
+                                      <input
+                                        type="text"
+                                        disabled={selectedWidget.config.yAxisAutoMax !== false}
+                                        value={selectedWidget.config.yAxisAutoMax !== false ? 'auto' : (selectedWidget.config.yAxisMax ?? 100)}
+                                        onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, yAxisMax: e.target.value })}
+                                        className={`w-full text-xs font-semibold p-1.5 border rounded-lg outline-none transition-all ${selectedWidget.config.yAxisAutoMax !== false
+                                            ? 'bg-transparent border-transparent text-slate-400 dark:text-slate-500 font-mono'
+                                            : 'bg-background border-border text-foreground'
+                                          }`}
+                                      />
+                                    </div>
+                                    <ToggleSwitch
+                                      checked={selectedWidget.config.yAxisAutoMax === false}
+                                      onChange={(isCustom) => updateWidgetConfig({ ...selectedWidget.config, yAxisAutoMax: !isCustom })}
+                                      primaryColor={primaryAccentColor}
+                                    />
+                                  </div>
+
+                                  {/* Y-AXIS MIN */}
+                                  <div className="flex items-center justify-between gap-3 p-2.5 bg-secondary/20 border border-border rounded-xl">
+                                    <div className="flex-1 space-y-1">
+                                      <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Y-axis Min</label>
+                                      <input
+                                        type="text"
+                                        disabled={selectedWidget.config.yAxisAutoMin !== false}
+                                        value={selectedWidget.config.yAxisAutoMin !== false ? 'auto' : (selectedWidget.config.yAxisMin ?? 0)}
+                                        onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, yAxisMin: e.target.value })}
+                                        className={`w-full text-xs font-semibold p-1.5 border rounded-lg outline-none transition-all ${selectedWidget.config.yAxisAutoMin !== false
+                                            ? 'bg-transparent border-transparent text-slate-400 dark:text-slate-500 font-mono'
+                                            : 'bg-background border-border text-foreground'
+                                          }`}
+                                      />
+                                    </div>
+                                    <ToggleSwitch
+                                      checked={selectedWidget.config.yAxisAutoMin === false}
+                                      onChange={(isCustom) => updateWidgetConfig({ ...selectedWidget.config, yAxisAutoMin: !isCustom })}
+                                      primaryColor={primaryAccentColor}
+                                    />
                                   </div>
                                 </div>
-                              );
-                            })()}
+                              )}
+                            </div>
+
+                            {/* SHOW LEGEND TOGGLE */}
+                            <div className="flex items-center justify-between pt-3 border-t border-border">
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Show Legend</span>
+                              <ToggleSwitch
+                                checked={selectedWidget.config.showLegend !== false}
+                                onChange={(show) => updateWidgetConfig({ ...selectedWidget.config, showLegend: show })}
+                                primaryColor={primaryAccentColor}
+                              />
+                            </div>
                           </>
                         ) : (
                           <>
@@ -1918,16 +2664,17 @@ export default function InsightsPage() {
                                     <div className="space-y-3 pl-2 animate-in fade-in duration-150">
                                       <div className="space-y-1">
                                         <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Timeframe</label>
-                                        <select
+                                        <CustomSidebarSelect
                                           value={selectedWidget.config.timeframe || 'Hour'}
-                                          onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, timeframe: e.target.value })}
-                                          className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
-                                        >
-                                          <option value="Hour">Hour</option>
-                                          <option value="Day">Day</option>
-                                          <option value="Week">Week</option>
-                                          <option value="Month">Month</option>
-                                        </select>
+                                          onChange={(val) => updateWidgetConfig({ ...selectedWidget.config, timeframe: val })}
+                                          options={[
+                                            { value: 'Hour', label: 'Hour' },
+                                            { value: 'Day', label: 'Day' },
+                                            { value: 'Week', label: 'Week' },
+                                            { value: 'Month', label: 'Month' }
+                                          ]}
+                                          primaryAccentColor={primaryAccentColor}
+                                        />
                                       </div>
 
                                       <div className="flex items-center justify-between pt-1">
@@ -1935,15 +2682,13 @@ export default function InsightsPage() {
                                         <button
                                           type="button"
                                           onClick={() => updateWidgetConfig({ ...selectedWidget.config, allowTimeRange: !(selectedWidget.config.allowTimeRange ?? true) })}
-                                          className={`w-9 h-5 rounded-full p-0.5 transition-colors relative cursor-pointer ${
-                                            (selectedWidget.config.allowTimeRange ?? true) ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'
-                                          }`}
+                                          className={`w-9 h-5 rounded-full p-0.5 transition-colors relative cursor-pointer ${(selectedWidget.config.allowTimeRange ?? true) ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'
+                                            }`}
                                           style={{ backgroundColor: (selectedWidget.config.allowTimeRange ?? true) ? primaryAccentColor : undefined }}
                                         >
                                           <div
-                                            className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                                              (selectedWidget.config.allowTimeRange ?? true) ? 'translate-x-4' : 'translate-x-0'
-                                            }`}
+                                            className={`w-4 h-4 rounded-full bg-white transition-transform ${(selectedWidget.config.allowTimeRange ?? true) ? 'translate-x-4' : 'translate-x-0'
+                                              }`}
                                           />
                                         </button>
                                       </div>
@@ -1966,15 +2711,16 @@ export default function InsightsPage() {
                                     <div className="space-y-3 pl-2 animate-in fade-in duration-150">
                                       <div className="space-y-1">
                                         <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Show value as</label>
-                                        <select
+                                        <CustomSidebarSelect
                                           value={selectedWidget.config.showValueAs || 'Absolute'}
-                                          onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, showValueAs: e.target.value })}
-                                          className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
-                                        >
-                                          <option value="Absolute">Absolute</option>
-                                          <option value="Delta">Delta</option>
-                                          <option value="Percentage">Percentage</option>
-                                        </select>
+                                          onChange={(val) => updateWidgetConfig({ ...selectedWidget.config, showValueAs: val })}
+                                          options={[
+                                            { value: 'Absolute', label: 'Absolute' },
+                                            { value: 'Delta', label: 'Delta' },
+                                            { value: 'Percentage', label: 'Percentage' }
+                                          ]}
+                                          primaryAccentColor={primaryAccentColor}
+                                        />
                                       </div>
 
                                       <div className="space-y-1">
@@ -1994,40 +2740,9 @@ export default function InsightsPage() {
                               </div>
                             )}
 
-                            {/* Value Card Specific Settings: Values (Decimals) */}
-                            {selectedWidget.type === 'valueCard' && (
-                              <div className="space-y-4 pt-3 border-t border-border">
-                                <div className="space-y-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => setIsValuesOpen(!isValuesOpen)}
-                                    className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-primary transition-colors w-full text-left"
-                                  >
-                                    <ChevronDown className={`w-4 h-4 transition-transform ${isValuesOpen ? '' : '-rotate-90'}`} />
-                                    <span>Values</span>
-                                  </button>
-
-                                  {isValuesOpen && (
-                                    <div className="space-y-3 pl-2 animate-in fade-in duration-150">
-                                      <div className="space-y-1">
-                                        <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Decimals</label>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max="5"
-                                          value={selectedWidget.config.decimals !== undefined ? selectedWidget.config.decimals : 1}
-                                          onChange={(e) => updateWidgetConfig({ ...selectedWidget.config, decimals: e.target.value === '' ? 0 : Math.max(0, Number(e.target.value)) })}
-                                          className="w-full text-xs font-semibold p-2 border border-border rounded-lg bg-secondary/20 text-foreground"
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
+                            </>
+                          )}
+                        </div>
 
                       {/* Delete Widget Button inside Sidebar Settings */}
                       <div className="pt-4 border-t border-border mt-auto">
@@ -2214,12 +2929,15 @@ export default function InsightsPage() {
                 <div className="flex-1 overflow-y-auto p-3 space-y-1 text-xs">
                   {(() => {
                     const selectedAsset = assets.find(a => a.id === pickerSelectedAssetId);
-                    let attributes = selectedAsset ? getAssetAttributes(selectedAsset.id) : [
-                      { value: 'temperature', label: 'Temperature (°C)' },
-                      { value: 'humidity', label: 'Humidity (%)' },
-                      { value: 'battery', label: 'Battery (V)' },
-                      { value: 'rssi', label: 'RSSI (dBm)' }
-                    ];
+                    let attributes = selectedAsset ? getAssetAttributes(selectedAsset.id) : [];
+
+                    if (attributes.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12 select-none">
+                          <p className="text-xs font-semibold text-muted-foreground">No attributes found</p>
+                        </div>
+                      );
+                    }
 
                     return attributes.map(attr => {
                       const isSelected = pickerSelectedAttribute === attr.value;
@@ -2269,13 +2987,32 @@ export default function InsightsPage() {
                   const asset = assets.find(a => a.id === pickerSelectedAssetId);
                   const assetName = asset?.name || 'Weather Station';
 
-                  updateWidgetConfig({
-                    ...selectedWidget.config,
-                    assetId: pickerSelectedAssetId,
-                    attribute: pickerSelectedAttribute,
-                    attributes: [pickerSelectedAttribute],
-                    title: `${assetName} - ${pickerSelectedAttribute}`
-                  });
+                  if (selectedWidget.type === 'chart') {
+                    const currentTargets = selectedWidget.config.targets || [];
+                    const exists = currentTargets.some(
+                      (t: any) => t.assetId === pickerSelectedAssetId && t.attribute === pickerSelectedAttribute
+                    );
+                    const updatedTargets = exists
+                      ? currentTargets
+                      : [...currentTargets, { assetId: pickerSelectedAssetId, attribute: pickerSelectedAttribute }];
+
+                    updateWidgetConfig({
+                      ...selectedWidget.config,
+                      assetId: pickerSelectedAssetId,
+                      attribute: pickerSelectedAttribute,
+                      attributes: [pickerSelectedAttribute],
+                      targets: updatedTargets,
+                      title: selectedWidget.config.title || `${assetName} - ${pickerSelectedAttribute}`
+                    });
+                  } else {
+                    updateWidgetConfig({
+                      ...selectedWidget.config,
+                      assetId: pickerSelectedAssetId,
+                      attribute: pickerSelectedAttribute,
+                      attributes: [pickerSelectedAttribute],
+                      title: `${assetName} - ${pickerSelectedAttribute}`
+                    });
+                  }
 
                   setIsAttrPickerOpen(false);
                 }}
@@ -2286,6 +3023,174 @@ export default function InsightsPage() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* LINKED ASSETS TREE SELECT MODAL */}
+      {isLinkedAssetsOpen && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150">
+            {/* Modal Title Bar */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-card">
+              <h3 className="text-sm font-bold text-foreground">Linked assets</h3>
+              <button
+                type="button"
+                onClick={() => setIsLinkedAssetsOpen(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Sub Header (Green Bar) */}
+            <div
+              className="px-4 py-2.5 flex items-center justify-between text-white font-bold text-xs shadow-inner"
+              style={{ backgroundColor: primaryAccentColor }}
+            >
+              <span>Assets</span>
+              <SlidersHorizontal className="w-4 h-4 opacity-90" />
+            </div>
+
+            {/* Filter Input Bar */}
+            <div className="p-3 border-b border-border bg-secondary/20">
+              <input
+                type="text"
+                placeholder="Filter..."
+                value={linkedAssetsFilter}
+                onChange={(e) => setLinkedAssetsFilter(e.target.value)}
+                className="w-full text-xs p-2 rounded-lg border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-primary font-medium"
+              />
+            </div>
+
+            {/* Hierarchical Tree List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-1 text-xs min-h-[220px]">
+              {(() => {
+                const selectedWidget = widgets.find(w => w.id === selectedWidgetId);
+                const currentAssetType = selectedWidget?.config?.assetType || '';
+
+                const assetMap = new Map();
+                assets.forEach(a => assetMap.set(a.id, { ...a, children: [] }));
+
+                const roots: any[] = [];
+                assets.forEach(a => {
+                  const item = assetMap.get(a.id);
+                  if (a.parentId && assetMap.has(a.parentId)) {
+                    assetMap.get(a.parentId).children.push(item);
+                  } else {
+                    roots.push(item);
+                  }
+                });
+
+                const flattened: { asset: any; depth: number; hasChildren: boolean; isCollapsed: boolean }[] = [];
+                const traverse = (list: any[], depth: number) => {
+                  list.forEach(node => {
+                    const isCollapsed = !!collapsedLinkedAssetIds[node.id];
+                    const matches = !linkedAssetsFilter || node.name.toLowerCase().includes(linkedAssetsFilter.toLowerCase()) || (node.children && node.children.some((c: any) => c.name.toLowerCase().includes(linkedAssetsFilter.toLowerCase())));
+                    if (matches) {
+                      flattened.push({ asset: node, depth, hasChildren: node.children.length > 0, isCollapsed });
+                      if (!isCollapsed || linkedAssetsFilter) {
+                        traverse(node.children, depth + 1);
+                      }
+                    }
+                  });
+                };
+                traverse(roots, 0);
+
+                if (flattened.length === 0) {
+                  return <div className="text-center py-8 text-xs text-muted-foreground">No assets found</div>;
+                }
+
+                return flattened.map(({ asset, depth, hasChildren, isCollapsed }) => {
+                  const isMatchingType = !currentAssetType || String(asset.type || '').toUpperCase() === String(currentAssetType).toUpperCase();
+                  const isChecked = linkedAssetsSelectedIds.has(asset.id);
+                  const { IconComp, color: iconColor } = getAssetIconAndColor(asset, asset.name, dbAssetTypes);
+                  const indentPadding = Math.min(depth * 14 + 10, 48);
+
+                  return (
+                    <div
+                      key={asset.id}
+                      style={{ paddingLeft: `${indentPadding}px` }}
+                      className={`flex items-center gap-2 pr-3 py-1.5 rounded-lg transition-all ${
+                        isMatchingType
+                          ? 'hover:bg-secondary/60 cursor-pointer text-foreground'
+                          : 'opacity-40 cursor-not-allowed text-muted-foreground'
+                      }`}
+                      onClick={() => {
+                        if (!isMatchingType) return;
+                        setLinkedAssetsSelectedIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(asset.id)) {
+                            next.delete(asset.id);
+                          } else {
+                            next.add(asset.id);
+                          }
+                          return next;
+                        });
+                      }}
+                    >
+                      {hasChildren ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCollapsedLinkedAssetIds(prev => ({ ...prev, [asset.id]: !prev[asset.id] }));
+                          }}
+                          className="p-0.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground shrink-0 transition-transform"
+                        >
+                          {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </button>
+                      ) : (
+                        <span className="w-3.5 h-3.5 shrink-0" />
+                      )}
+
+                      <IconComp className="w-3.5 h-3.5 shrink-0" style={{ color: iconColor }} />
+                      <span className="truncate text-xs font-semibold flex-1">{asset.name}</span>
+
+                      {/* Checkbox */}
+                      <input
+                        type="checkbox"
+                        disabled={!isMatchingType}
+                        checked={isChecked}
+                        onChange={() => {}}
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:cursor-not-allowed shrink-0"
+                      />
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Footer Controls */}
+            <div className="px-5 py-3 border-t border-border bg-card flex items-center justify-end gap-4">
+              <button
+                type="button"
+                onClick={() => setIsLinkedAssetsOpen(false)}
+                style={{ color: primaryAccentColor }}
+                className="text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer hover:opacity-80"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const selectedWidget = widgets.find(w => w.id === selectedWidgetId);
+                  if (!selectedWidget) return;
+
+                  const selectedArray = Array.from(linkedAssetsSelectedIds);
+                  updateWidgetConfig({
+                    ...selectedWidget.config,
+                    selectedAssetIds: selectedArray,
+                    assetId: selectedArray[0] || selectedWidget.config.assetId || ''
+                  });
+                  setIsLinkedAssetsOpen(false);
+                }}
+                style={{ color: primaryAccentColor }}
+                className="text-xs font-extrabold uppercase tracking-wider transition-colors cursor-pointer hover:opacity-80"
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
       )}

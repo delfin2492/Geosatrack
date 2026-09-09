@@ -35,6 +35,9 @@ import {
   Copy,
   Search,
   Check,
+  Send,
+  Loader2,
+  LocateFixed,
   Truck, Wrench, Battery, Zap, Plug, Box, Building, DoorClosed, Car, Tv, Navigation, Layers, Wifi, Database, Server, Anchor, Gauge, Compass, Eye, Settings, SlidersHorizontal, Lightbulb, Monitor, Cpu, Radio, Tag
 } from 'lucide-react';
 
@@ -43,6 +46,21 @@ const ICON_MAP: Record<string, React.ElementType> = {
 };
 
 let globalDbAssetTypesCache: any[] = [];
+
+interface AssetAttribute {
+  name: string;
+  dataType: string; // 'Number' | 'String' | 'JSON' | 'Text' | 'Integer' | 'Boolean'
+  unit: string;
+  value?: any;
+  lastUpdated?: string;
+  readOnly?: boolean;
+  mqttAgentId?: string;
+  mqttTopic?: string;
+  mqttPublishTopic?: string;
+  mqttValuePath?: string;
+  mqttDecodeFunctionCode?: string;
+}
+
 export const setGlobalAssetTypesCache = (types: any[]) => {
   globalDbAssetTypesCache = types;
 };
@@ -230,12 +248,10 @@ const defaultAttributesLookup: Record<string, { name: string; dataType: string; 
     { name: 'pressure', dataType: 'Number', unit: 'hPa' }
   ],
   ANCHOR: [
-    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'anchorId', dataType: 'String', unit: '' },
     { name: 'voltage', dataType: 'Number', unit: 'V' }
   ],
   FORKLIFT: [
-    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'vehicleCode', dataType: 'String', unit: '' },
     { name: 'operator', dataType: 'String', unit: '' },
     { name: 'temperature', dataType: 'Number', unit: '°C' },
@@ -243,13 +259,11 @@ const defaultAttributesLookup: Record<string, { name: string; dataType: string; 
     { name: 'battery', dataType: 'Number', unit: 'V' }
   ],
   MACHINE: [
-    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'machineCode', dataType: 'String', unit: '' },
     { name: 'temperature', dataType: 'Number', unit: '°C' },
     { name: 'status', dataType: 'String', unit: '' }
   ],
   MESH_EYE_SENSOR: [
-    { name: 'location', dataType: 'GeoPoint', unit: 'GPS' },
     { name: 'temperature', dataType: 'Number', unit: '°C' },
     { name: 'humidity', dataType: 'Number', unit: '%' },
     { name: 'voltage', dataType: 'Number', unit: 'V' },
@@ -612,6 +626,7 @@ export default function AssetsPage() {
 
   // Mode states: 'view' | 'edit'
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const [isScrolled, setIsScrolled] = useState(false);
 
   // Selection states
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -681,10 +696,18 @@ export default function AssetsPage() {
   const [attrModalDataType, setAttrModalDataType] = useState('Number');
   const [attrModalUnit, setAttrModalUnit] = useState('');
   const [attrModalValue, setAttrModalValue] = useState<any>('');
+  const [attrModalReadOnly, setAttrModalReadOnly] = useState<boolean>(false);
   const [attrModalMqttAgentId, setAttrModalMqttAgentId] = useState('');
   const [attrModalMqttTopic, setAttrModalMqttTopic] = useState('');
+  const [attrModalMqttPublishTopic, setAttrModalMqttPublishTopic] = useState('');
   const [attrModalMqttValuePath, setAttrModalMqttValuePath] = useState('');
   const [attrModalMqttDecodeFunctionCode, setAttrModalMqttDecodeFunctionCode] = useState('');
+
+  // Send Command Modal states
+  const [sendCommandModalOpen, setSendCommandModalOpen] = useState(false);
+  const [selectedCommandAttr, setSelectedCommandAttr] = useState<{ attr: AssetAttribute; index: number } | null>(null);
+  const [commandPayload, setCommandPayload] = useState('');
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
 
   const handleOpenAddAttributeModal = () => {
     setEditingAttributeIndex(null);
@@ -692,8 +715,10 @@ export default function AssetsPage() {
     setAttrModalDataType('Number');
     setAttrModalUnit('');
     setAttrModalValue('');
+    setAttrModalReadOnly(false);
     setAttrModalMqttAgentId('');
     setAttrModalMqttTopic('');
+    setAttrModalMqttPublishTopic('');
     setAttrModalMqttValuePath('');
     setAttrModalMqttDecodeFunctionCode('');
     setAttributeModalOpen(true);
@@ -707,8 +732,10 @@ export default function AssetsPage() {
     setAttrModalDataType(attr.dataType || 'Number');
     setAttrModalUnit(attr.unit || '');
     setAttrModalValue(attr.value ?? '');
+    setAttrModalReadOnly(attr.readOnly ?? false);
     setAttrModalMqttAgentId(attr.mqttAgentId || '');
     setAttrModalMqttTopic(attr.mqttTopic || '');
+    setAttrModalMqttPublishTopic(attr.mqttPublishTopic || '');
     setAttrModalMqttValuePath(attr.mqttValuePath || '');
     setAttrModalMqttDecodeFunctionCode(attr.mqttDecodeFunctionCode || '');
     setAttributeModalOpen(true);
@@ -721,8 +748,10 @@ export default function AssetsPage() {
       dataType: attrModalDataType,
       unit: attrModalUnit,
       value: attrModalValue,
+      readOnly: attrModalReadOnly,
       mqttAgentId: attrModalMqttAgentId || undefined,
       mqttTopic: attrModalMqttTopic || undefined,
+      mqttPublishTopic: attrModalMqttPublishTopic || undefined,
       mqttValuePath: attrModalMqttValuePath || undefined,
       mqttDecodeFunctionCode: attrModalMqttDecodeFunctionCode || undefined
     };
@@ -735,6 +764,164 @@ export default function AssetsPage() {
     setAttributeModalOpen(false);
   };
 
+  const handleOpenSendCommandModal = (attr: AssetAttribute, idx: number) => {
+    setSelectedCommandAttr({ attr, index: idx });
+    let initialPayload = '';
+    if (attr.value !== undefined && attr.value !== null && attr.value !== '') {
+      if (typeof attr.value === 'object') {
+        try {
+          initialPayload = JSON.stringify(attr.value, null, 2);
+        } catch (e) {
+          initialPayload = String(attr.value);
+        }
+      } else {
+        initialPayload = String(attr.value);
+      }
+    } else if (attr.dataType === 'JSON') {
+      initialPayload = '{\n  \n}';
+    }
+    setCommandPayload(initialPayload);
+    setSendCommandModalOpen(true);
+  };
+
+  const handleExecuteSendCommand = async () => {
+    if (!selectedCommandAttr || !selectedAssetId || !tenantId) return;
+    setIsSendingCommand(true);
+    try {
+      let updatedValue: any = commandPayload;
+
+      // Handle JSON data type parsing & validation
+      if (selectedCommandAttr.attr.dataType === 'JSON') {
+        try {
+          updatedValue = JSON.parse(commandPayload);
+        } catch (jsonErr) {
+          showToast('error', 'Format JSON tidak valid. Harap periksa kembali sintaks JSON.');
+          setIsSendingCommand(false);
+          return;
+        }
+      } else if (selectedCommandAttr.attr.dataType === 'Number' || selectedCommandAttr.attr.dataType === 'Integer') {
+        const numVal = Number(commandPayload);
+        if (!isNaN(numVal)) {
+          updatedValue = numVal;
+        }
+      } else if (selectedCommandAttr.attr.dataType === 'Boolean') {
+        updatedValue = commandPayload === 'true';
+      }
+
+      const nowIso = new Date().toISOString();
+
+      const updatedAttrs = attributes.map((a, i) => {
+        if (i === selectedCommandAttr.index) {
+          return { ...a, value: updatedValue, lastUpdated: nowIso };
+        }
+        return a;
+      });
+
+      setAttributes(updatedAttrs);
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      // Call backend command endpoint to publish MQTT message to broker
+      const res = await fetch(`${getApiUrl()}/assets/${selectedAssetId}/command`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          attributeName: selectedCommandAttr.attr.name,
+          publishTopic: selectedCommandAttr.attr.mqttPublishTopic || mqttPublishTopic || undefined,
+          payload: updatedValue,
+          agentId: selectedCommandAttr.attr.mqttAgentId || mqttAgentId || undefined
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Gagal mempublish command MQTT ke broker.');
+      }
+
+      const result = await res.json();
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      await refreshAssets();
+      setSendCommandModalOpen(false);
+      showToast('success', `Command dipublish ke MQTT topic "${result.topic || selectedCommandAttr.attr.mqttPublishTopic || 'MQTT Broker'}".`);
+    } catch (err: any) {
+      showToast('error', err.message || 'Gagal mempublish command ke MQTT broker.');
+    } finally {
+      setIsSendingCommand(false);
+    }
+  };
+
+  const [attrInputValues, setAttrInputValues] = useState<Record<string, string>>({});
+  const [sendingAttrNames, setSendingAttrNames] = useState<Record<string, boolean>>({});
+
+  const handleDirectSendCommand = async (attr: AssetAttribute, rawInputValue: string) => {
+    if (!selectedAssetId || !tenantId) return;
+
+    const attrName = attr.name;
+    setSendingAttrNames(prev => ({ ...prev, [attrName]: true }));
+
+    try {
+      let payloadValue: any = rawInputValue;
+
+      if (attr.dataType === 'JSON') {
+        try {
+          payloadValue = JSON.parse(rawInputValue);
+        } catch (jsonErr) {
+          showToast('error', 'Format JSON tidak valid. Harap periksa kembali sintaks JSON.');
+          setSendingAttrNames(prev => ({ ...prev, [attrName]: false }));
+          return;
+        }
+      } else if (attr.dataType === 'Number' || attr.dataType === 'Integer') {
+        const numVal = Number(rawInputValue);
+        if (!isNaN(numVal)) {
+          payloadValue = numVal;
+        }
+      } else if (attr.dataType === 'Boolean') {
+        payloadValue = String(rawInputValue).toLowerCase() === 'true';
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${getApiUrl()}/assets/${selectedAssetId}/command`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          attributeName: attr.name,
+          publishTopic: attr.mqttPublishTopic || mqttPublishTopic || undefined,
+          payload: payloadValue,
+          agentId: attr.mqttAgentId || mqttAgentId || undefined
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Gagal mempublish command MQTT ke broker.');
+      }
+
+      const result = await res.json();
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      await refreshAssets();
+      showToast('success', `Command dipublish ke MQTT topic "${result.topic || attr.mqttPublishTopic || 'MQTT Broker'}".`);
+    } catch (err: any) {
+      showToast('error', err.message || 'Gagal mempublish command ke MQTT broker.');
+    } finally {
+      setSendingAttrNames(prev => ({ ...prev, [attrName]: false }));
+    }
+  };
+
   // Map Picker Modal state
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [mapPickerTargetIndex, setMapPickerTargetIndex] = useState<number | null>(null);
@@ -742,6 +929,13 @@ export default function AssetsPage() {
   const mapPickerContainerRef = useRef<HTMLDivElement | null>(null);
   const mapPickerInstanceRef = useRef<any>(null);
   const mapPickerMarkerRef = useRef<any>(null);
+
+  // Inline Attribute Map states & refs for GeoPoint GPS
+  const inlineAttrMapContainerRef = useRef<HTMLDivElement | null>(null);
+  const inlineAttrMapInstanceRef = useRef<any>(null);
+  const inlineAttrMarkerRef = useRef<any>(null);
+  const [inlineSearchQuery, setInlineSearchQuery] = useState('');
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
 
   // Asset-level Ingestion parameters
   const [mqttAgentId, setMqttAgentId] = useState('');
@@ -790,15 +984,17 @@ export default function AssetsPage() {
       if (pxIndex >= 0) {
         attrs[pxIndex].value = planX;
         attrs[pxIndex].lastUpdated = selectedAsset.updatedAt;
+        attrs[pxIndex].readOnly = true;
       }
-      else attrs.push({ name: 'position_x', dataType: 'float', unit: 'm', value: planX, lastUpdated: selectedAsset.updatedAt });
+      else attrs.push({ name: 'position_x', dataType: 'float', unit: 'm', value: planX, lastUpdated: selectedAsset.updatedAt, readOnly: true });
 
       const pyIndex = attrs.findIndex((a: any) => a.name === 'position_y');
       if (pyIndex >= 0) {
         attrs[pyIndex].value = planY;
         attrs[pyIndex].lastUpdated = selectedAsset.updatedAt;
+        attrs[pyIndex].readOnly = true;
       }
-      else attrs.push({ name: 'position_y', dataType: 'float', unit: 'm', value: planY, lastUpdated: selectedAsset.updatedAt });
+      else attrs.push({ name: 'position_y', dataType: 'float', unit: 'm', value: planY, lastUpdated: selectedAsset.updatedAt, readOnly: true });
     }
 
     return attrs;
@@ -926,6 +1122,9 @@ export default function AssetsPage() {
   }, [assets]);
 
   const handleSelectAsset = (asset: any) => {
+    setIsScrolled(false);
+    setAttrInputValues({});
+    setSendingAttrNames({});
     setSelectedAssetId(asset.id);
     setName(asset.name);
     setType(asset.type || 'FORKLIFT');
@@ -955,22 +1154,6 @@ export default function AssetsPage() {
           } else {
             const defaults = defaultAttributesLookup[asset.type] || [];
             loadedAttrs = defaults.map(d => ({ ...d, value: '' }));
-          }
-
-          // Ensure location attribute exists and is populated with asset's latitude & longitude if available
-          const hasLocation = loadedAttrs.some(a => a.dataType === 'GeoPoint' || a.name === 'location' || a.name === 'coordinates');
-          if (!hasLocation) {
-            const locVal = asset.latitude && asset.longitude ? `${asset.latitude}, ${asset.longitude}` : '';
-            loadedAttrs.unshift({ name: 'location', dataType: 'GeoPoint', unit: 'GPS', value: locVal });
-          } else {
-            loadedAttrs = loadedAttrs.map(a => {
-              if ((a.dataType === 'GeoPoint' || a.name === 'location' || a.name === 'coordinates') && (!a.value || a.value === '')) {
-                if (asset.latitude && asset.longitude) {
-                  return { ...a, value: `${asset.latitude}, ${asset.longitude}` };
-                }
-              }
-              return a;
-            });
           }
 
           setAttributes(loadedAttrs);
@@ -1251,14 +1434,25 @@ export default function AssetsPage() {
         maxZoom: 20,
       }).addTo(map);
 
-      const customIcon = L.icon({
-        iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41],
+      const currentType = selectedAsset?.type || addModalSelectedType || type || 'FORKLIFT';
+      const currentName = selectedAsset?.name || name || 'Asset';
+      const markerIconInfo = getAssetMarkerIcon(currentType, currentName, dbAssetTypes);
+      const pinColor = markerIconInfo.color || '#3b82f6';
+
+      const customIcon = L.divIcon({
+        className: 'custom-asset-picker-marker',
+        html: `
+          <div style="position: relative; width: 36px; height: 36px; cursor: grab;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="36" height="36" style="filter: drop-shadow(0px 3px 6px rgba(0,0,0,0.35));">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.8"/>
+            </svg>
+            <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
+              ${markerIconInfo.svg}
+            </div>
+          </div>
+        `,
+        iconSize: [36, 36],
+        iconAnchor: [18, 36],
       });
 
       const marker = L.marker([mapPickerCoords.lat, mapPickerCoords.lng], {
@@ -1291,6 +1485,166 @@ export default function AssetsPage() {
       }
     };
   }, [mapPickerOpen]);
+
+  // Leaflet Inline Map initialization inside Add/Edit Attribute Modal for GeoPoint GPS
+  useEffect(() => {
+    const isGpsType = attrModalDataType === 'GeoPoint' || attrModalName === 'location' || attrModalName === 'coordinates';
+    if (!attributeModalOpen || !isGpsType || typeof window === 'undefined') return;
+
+    const timer = setTimeout(() => {
+      const container = inlineAttrMapContainerRef.current;
+      if (!container) return;
+
+      const L = require('leaflet');
+      if ((container as any)._leaflet_id) {
+        (container as any)._leaflet_id = null;
+      }
+
+      let startLat = -6.168911;
+      let startLng = 106.899709;
+      const rawVal = typeof attrModalValue === 'object' && attrModalValue !== null
+        ? `${attrModalValue.lat ?? ''}, ${attrModalValue.lng ?? ''}`
+        : (attrModalValue ?? '');
+
+      if (rawVal && typeof rawVal === 'string' && rawVal.includes(',')) {
+        const parts = rawVal.split(',').map((s: string) => parseFloat(s.trim()));
+        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          startLat = parts[0];
+          startLng = parts[1];
+        }
+      }
+
+      const map = L.map(container, {
+        center: [startLat, startLng],
+        zoom: 15,
+        zoomControl: false,
+      });
+      inlineAttrMapInstanceRef.current = map;
+
+      // Add zoom control at bottom-left
+      L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+      L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        attribution: '© Google / OpenStreetMap',
+        maxZoom: 20,
+      }).addTo(map);
+
+      const currentType = selectedAsset?.type || addModalSelectedType || type || 'FORKLIFT';
+      const currentName = selectedAsset?.name || name || 'Asset';
+      const markerIconInfo = getAssetMarkerIcon(currentType, currentName, dbAssetTypes);
+      const pinColor = markerIconInfo.color || '#3b82f6';
+
+      const customIcon = L.divIcon({
+        className: 'custom-asset-inline-marker',
+        html: `
+          <div style="position: relative; width: 36px; height: 36px; cursor: grab;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${pinColor}" width="36" height="36" style="filter: drop-shadow(0px 3px 6px rgba(0,0,0,0.35));">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#ffffff" stroke-width="1.8"/>
+            </svg>
+            <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); color: white; display: flex; align-items: center; justify-content: center; z-index: 5;">
+              ${markerIconInfo.svg}
+            </div>
+          </div>
+        `,
+        iconSize: [36, 36],
+        iconAnchor: [18, 36],
+      });
+
+      const marker = L.marker([startLat, startLng], {
+        icon: customIcon,
+        draggable: true,
+      }).addTo(map);
+      inlineAttrMarkerRef.current = marker;
+
+      const updateCoordState = (lat: number, lng: number) => {
+        const formatted = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setAttrModalValue(formatted);
+      };
+
+      marker.on('dragend', (e: any) => {
+        const { lat, lng } = e.target.getLatLng();
+        updateCoordState(lat, lng);
+      });
+
+      map.on('click', (e: any) => {
+        const { lat, lng } = e.latlng;
+        marker.setLatLng([lat, lng]);
+        updateCoordState(lat, lng);
+      });
+
+      setTimeout(() => {
+        try {
+          map.invalidateSize();
+        } catch (e) { }
+      }, 200);
+    }, 150);
+
+    return () => {
+      clearTimeout(timer);
+      if (inlineAttrMapInstanceRef.current) {
+        try {
+          inlineAttrMapInstanceRef.current.remove();
+        } catch (e) { }
+        inlineAttrMapInstanceRef.current = null;
+      }
+    };
+  }, [attributeModalOpen, attrModalDataType]);
+
+  const handleInlineSearchLocation = async () => {
+    if (!inlineSearchQuery.trim()) return;
+    setIsSearchingLocation(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(inlineSearchQuery.trim())}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+          if (!isNaN(lat) && !isNaN(lon)) {
+            if (inlineAttrMapInstanceRef.current) {
+              inlineAttrMapInstanceRef.current.setView([lat, lon], 15);
+            }
+            if (inlineAttrMarkerRef.current) {
+              inlineAttrMarkerRef.current.setLatLng([lat, lon]);
+            }
+            setAttrModalValue(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+            showToast('info', `Found: ${data[0].display_name.split(',')[0]}`);
+          }
+        } else {
+          showToast('error', 'Lokasi tidak ditemukan.');
+        }
+      }
+    } catch (e) {
+      showToast('error', 'Gagal melakukan pencarian lokasi.');
+    } finally {
+      setIsSearchingLocation(false);
+    }
+  };
+
+  const handleInlineLocateMe = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      showToast('error', 'Browser tidak mendukung GPS Geolocation.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        if (inlineAttrMapInstanceRef.current) {
+          inlineAttrMapInstanceRef.current.setView([lat, lng], 16);
+        }
+        if (inlineAttrMarkerRef.current) {
+          inlineAttrMarkerRef.current.setLatLng([lat, lng]);
+        }
+        setAttrModalValue(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+        showToast('success', 'Lokasi GPS ditetapkan ke posisi Anda saat ini.');
+      },
+      (err) => {
+        showToast('error', `Gagal mengambil lokasi GPS: ${err.message}`);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   // Leaflet view-only map initialization inside inspector panel
   useEffect(() => {
@@ -1585,323 +1939,345 @@ export default function AssetsPage() {
       </Card>
 
       {/* RIGHT COLUMN: INSPECTOR & CONFIG PANEL */}
-      <Card className="flex-1 flex flex-col overflow-hidden border border-border shadow-xl">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {mode === 'edit' ? (
           /* ==================== EDIT FORM ==================== */
-          <form onSubmit={handleUpdateAsset} className="flex-1 flex flex-col justify-between overflow-hidden">
-            <CardHeader className="py-4 flex flex-row items-center justify-between border-b bg-secondary/15">
-              <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                {(() => {
-                  const TypeIcon = getTypeIcon(selectedAsset?.type || 'FORKLIFT');
-                  return <TypeIcon className="h-4.5 w-4.5 shrink-0 animate-pulse" style={{ color: getTypeColor(selectedAsset?.type || 'FORKLIFT') || 'var(--primary)' }} />;
-                })()}
-                Modify: {selectedAsset?.name} ({selectedAsset?.type})
-              </CardTitle>
-              <Button
-                type="button"
-                onClick={() => setMode('view')}
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </CardHeader>
+          <Card className="flex-1 flex flex-col justify-between overflow-hidden border border-border shadow-md">
+            <form onSubmit={handleUpdateAsset} className="flex-1 flex flex-col justify-between overflow-hidden">
+              <CardHeader className="py-4 flex flex-row items-center justify-between border-b bg-secondary/15">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                  {(() => {
+                    const TypeIcon = getTypeIcon(selectedAsset?.type || 'FORKLIFT');
+                    return <TypeIcon className="h-4.5 w-4.5 shrink-0 animate-pulse" style={{ color: getTypeColor(selectedAsset?.type || 'FORKLIFT') || 'var(--primary)' }} />;
+                  })()}
+                  Modify: {selectedAsset?.name} ({selectedAsset?.type})
+                </CardTitle>
+                <Button
+                  type="button"
+                  onClick={() => setMode('view')}
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </CardHeader>
 
-            <CardContent className="p-6 space-y-4 flex-1 overflow-y-auto pt-6 text-xs font-semibold">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-muted-foreground">Name *</label>
-                  <Input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                  />
-                </div>
+              <CardContent className="p-6 space-y-4 flex-1 overflow-y-auto pt-6 text-xs font-semibold">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-muted-foreground">Name *</label>
+                    <Input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                    />
+                  </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-muted-foreground">Parent Asset</label>
-                  <TreeAssetPicker
-                    assets={assets}
-                    value={parentId}
-                    onChange={(val) => setParentId(val)}
-                    disabledAssetId={selectedAssetId || undefined}
-                    placeholder="(None / Root Asset)"
-                  />
-                </div>
+                  <div className="space-y-1.5">
+                    <label className="text-muted-foreground">Parent Asset</label>
+                    <TreeAssetPicker
+                      assets={assets}
+                      value={parentId}
+                      onChange={(val) => setParentId(val)}
+                      disabledAssetId={selectedAssetId || undefined}
+                      placeholder="(None / Root Asset)"
+                    />
+                  </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-muted-foreground">Device Address / Serial Number (Optional)</label>
-                  <Input
-                    type="text"
-                    value={tagId}
-                    onChange={(e) => setTagId(e.target.value)}
-                    placeholder="e.g. node-439201 or 439201"
-                  />
-                </div>
-              </div>
-
-              {/* Dynamic Connection Credentials Form (For Agents) */}
-              {type.startsWith('AGENT_') && currentEditFieldsConfig.length > 0 && (
-                <div className="space-y-4 pt-4 border-t border-border/60">
-                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Required Connection Credentials</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {currentEditFieldsConfig.map((field) => (
-                      <div key={field.key} className="space-y-1.5">
-                        <label className="text-muted-foreground">{field.label}</label>
-                        {field.type === 'select' ? (
-                          <CustomSelect
-                            value={customFields[field.key] || ''}
-                            onChange={(val) => handleCustomFieldChange(field.key, val)}
-                            placeholder="Select option..."
-                            options={[
-                              { value: '', label: 'Select option...' },
-                              ...(field.options?.map((opt) => ({ value: opt, label: opt })) || [])
-                            ]}
-                          />
-                        ) : (
-                          <Input
-                            type={field.type || 'text'}
-                            value={customFields[field.key] || ''}
-                            onChange={(e) => handleCustomFieldChange(field.key, e.target.value)}
-                            placeholder={field.placeholder}
-                          />
-                        )}
-                      </div>
-                    ))}
+                  <div className="space-y-1.5">
+                    <label className="text-muted-foreground">Device Address / Serial Number (Optional)</label>
+                    <Input
+                      type="text"
+                      value={tagId}
+                      onChange={(e) => setTagId(e.target.value)}
+                      placeholder="e.g. node-439201 or 439201"
+                    />
                   </div>
                 </div>
-              )}
 
-              {/* Asset-Level MQTT Ingestion Configuration (For physical assets) */}
-              {!type.startsWith('AGENT_') && (
-                <div className="space-y-3.5 pt-4 border-t border-border/60">
-                  <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Asset-Level Ingestion Configuration (Optional)</span>
+                {/* Dynamic Connection Credentials Form (For Agents) */}
+                {type.startsWith('AGENT_') && currentEditFieldsConfig.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t border-border/60">
+                    <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Required Connection Credentials</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {currentEditFieldsConfig.map((field) => (
+                        <div key={field.key} className="space-y-1.5">
+                          <label className="text-muted-foreground">{field.label}</label>
+                          {field.type === 'select' ? (
+                            <CustomSelect
+                              value={customFields[field.key] || ''}
+                              onChange={(val) => handleCustomFieldChange(field.key, val)}
+                              placeholder="Select option..."
+                              options={[
+                                { value: '', label: 'Select option...' },
+                                ...(field.options?.map((opt) => ({ value: opt, label: opt })) || [])
+                              ]}
+                            />
+                          ) : (
+                            <Input
+                              type={field.type || 'text'}
+                              value={customFields[field.key] || ''}
+                              onChange={(e) => handleCustomFieldChange(field.key, e.target.value)}
+                              placeholder={field.placeholder}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1">
-                      <label className="text-muted-foreground">MQTT Agent Link</label>
-                      <CustomSelect
-                        value={mqttAgentId}
-                        onChange={(val) => {
-                          setMqttAgentId(val);
-                          const linked = assets.find(a => a.id === val);
-                          if (linked?.type === 'AGENT_MQTT_TELTONIKA') {
-                            setMqttTopic('json-gw-event/received_data/#');
-                            setMqttDecodeFunctionCode(defaultTeltonikaDecodeCode);
-                          } else {
-                            setMqttTopic('');
-                            setMqttDecodeFunctionCode('');
-                          }
-                        }}
-                        placeholder="(None / Static Asset)"
-                        options={[
-                          { value: '', label: '(None / Static Asset)' },
-                          ...assets
-                            .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
-                            .map(a => ({
-                              value: a.id,
-                              label: `${a.name} (${a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})`
-                            }))
-                        ]}
-                      />
+                {/* Asset-Level MQTT Ingestion Configuration (For physical assets) */}
+                {!type.startsWith('AGENT_') && (
+                  <div className="space-y-3.5 pt-4 border-t border-border/60">
+                    <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Asset-Level Ingestion Configuration (Optional)</span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground">MQTT Agent Link</label>
+                        <CustomSelect
+                          value={mqttAgentId}
+                          onChange={(val) => {
+                            setMqttAgentId(val);
+                            const linked = assets.find(a => a.id === val);
+                            if (linked?.type === 'AGENT_MQTT_TELTONIKA') {
+                              setMqttTopic('json-gw-event/received_data/#');
+                              setMqttDecodeFunctionCode(defaultTeltonikaDecodeCode);
+                            } else {
+                              setMqttTopic('');
+                              setMqttDecodeFunctionCode('');
+                            }
+                          }}
+                          placeholder="(None / Static Asset)"
+                          options={[
+                            { value: '', label: '(None / Static Asset)' },
+                            ...assets
+                              .filter(a => a.type === 'AGENT_MQTT_TELTONIKA' || a.type === 'AGENT_MQTT_GENERIC')
+                              .map(a => ({
+                                value: a.id,
+                                label: `${a.name} (${a.type === 'AGENT_MQTT_TELTONIKA' ? 'Teltonika' : 'Generic'})`
+                              }))
+                          ]}
+                        />
+                      </div>
+
+                      {mqttAgentId && (
+                        <div className="space-y-1">
+                          <label className="text-muted-foreground">Subscribe Topic</label>
+                          <Input
+                            type="text"
+                            value={mqttTopic}
+                            onChange={(e) => setMqttTopic(e.target.value)}
+                            placeholder="e.g. json-gw-event/received_data/#"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {mqttAgentId && (
-                      <div className="space-y-1">
-                        <label className="text-muted-foreground">Subscribe Topic</label>
-                        <Input
-                          type="text"
-                          value={mqttTopic}
-                          onChange={(e) => setMqttTopic(e.target.value)}
-                          placeholder="e.g. json-gw-event/received_data/#"
-                        />
+                      <div className="space-y-3.5 pt-1">
+                        <div className="grid grid-cols-1 gap-3.5">
+                          <div className="space-y-1">
+                            <label className="text-muted-foreground">Publish Topic</label>
+                            <Input
+                              type="text"
+                              value={mqttPublishTopic}
+                              onChange={(e) => setMqttPublishTopic(e.target.value)}
+                              placeholder="e.g. gateway/publish/topic"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-muted-foreground flex items-center gap-1.5">
+                              <Code className="h-3.5 w-3.5 text-primary" />
+                              JavaScript Payload Decoder Function (Node-RED format)
+                            </label>
+                            <Badge variant="outline" className="text-[9px]">vm sandbox (1s timeout)</Badge>
+                          </div>
+                          <textarea
+                            rows={12}
+                            value={mqttDecodeFunctionCode}
+                            onChange={(e) => setMqttDecodeFunctionCode(e.target.value)}
+                            className="w-full font-mono text-[11px] p-3.5 bg-black/75 text-emerald-400 border border-border/80 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed"
+                            placeholder="// Write custom JS code..."
+                          />
+                          <p className="text-[9.5px] text-muted-foreground leading-normal">
+                            Write a function that manipulates the <code>msg</code> object and returns it. Context exposes <code>msg.payload</code>, <code>msg.topic</code>, and global <code>Buffer</code>.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
+                )}
 
-                  {mqttAgentId && (
-                    <div className="space-y-3.5 pt-1">
-                      <div className="grid grid-cols-1 gap-3.5">
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground">Publish Topic</label>
-                          <Input
-                            type="text"
-                            value={mqttPublishTopic}
-                            onChange={(e) => setMqttPublishTopic(e.target.value)}
-                            placeholder="e.g. gateway/publish/topic"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <label className="text-muted-foreground flex items-center gap-1.5">
-                            <Code className="h-3.5 w-3.5 text-primary" />
-                            JavaScript Payload Decoder Function (Node-RED format)
-                          </label>
-                          <Badge variant="outline" className="text-[9px]">vm sandbox (1s timeout)</Badge>
-                        </div>
-                        <textarea
-                          rows={12}
-                          value={mqttDecodeFunctionCode}
-                          onChange={(e) => setMqttDecodeFunctionCode(e.target.value)}
-                          className="w-full font-mono text-[11px] p-3.5 bg-black/75 text-emerald-400 border border-border/80 rounded-xl focus:outline-none focus:border-primary resize-none leading-relaxed"
-                          placeholder="// Write custom JS code..."
-                        />
-                        <p className="text-[9.5px] text-muted-foreground leading-normal">
-                          Write a function that manipulates the <code>msg</code> object and returns it. Context exposes <code>msg.payload</code>, <code>msg.topic</code>, and global <code>Buffer</code>.
-                        </p>
-                      </div>
+                {/* Dynamic Metadata Attributes Editor (For physical assets) */}
+                {!type.startsWith('AGENT_') && (
+                  <div className="space-y-4 pt-4 border-t border-border/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Dynamic Asset Attributes</span>
+                      <Button
+                        type="button"
+                        onClick={handleOpenAddAttributeModal}
+                        variant="outline"
+                        className="h-7 text-[10px] uppercase font-bold px-2 flex items-center gap-1.5 cursor-pointer hover:bg-primary/10 hover:text-primary"
+                      >
+                        <Plus className="h-3 w-3 text-primary" />
+                        Add Attribute
+                      </Button>
                     </div>
-                  )}
-                </div>
-              )}
 
-              {/* Dynamic Metadata Attributes Editor (For physical assets) */}
-              {!type.startsWith('AGENT_') && (
-                <div className="space-y-4 pt-4 border-t border-border/60">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-primary uppercase font-bold tracking-wider">Dynamic Asset Attributes</span>
-                    <Button
-                      type="button"
-                      onClick={handleOpenAddAttributeModal}
-                      variant="outline"
-                      className="h-7 text-[10px] uppercase font-bold px-2 flex items-center gap-1.5 cursor-pointer hover:bg-primary/10 hover:text-primary"
-                    >
-                      <Plus className="h-3 w-3 text-primary" />
-                      Add Attribute
-                    </Button>
-                  </div>
-
-                  {attributes.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-4 font-semibold text-xs italic">No attributes configured.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
-                      {attributes.map((attr, idx) => {
-                        const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
-                        return (
-                          <div key={idx} className="p-3 bg-secondary/15 border border-border/60 hover:border-primary/40 rounded-xl flex items-center justify-between transition-all">
-                            <div className="flex items-center gap-3 truncate">
-                              <Tag className="h-4 w-4 text-primary shrink-0" />
-                              <div className="space-y-0.5 truncate">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-xs text-foreground truncate">{attr.name || 'Unnamed Attribute'}</span>
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-background border border-border text-muted-foreground shrink-0">
-                                    {attr.dataType}
-                                  </span>
-                                  {attr.unit && (
-                                    <span className="text-[10px] text-muted-foreground font-mono shrink-0">({attr.unit})</span>
+                    {attributes.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-4 font-semibold text-xs italic">No attributes configured.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                        {attributes.map((attr, idx) => {
+                          const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
+                          return (
+                            <div key={idx} className="p-3 bg-secondary/15 border border-border/60 hover:border-primary/40 rounded-xl flex items-center justify-between transition-all">
+                              <div className="flex items-center gap-3 truncate">
+                                <Tag className="h-4 w-4 text-primary shrink-0" />
+                                <div className="space-y-0.5 truncate">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-xs text-foreground truncate">{attr.name || 'Unnamed Attribute'}</span>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-background border border-border text-muted-foreground shrink-0">
+                                      {attr.dataType}
+                                    </span>
+                                    {attr.unit && (
+                                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">({attr.unit})</span>
+                                    )}
+                                  </div>
+                                  {attr.value !== undefined && attr.value !== '' && (
+                                    <p className="text-[10px] text-muted-foreground truncate max-w-xs font-mono">
+                                      Value: {typeof attr.value === 'object' ? JSON.stringify(attr.value) : String(attr.value)}
+                                    </p>
                                   )}
                                 </div>
-                                {attr.value !== undefined && attr.value !== '' && (
-                                  <p className="text-[10px] text-muted-foreground truncate max-w-xs font-mono">
-                                    Value: {typeof attr.value === 'object' ? JSON.stringify(attr.value) : String(attr.value)}
-                                  </p>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {linkedAgent && (
+                                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[9px] uppercase font-bold tracking-wide" title="Linked to IoT Agent">
+                                    <Activity className="h-3 w-3" />
+                                    <span className="hidden sm:inline">Linked</span>
+                                  </div>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditAttributeModal(idx)}
+                                  className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
+                                  title="Edit Attribute"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAttributes(prev => prev.filter((_, i) => i !== idx))}
+                                  className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
+                                  title="Remove Attribute"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
                               </div>
                             </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                            <div className="flex items-center gap-2 shrink-0">
-                              {linkedAgent && (
-                                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[9px] uppercase font-bold tracking-wide" title="Linked to IoT Agent">
-                                  <Activity className="h-3 w-3" />
-                                  <span className="hidden sm:inline">Linked</span>
-                                </div>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditAttributeModal(idx)}
-                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
-                                title="Edit Attribute"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setAttributes(prev => prev.filter((_, i) => i !== idx))}
-                                className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
-                                title="Remove Attribute"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                <div className="space-y-1.5 pt-3">
+                  <label className="text-muted-foreground">Notes / General Description</label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary resize-none text-xs font-semibold"
+                  />
                 </div>
-              )}
+              </CardContent>
 
-              <div className="space-y-1.5 pt-3">
-                <label className="text-muted-foreground">Notes / General Description</label>
-                <textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-secondary/35 border border-border px-3 py-2 rounded-lg text-foreground focus:outline-none focus:border-primary resize-none text-xs font-semibold"
-                />
+              <div className="p-4 border-t border-border flex items-center justify-end gap-3 bg-secondary/10 shrink-0">
+                <Button type="button" onClick={() => setMode('view')} variant="outline">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  <Save className="h-3.5 w-3.5 mr-1.5" />
+                  {isSubmitting ? 'Saving...' : 'Save Configuration'}
+                </Button>
               </div>
-            </CardContent>
-
-            <div className="p-4 border-t border-border flex items-center justify-end gap-3 bg-secondary/10 shrink-0">
-              <Button type="button" onClick={() => setMode('view')} variant="outline">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                <Save className="h-3.5 w-3.5 mr-1.5" />
-                {isSubmitting ? 'Saving...' : 'Save Configuration'}
-              </Button>
-            </div>
-          </form>
+            </form>
+          </Card>
         ) : (
           /* ==================== VIEW MODE ==================== */
           <>
             {selectedAsset ? (
-              <div className="flex-1 flex flex-col min-h-0">
-                <div className="border-b border-border p-4 flex items-center justify-between bg-secondary/15 shrink-0">
-                  <div className="space-y-0.5">
-                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                      {(() => {
-                        const TypeIcon = getTypeIcon(selectedAsset.type);
-                        return <TypeIcon className="h-4.5 w-4.5 shrink-0" style={{ color: getTypeColor(selectedAsset.type) || 'currentColor' }} />;
-                      })()}
+              <div
+                onScroll={(e) => setIsScrolled(e.currentTarget.scrollTop > 5)}
+                className="flex-1 flex flex-col min-h-0 overflow-y-auto pr-1"
+              >
+                <div
+                  className={`sticky top-0 z-30 bg-background/95 backdrop-blur-md py-3 flex items-center justify-between shrink-0 mb-4 px-2 transition-all duration-200 ${isScrolled
+                    ? 'border-b border-border/60 shadow-xs'
+                    : 'border-b border-transparent shadow-none'
+                    }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    {(() => {
+                      const TypeIcon = getTypeIcon(selectedAsset.type);
+                      return <TypeIcon className="h-5 w-5 shrink-0" style={{ color: getTypeColor(selectedAsset.type) || 'currentColor' }} />;
+                    })()}
+                    <h3 className="text-sm font-bold text-foreground">
                       {selectedAsset.name}
                     </h3>
-                    <p className="text-[10px] text-muted-foreground">
-                      Created: {selectedAsset.createdAt ? new Date(selectedAsset.createdAt).toLocaleString() : '--'}
-                    </p>
                   </div>
-                  {isAdmin && (
-                    <Button
-                      onClick={() => {
-                        setName(selectedAsset.name);
-                        setType(selectedAsset.type || 'FORKLIFT');
-                        setParentId(selectedAsset.parentId || '');
-                        setLatitude(selectedAsset.latitude !== null && selectedAsset.latitude !== undefined ? String(selectedAsset.latitude) : '');
-                        setLongitude(selectedAsset.longitude !== null && selectedAsset.longitude !== undefined ? String(selectedAsset.longitude) : '');
 
-                        try {
-                          if (selectedAsset.description && selectedAsset.description.startsWith('{')) {
-                            const parsed = JSON.parse(selectedAsset.description);
-                            setCustomFields(parsed);
-                            setDescription(parsed.notes || '');
-                            setMqttAgentId(parsed.mqttAgentId || '');
-                            setMqttTopic(parsed.mqttTopic || '');
-                            setMqttPublishTopic(parsed.mqttPublishTopic || '');
-                            setMqttDecodeFunctionCode(parsed.mqttDecodeFunctionCode || '');
+                  <div className="flex items-center gap-4">
+                    <span className="text-[11px] text-muted-foreground font-medium hidden sm:inline">
+                      Created: {selectedAsset.createdAt ? new Date(selectedAsset.createdAt).toLocaleString() : '--'}
+                    </span>
+                    {isAdmin && (
+                      <Button
+                        onClick={() => {
+                          setName(selectedAsset.name);
+                          setType(selectedAsset.type || 'FORKLIFT');
+                          setParentId(selectedAsset.parentId || '');
+                          setLatitude(selectedAsset.latitude !== null && selectedAsset.latitude !== undefined ? String(selectedAsset.latitude) : '');
+                          setLongitude(selectedAsset.longitude !== null && selectedAsset.longitude !== undefined ? String(selectedAsset.longitude) : '');
 
-                            if (!selectedAsset.type.startsWith('AGENT_')) {
-                              if (parsed.attributes && Array.isArray(parsed.attributes)) {
-                                setAttributes(parsed.attributes);
-                              } else {
-                                const defaults = defaultAttributesLookup[selectedAsset.type] || [];
-                                setAttributes(defaults.map(d => ({ ...d, value: '' })));
+                          try {
+                            if (selectedAsset.description && selectedAsset.description.startsWith('{')) {
+                              const parsed = JSON.parse(selectedAsset.description);
+                              setCustomFields(parsed);
+                              setDescription(parsed.notes || '');
+                              setMqttAgentId(parsed.mqttAgentId || '');
+                              setMqttTopic(parsed.mqttTopic || '');
+                              setMqttPublishTopic(parsed.mqttPublishTopic || '');
+                              setMqttDecodeFunctionCode(parsed.mqttDecodeFunctionCode || '');
+
+                              if (!selectedAsset.type.startsWith('AGENT_')) {
+                                if (parsed.attributes && Array.isArray(parsed.attributes)) {
+                                  setAttributes(parsed.attributes);
+                                } else {
+                                  const defaults = defaultAttributesLookup[selectedAsset.type] || [];
+                                  setAttributes(defaults.map(d => ({ ...d, value: '' })));
+                                }
                               }
+                            } else {
+                              setCustomFields({});
+                              setDescription(selectedAsset.description || '');
+                              setMqttAgentId('');
+                              setMqttTopic('');
+                              setMqttPublishTopic('');
+                              setMqttDecodeFunctionCode('');
+                              const defaults = defaultAttributesLookup[selectedAsset.type] || [];
+                              setAttributes(defaults.map(d => ({ ...d, value: '' })));
                             }
-                          } else {
+                          } catch (e) {
                             setCustomFields({});
                             setDescription(selectedAsset.description || '');
                             setMqttAgentId('');
@@ -1911,28 +2287,19 @@ export default function AssetsPage() {
                             const defaults = defaultAttributesLookup[selectedAsset.type] || [];
                             setAttributes(defaults.map(d => ({ ...d, value: '' })));
                           }
-                        } catch (e) {
-                          setCustomFields({});
-                          setDescription(selectedAsset.description || '');
-                          setMqttAgentId('');
-                          setMqttTopic('');
-                          setMqttPublishTopic('');
-                          setMqttDecodeFunctionCode('');
-                          const defaults = defaultAttributesLookup[selectedAsset.type] || [];
-                          setAttributes(defaults.map(d => ({ ...d, value: '' })));
-                        }
-                        setMode('edit');
-                      }}
-                      variant="outline"
-                      className="flex items-center gap-1.5 h-8 text-[11px] font-bold"
-                    >
-                      <Edit className="h-3.5 w-3.5" />
-                      Modify
-                    </Button>
-                  )}
+                          setMode('edit');
+                        }}
+                        variant="outline"
+                        className="flex items-center gap-1.5 h-8 text-[11px] font-bold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/15 cursor-pointer"
+                      >
+                        <Edit className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        Modify
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 flex flex-col lg:flex-row gap-6 min-h-0">
+                <div className="flex-1 flex flex-col lg:flex-row gap-5 min-h-0 pb-4">
                   {/* Left Column: Info, Connection Parameters & Dynamic Attributes */}
                   <div className="flex-1 space-y-5">
 
@@ -2068,7 +2435,7 @@ export default function AssetsPage() {
                             Attributes
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-0 text-xs font-semibold divide-y divide-border/45 max-h-[500px] overflow-y-auto pr-1 select-text scrollbar-thin pb-4">
+                        <CardContent className="p-0 text-xs font-semibold max-h-[520px] overflow-y-auto pr-1 select-text scrollbar-thin pb-2">
                           {activeAttributes.length === 0 ? (
                             <div className="p-6 text-center text-muted-foreground/65 italic font-normal">
                               No attributes registered for this asset.
@@ -2077,39 +2444,118 @@ export default function AssetsPage() {
                             <>
                               {activeAttributes.map((attr: any, idx: number) => {
                                 const linkedAgent = assets.find(a => a.id === attr.mqttAgentId);
+                                const isReadOnly = attr.readOnly === true || attr.name === 'position_x' || attr.name === 'position_y' || attr.name === 'position_z';
+
+                                let formattedVal = '--';
+                                if (attr.value !== undefined && attr.value !== null && attr.value !== '') {
+                                  if (typeof attr.value === 'object') {
+                                    try {
+                                      formattedVal = JSON.stringify(attr.value, null, 2);
+                                    } catch (e) {
+                                      formattedVal = String(attr.value);
+                                    }
+                                  } else if (attr.dataType === 'JSON' && typeof attr.value === 'string') {
+                                    try {
+                                      const parsed = JSON.parse(attr.value);
+                                      formattedVal = JSON.stringify(parsed, null, 2);
+                                    } catch (e) {
+                                      formattedVal = attr.value;
+                                    }
+                                  } else {
+                                    formattedVal = String(attr.value);
+                                  }
+                                }
+
+                                const attrKey = attr.name;
+                                const currentInputValue = attrInputValues[attrKey] !== undefined ? attrInputValues[attrKey] : (formattedVal === '--' ? '' : formattedVal);
+                                const isSendingThisAttr = !!sendingAttrNames[attrKey];
+
                                 return (
-                                  <div key={idx} className="p-3.5 flex items-center justify-between hover:bg-secondary/15 transition-all">
-                                    <div>
+                                  <div key={idx} className="p-4 space-y-2 border-b border-border/40 last:border-0 hover:bg-secondary/10 transition-colors">
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-xs font-bold text-foreground">
+                                        {attr.name} {attr.unit ? `(${attr.unit})` : ''}
+                                      </label>
                                       <div className="flex items-center gap-1.5">
-                                        <p className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">{attr.name}</p>
-                                        <Badge variant="outline" className="text-[8px] px-1 py-0 font-normal border-border/50 text-muted-foreground/75">
+                                        <Badge variant="outline" className="text-[8px] px-1.5 py-0 font-mono border-border/50 text-muted-foreground">
                                           {attr.dataType}
                                         </Badge>
+                                        {isReadOnly ? (
+                                          <Badge variant="outline" className="text-[8px] px-1.5 py-0 font-semibold border-slate-500/30 text-slate-500 bg-slate-500/5">
+                                            Read Only
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="text-[8px] px-1.5 py-0 font-semibold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5">
+                                            Writable
+                                          </Badge>
+                                        )}
                                         {linkedAgent && (
-                                          <Badge variant="outline" className="text-[8px] px-1 py-0 font-bold border-primary/20 text-primary bg-primary/5">
-                                            MQTT Link
+                                          <Badge variant="outline" className="text-[8px] px-1.5 py-0 font-bold border-primary/20 text-primary bg-primary/5">
+                                            MQTT
                                           </Badge>
                                         )}
                                       </div>
-                                      <p className="text-sm font-bold text-foreground mt-0.5">
-                                        {attr.value !== undefined && attr.value !== null && attr.value !== '' ? String(attr.value) : '--'}{' '}
-                                        {attr.unit && <span className="text-[10.5px] text-muted-foreground/80 font-normal">{attr.unit}</span>}
-                                      </p>
-                                      <p className="text-[9px] text-muted-foreground/75 mt-0.5 font-normal">
-                                        Last Update: {attr.lastUpdated ? new Date(attr.lastUpdated).toLocaleString() : '--'}
-                                      </p>
                                     </div>
-                                    {linkedAgent && (
-                                      <div className="text-[9px] text-muted-foreground font-mono text-right space-y-0.5">
-                                        <p className="max-w-[140px] truncate" title={attr.mqttTopic}>Topic: {attr.mqttTopic}</p>
-                                        {attr.mqttDecodeFunctionCode && <p className="text-primary flex items-center justify-end gap-1"><Code className="h-3 w-3" /> JS Decoder Active</p>}
+
+                                    <div className="flex items-start gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        {attr.dataType === 'JSON' ? (
+                                          <textarea
+                                            rows={4}
+                                            readOnly={isReadOnly}
+                                            value={currentInputValue}
+                                            onChange={(e) => {
+                                              if (!isReadOnly) {
+                                                setAttrInputValues(prev => ({ ...prev, [attrKey]: e.target.value }));
+                                              }
+                                            }}
+                                            className={`w-full text-xs font-bold font-mono rounded-xl border border-border/60 p-2.5 transition-all resize-y ${isReadOnly
+                                              ? 'bg-secondary/35 text-foreground cursor-not-allowed opacity-100 border-dashed'
+                                              : 'bg-secondary/20 text-foreground focus:bg-background'
+                                              }`}
+                                          />
+                                        ) : (
+                                          <Input
+                                            type="text"
+                                            readOnly={isReadOnly}
+                                            value={currentInputValue}
+                                            onChange={(e) => {
+                                              if (!isReadOnly) {
+                                                setAttrInputValues(prev => ({ ...prev, [attrKey]: e.target.value }));
+                                              }
+                                            }}
+                                            className={`h-9.5 text-xs font-bold font-mono rounded-xl border border-border/60 transition-all ${isReadOnly
+                                              ? 'bg-secondary/35 text-foreground cursor-not-allowed opacity-100 border-dashed'
+                                              : 'bg-secondary/20 text-foreground focus:bg-background'
+                                              }`}
+                                          />
+                                        )}
                                       </div>
-                                    )}
+                                      {!isReadOnly && (
+                                        <button
+                                          type="button"
+                                          disabled={isSendingThisAttr}
+                                          title="Send Command Direct"
+                                          onClick={() => handleDirectSendCommand(attr, currentInputValue)}
+                                          className="h-9.5 w-9.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:text-white transition-all cursor-pointer flex items-center justify-center shrink-0 disabled:opacity-50 shadow-2xs"
+                                        >
+                                          {isSendingThisAttr ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <Send className="h-4 w-4" />
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    <p className="text-[10px] text-muted-foreground/75 font-medium">
+                                      Updated: {attr.lastUpdated ? new Date(attr.lastUpdated).toLocaleString() : (selectedAsset.updatedAt ? new Date(selectedAsset.updatedAt).toLocaleString() : '--')}
+                                    </p>
                                   </div>
                                 );
                               })}
-                              {/* Spacing element at the bottom to prevent list element cutoff */}
-                              <div className="h-10 bg-transparent w-full" />
+                              {/* Spacing element at the bottom */}
+                              <div className="h-4 bg-transparent w-full" />
                             </>
                           )}
                         </CardContent>
@@ -2297,17 +2743,17 @@ export default function AssetsPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-muted-foreground gap-3">
+              <Card className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-muted-foreground gap-3 border border-border/70 border-dashed">
                 <FileText className="h-8 w-8 text-muted-foreground/35" />
                 <div>
                   <p className="font-bold">No Asset Selected</p>
                   <p className="text-[11px] opacity-75 mt-0.5">Select an asset from the tree or click '+' to register a new one.</p>
                 </div>
-              </div>
+              </Card>
             )}
           </>
         )}
-      </Card>
+      </div>
 
       {/* ==================== ADD ASSET & AGENT POPUP MODAL ==================== */}
       {showAddModal && (
@@ -2601,10 +3047,34 @@ export default function AssetsPage() {
                 </div>
               </div>
 
+              {/* Read Only Toggle Switch */}
+              <div className="pt-2 border-t border-border/30 flex items-center justify-between p-3 bg-secondary/20 border border-border/50 rounded-xl">
+                <div className="space-y-0.5 pr-3">
+                  <label className="text-xs font-bold text-foreground block">Read Only Attribute</label>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    {attrModalReadOnly
+                      ? "Attribute is read-only (telemetry / view only)."
+                      : "Attribute is writable (Send Command icon button will appear in mode view)."
+                    }
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttrModalReadOnly(!attrModalReadOnly)}
+                  className={`w-10 h-5.5 rounded-full p-0.5 transition-colors relative cursor-pointer shrink-0 ${attrModalReadOnly ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                >
+                  <div
+                    className={`w-4.5 h-4.5 rounded-full bg-white transition-transform shadow-xs ${attrModalReadOnly ? 'translate-x-4.5' : 'translate-x-0'
+                      }`}
+                  />
+                </button>
+              </div>
+
               {/* Value / GPS Coordinates Picker Input */}
               <div className="pt-2 border-t border-border/30">
                 {attrModalDataType === 'GeoPoint' || attrModalName === 'location' || attrModalName === 'coordinates' || attrModalName === 'maps' ? (
-                  <div className="space-y-2 bg-primary/5 border border-primary/20 p-3 rounded-lg">
+                  <div className="space-y-2.5 bg-primary/5 border border-primary/20 p-3.5 rounded-2xl">
                     <div className="flex items-center justify-between">
                       <label className="text-primary text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
                         <MapPin className="h-3.5 w-3.5" />
@@ -2612,38 +3082,104 @@ export default function AssetsPage() {
                       </label>
                       <span className="text-[10px] text-muted-foreground italic font-normal">Format: Latitude, Longitude</span>
                     </div>
+
                     <div className="flex items-center gap-2">
                       <Input
                         type="text"
                         value={typeof attrModalValue === 'object' && attrModalValue !== null ? `${attrModalValue.lat ?? ''}, ${attrModalValue.lng ?? ''}` : (attrModalValue ?? '')}
-                        onChange={(e) => setAttrModalValue(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAttrModalValue(val);
+                          if (val.includes(',')) {
+                            const parts = val.split(',').map((s) => parseFloat(s.trim()));
+                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                              if (inlineAttrMapInstanceRef.current && inlineAttrMarkerRef.current) {
+                                inlineAttrMapInstanceRef.current.setView([parts[0], parts[1]], inlineAttrMapInstanceRef.current.getZoom() || 15);
+                                inlineAttrMarkerRef.current.setLatLng([parts[0], parts[1]]);
+                              }
+                            }
+                          }
+                        }}
                         placeholder="e.g. -6.168911, 106.899709"
-                        className="font-mono text-xs bg-background/80"
+                        className="font-mono text-xs bg-background/90 font-bold"
                       />
                       <Button
                         type="button"
-                        onClick={() => {
-                          let initialLat = -6.168911;
-                          let initialLng = 106.899709;
-                          const rawVal = typeof attrModalValue === 'object' && attrModalValue !== null
-                            ? `${attrModalValue.lat ?? ''}, ${attrModalValue.lng ?? ''}`
-                            : (attrModalValue ?? '');
-                          if (rawVal && typeof rawVal === 'string' && rawVal.includes(',')) {
-                            const parts = rawVal.split(',').map((s: string) => parseFloat(s.trim()));
-                            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                              initialLat = parts[0];
-                              initialLng = parts[1];
-                            }
-                          }
-                          setMapPickerCoords({ lat: initialLat, lng: initialLng });
-                          setMapPickerOpen(true);
-                        }}
-                        className="shrink-0 h-9 px-3.5 text-xs font-bold text-white bg-primary hover:bg-primary/90 flex items-center gap-1.5 shadow-sm cursor-pointer"
+                        onClick={handleInlineLocateMe}
+                        title="Use My Current GPS Location"
+                        className="shrink-0 h-9 px-3 text-xs font-bold text-white bg-primary hover:bg-primary/90 flex items-center gap-1.5 shadow-xs cursor-pointer rounded-xl"
                       >
-                        <MapPin className="h-4 w-4" />
-                        Pilih di Peta
+                        <LocateFixed className="h-4 w-4" />
+                        <span className="hidden sm:inline">My Location</span>
                       </Button>
                     </div>
+
+                    {/* INLINE EMBEDDED MAP CANVAS */}
+                    <div className="relative w-full h-64 bg-secondary/20 rounded-xl border border-border/80 overflow-hidden isolate shadow-inner">
+                      {/* Floating Search Bar (Top-Left) */}
+                      <div className="absolute top-2.5 left-2.5 z-[1000] flex items-center bg-background/95 border border-border/80 rounded-xl shadow-md backdrop-blur-md px-2.5 py-1 gap-1.5 max-w-[210px] sm:max-w-xs">
+                        <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <input
+                          type="text"
+                          value={inlineSearchQuery}
+                          onChange={(e) => setInlineSearchQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleInlineSearchLocation();
+                            }
+                          }}
+                          placeholder="Search location..."
+                          className="bg-transparent text-xs text-foreground focus:outline-none w-full font-semibold placeholder:text-muted-foreground/60"
+                        />
+                        {isSearchingLocation ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleInlineSearchLocation}
+                            className="text-primary hover:text-primary/80 cursor-pointer text-[10px] font-bold uppercase tracking-wider px-1 shrink-0"
+                          >
+                            Go
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Floating Coordinates Badge (Top-Right) */}
+                      <div
+                        onClick={handleInlineLocateMe}
+                        title="Click to locate your GPS position"
+                        className="absolute top-2.5 right-2.5 z-[1000] flex items-center gap-1.5 bg-background/95 hover:bg-secondary text-foreground border border-border/80 px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold shadow-md backdrop-blur-md cursor-pointer transition-colors"
+                      >
+                        <LocateFixed className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>
+                          {typeof attrModalValue === 'string' && attrModalValue.trim()
+                            ? attrModalValue.trim()
+                            : '-6.168911, 106.899709'}
+                        </span>
+                      </div>
+
+                      {/* Leaflet Container Ref */}
+                      <div ref={inlineAttrMapContainerRef} className="w-full h-full z-10" />
+                    </div>
+
+                    {/* Helper Subtext */}
+                    <div className="text-center pt-0.5">
+                      <span className="text-[10.5px] text-muted-foreground font-medium italic">
+                        Click on the map or drag the pin to specify the asset's location
+                      </span>
+                    </div>
+                  </div>
+                ) : attrModalDataType === 'JSON' ? (
+                  <div className="space-y-1">
+                    <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Initial / Fallback Value (JSON)</label>
+                    <textarea
+                      rows={4}
+                      value={typeof attrModalValue === 'object' && attrModalValue !== null ? JSON.stringify(attrModalValue, null, 2) : (attrModalValue ?? '')}
+                      onChange={(e) => setAttrModalValue(e.target.value)}
+                      placeholder='e.g. {"key": "value"}'
+                      className="w-full bg-secondary/20 border border-border px-3 py-2 rounded-xl text-foreground focus:outline-none focus:border-primary text-xs font-mono font-bold resize-y"
+                    />
                   </div>
                 ) : (
                   <div className="space-y-1">
@@ -2698,15 +3234,27 @@ export default function AssetsPage() {
                   </div>
 
                   {attrModalMqttAgentId && (
-                    <div className="space-y-1">
-                      <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Subscribe Topic</label>
-                      <Input
-                        type="text"
-                        value={attrModalMqttTopic}
-                        onChange={(e) => setAttrModalMqttTopic(e.target.value)}
-                        placeholder="e.g. telemetry/#"
-                      />
-                    </div>
+                    <>
+                      <div className="space-y-1">
+                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Subscribe Topic</label>
+                        <Input
+                          type="text"
+                          value={attrModalMqttTopic}
+                          onChange={(e) => setAttrModalMqttTopic(e.target.value)}
+                          placeholder="e.g. telemetry/#"
+                        />
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Publish Topic (Command / Downlink)</label>
+                        <Input
+                          type="text"
+                          value={attrModalMqttPublishTopic}
+                          onChange={(e) => setAttrModalMqttPublishTopic(e.target.value)}
+                          placeholder="e.g. commands/set/# or gateway/write/topic"
+                        />
+                      </div>
+                    </>
                   )}
                 </div>
 
@@ -2798,7 +3346,7 @@ export default function AssetsPage() {
 
       {/* LEAFLET MAP PICKER MODAL */}
       {mapPickerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100000] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-secondary/20">
@@ -2807,8 +3355,8 @@ export default function AssetsPage() {
                   <MapPin className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-foreground">Pilih Titik Koordinat GPS (WGS84)</h3>
-                  <p className="text-[10.5px] text-muted-foreground">Klik pada peta atau geser pin untuk menentukan lokasi aset</p>
+                  <h3 className="text-sm font-bold text-foreground">Select a GPS Coordinate Point</h3>
+                  <p className="text-[10.5px] text-muted-foreground">Click on the map or drag the pin to determine the asset location</p>
                 </div>
               </div>
               <button
@@ -2868,7 +3416,133 @@ export default function AssetsPage() {
                 className="h-8.5 text-xs font-bold text-white bg-primary hover:bg-primary/90"
               >
                 <MapPin className="h-3.5 w-3.5" />
-                Gunakan Titik Koordinat Ini
+                Use This Coordinate Point
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEND COMMAND POPUP MODAL */}
+      {sendCommandModalOpen && selectedCommandAttr && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-card border border-border/80 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+            {/* Header Bar */}
+            <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between shadow-sm shrink-0">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Send className="h-4.5 w-4.5" />
+                <span>Send Command: {selectedCommandAttr.attr.name}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSendCommandModalOpen(false)}
+                className="p-1 hover:bg-black/20 rounded-lg transition-colors text-primary-foreground/80 hover:text-primary-foreground cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-5 space-y-4">
+              <div className="bg-secondary/20 p-3 rounded-xl border border-border/40 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-semibold">Attribute:</span>
+                  <span className="font-bold text-foreground capitalize">{selectedCommandAttr.attr.name}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-semibold">Data Type:</span>
+                  <span className="font-mono text-muted-foreground">{selectedCommandAttr.attr.dataType}</span>
+                </div>
+                {selectedCommandAttr.attr.unit && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground font-semibold">Unit:</span>
+                    <span className="font-mono text-muted-foreground">{selectedCommandAttr.attr.unit}</span>
+                  </div>
+                )}
+                {(() => {
+                  const targetTopic = selectedCommandAttr.attr.mqttPublishTopic || mqttPublishTopic || `commands/${selectedAsset?.name?.toLowerCase() || 'asset'}/${selectedCommandAttr.attr.name.toLowerCase().replace(/\s+/g, '_')}`;
+                  const effectiveAgentId = selectedCommandAttr.attr.mqttAgentId || mqttAgentId;
+                  const linkedAgent = assets.find(a => a.id === effectiveAgentId);
+                  return (
+                    <>
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-border/30">
+                        <span className="text-muted-foreground font-semibold">Publish Topic:</span>
+                        <span className="font-mono text-primary font-bold">{targetTopic}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground font-semibold">Broker / Agent:</span>
+                        <span className="font-mono text-foreground font-semibold">{linkedAgent ? linkedAgent.name : 'Default Broker'}</span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground block">
+                  Command Value / Payload
+                </label>
+                {selectedCommandAttr.attr.dataType === 'Boolean' ? (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setCommandPayload('true')}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${commandPayload === 'true'
+                        ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm'
+                        : 'bg-secondary/30 hover:bg-secondary/60 text-foreground border-border'
+                        }`}
+                    >
+                      ON (true)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCommandPayload('false')}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${commandPayload === 'false'
+                        ? 'bg-rose-500 text-white border-rose-600 shadow-sm'
+                        : 'bg-secondary/30 hover:bg-secondary/60 text-foreground border-border'
+                        }`}
+                    >
+                      OFF (false)
+                    </button>
+                  </div>
+                ) : selectedCommandAttr.attr.dataType === 'JSON' ? (
+                  <textarea
+                    rows={4}
+                    value={commandPayload}
+                    onChange={(e) => setCommandPayload(e.target.value)}
+                    placeholder='e.g. {"state": "ON", "speed": 100}'
+                    className="w-full font-mono text-xs p-3 bg-secondary/20 border border-border rounded-xl focus:outline-none focus:border-primary resize-none"
+                  />
+                ) : (
+                  <Input
+                    type={selectedCommandAttr.attr.dataType === 'Number' || selectedCommandAttr.attr.dataType === 'Integer' ? 'number' : 'text'}
+                    value={commandPayload}
+                    onChange={(e) => setCommandPayload(e.target.value)}
+                    placeholder={`Enter new ${selectedCommandAttr.attr.name} value...`}
+                    className="text-xs font-semibold"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="px-5 py-3.5 bg-secondary/20 border-t border-border/50 flex items-center justify-end gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSendCommandModalOpen(false)}
+                className="h-9 px-4 text-xs font-bold"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleExecuteSendCommand}
+                disabled={isSendingCommand}
+                className="h-9 px-4 text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-sm cursor-pointer"
+              >
+                {isSendingCommand ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                <span>Send Command</span>
               </Button>
             </div>
           </div>

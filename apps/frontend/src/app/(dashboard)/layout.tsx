@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import GlobalAlerts from '../components/GlobalAlerts';
@@ -34,6 +34,8 @@ import NotificationDropdown from '../components/NotificationDropdown';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isFullView = searchParams.get('fullscreen') === 'true' || searchParams.get('fullview') === 'true';
   const { 
     authenticated, 
     initialized, 
@@ -228,7 +230,8 @@ function getContrastColor(hexColor: string): string {
       <GlobalAlerts />
       
       {/* SIDEBAR (OpenRemote Inspired - Collapsible) */}
-      <aside className={`bg-card border-r border-border flex flex-col justify-between shrink-0 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      {!isFullView && (
+        <aside className={`bg-card border-r border-border flex flex-col justify-between shrink-0 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <div>
           {/* Logo Brand */}
           <div className={`h-16 flex items-center border-b border-border ${sidebarCollapsed ? 'justify-center px-2' : 'px-6'}`}>
@@ -385,12 +388,14 @@ function getContrastColor(hexColor: string): string {
           </div>
         </div>
       </aside>
+      )}
 
       {/* MAIN CONTAINER */}
       <div className="flex-1 flex flex-col min-w-0">
         
         {/* HEADER BAR */}
-        <header className="relative z-30 h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
+        {!isFullView && (
+          <header className="relative z-30 h-16 border-b border-border bg-card flex items-center justify-between px-8 shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={toggleSidebar}
@@ -421,9 +426,10 @@ function getContrastColor(hexColor: string): string {
             </button>
           </div>
         </header>
+        )}
 
         {/* PAGE CONTENT CONTAINER */}
-        <main className="flex-1 overflow-y-auto p-8 bg-background">
+        <main className={`flex-1 overflow-y-auto bg-background ${pathname?.startsWith('/insights') ? 'pt-[2px] px-0 pb-0' : 'p-8'}`}>
           {children}
         </main>
       </div>

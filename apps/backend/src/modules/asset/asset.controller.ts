@@ -105,4 +105,13 @@ export class AssetController {
   ) {
     return this.assetService.getTelemetryHistory(tenantId, id, attribute, range || '1h', endDate, startDate);
   }
+
+  @Post(':id/command')
+  sendCommand(
+    @GetTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() body: { attributeName?: string; publishTopic?: string; payload: any; agentId?: string },
+  ) {
+    return this.assetService.sendCommand(tenantId, id, body);
+  }
 }
