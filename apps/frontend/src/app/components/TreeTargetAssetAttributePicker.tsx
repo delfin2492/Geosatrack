@@ -390,9 +390,6 @@ export default function TreeTargetAssetAttributePicker({
 
           <TypeIcon className="w-3.5 h-3.5 shrink-0" style={{ color: typeColor }} />
           <span className="truncate flex-1">{node.name}</span>
-          <span className="text-[9px] px-1.5 py-0.2 rounded bg-secondary text-muted-foreground font-mono shrink-0 uppercase">
-            {node.type}
-          </span>
         </div>
 
         {hasChildren && !isCollapsed && (
