@@ -205,7 +205,8 @@ model TelemetryLog {
   timestamp DateTime
   tagId     String
   attrName  String
-  value     Float
+  value     Float?
+  strValue  String?
 
   @@id([timestamp, tagId, attrName])
 }

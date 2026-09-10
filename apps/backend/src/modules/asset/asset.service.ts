@@ -525,13 +525,20 @@ export class AssetService {
       include: { tag: true },
     });
 
-    const assetByTagMap = new Map<string, { id: string; name: string; type: string }>();
+    const assetByTagMap = new Map<string, { id: string; name: string; type: string; attributes?: any[] }>();
     const assetByIdMap = new Map<string, { id: string; name: string; tagId: string | null }>();
 
     tenantAssets.forEach((a) => {
+      let registeredAttrs: any[] = [];
+      if (a.description) {
+        try {
+          const parsed = JSON.parse(a.description);
+          if (Array.isArray(parsed.attributes)) registeredAttrs = parsed.attributes;
+        } catch (e) {}
+      }
       assetByIdMap.set(a.id, { id: a.id, name: a.name, tagId: a.tagId });
       if (a.tagId) {
-        assetByTagMap.set(a.tagId, { id: a.id, name: a.name, type: a.type });
+        assetByTagMap.set(a.tagId, { id: a.id, name: a.name, type: a.type, attributes: registeredAttrs });
       }
     });
 
@@ -556,50 +563,188 @@ export class AssetService {
 
     const limitNum = Math.min(query.limit ? Number(query.limit) : 5000, 50000);
 
+    const normalizeAttrKey = (name: string): string => {
+      if (!name) return '';
+      const s = name.toLowerCase().replace(/[\s_()%-]+/g, '').trim();
+      if (s === 'battery' || s === 'voltage' || s === 'batteryvoltage') return 'voltage';
+      if (s === 'accelx' || s === 'accel_x') return 'accelx';
+      if (s === 'accely' || s === 'accel_y') return 'accely';
+      if (s === 'accelz' || s === 'accel_z') return 'accelz';
+      return s;
+    };
+
+    const attrFilters = (query.attribute || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const normFilters = attrFilters.map(normalizeAttrKey);
+    const isAllAttr = attrFilters.length === 0 || attrFilters.includes('all');
+
+    const matchesFilter = (attrName: string) => {
+      if (isAllAttr) return true;
+      const normName = normalizeAttrKey(attrName);
+      return (
+        normFilters.some((f) => normName === f || normName.includes(f) || f.includes(normName)) ||
+        attrFilters.some((f) => attrName.toLowerCase().includes(f.toLowerCase()))
+      );
+    };
+
+    const getUnitForAttr = (assetAttrs: any[] = [], attrName: string, defaultUnit: string = '') => {
+      const norm = normalizeAttrKey(attrName);
+      const found = assetAttrs.find((a) => a.name && normalizeAttrKey(a.name) === norm);
+      if (found?.unit) return found.unit;
+      if (norm === 'temperature') return '°C';
+      if (norm === 'humidity') return '%';
+      if (norm === 'voltage') return 'mV';
+      if (norm === 'battery') return '%';
+      if (norm === 'rssi') return 'dBm';
+      if (norm.startsWith('accel')) return 'mg';
+      if (norm === 'pitch' || norm === 'roll') return '°';
+      return defaultUnit;
+    };
+
+    const results: any[] = [];
+    const recordSet = new Set<string>();
+
+    // 1. Query TelemetryLog (dynamic attributes - numbers, booleans, strings)
+    try {
+      const dynamicLogs = (await (this.prisma as any).telemetryLog.findMany({
+        where: whereClause,
+        orderBy: { timestamp: 'desc' },
+        take: limitNum,
+      })) as any[];
+
+      dynamicLogs.forEach((row: any) => {
+        const rawVal = row.strValue !== null && row.strValue !== undefined ? row.strValue : row.value;
+        if (rawVal === null || rawVal === undefined) return;
+        if (!matchesFilter(row.attrName)) return;
+
+        let displayValue: any = rawVal;
+        if (rawVal === 'true' || rawVal === 'false' || typeof rawVal === 'boolean') {
+          displayValue = rawVal === 'true' || rawVal === true;
+        } else if (!isNaN(Number(rawVal)) && String(rawVal).trim() !== '') {
+          displayValue = Number(rawVal);
+        }
+
+        const assetInfo = assetByTagMap.get(row.tagId) || { id: '', name: `Tag [${row.tagId}]`, type: 'UNKNOWN', attributes: [] };
+        const ts = row.timestamp ? new Date(row.timestamp).toISOString() : new Date().toISOString();
+        const key = `${row.tagId}-${new Date(row.timestamp).getTime()}-${normalizeAttrKey(row.attrName)}`;
+
+        if (!recordSet.has(key)) {
+          recordSet.add(key);
+          results.push({
+            id: `${row.tagId}-${new Date(row.timestamp).getTime()}-${row.attrName}`,
+            timestamp: ts,
+            tagId: row.tagId,
+            assetId: assetInfo.id,
+            assetName: assetInfo.name,
+            assetType: assetInfo.type,
+            attribute: row.attrName,
+            value: displayValue,
+            unit: getUnitForAttr(assetInfo.attributes, row.attrName),
+          });
+        }
+      });
+    } catch (e) {}
+
+    // 2. Query Telemetry table (legacy / standard fields)
     const rawLogs = (await this.prisma.telemetry.findMany({
       where: whereClause,
       orderBy: { timestamp: 'desc' },
       take: limitNum,
     })) as any[];
 
-    const results: any[] = [];
-    const attrFilters = (query.attribute || '').toLowerCase().split(',').map((s: string) => s.trim()).filter(Boolean);
-
     rawLogs.forEach((row: any) => {
-      const assetInfo = assetByTagMap.get(row.tagId) || { id: '', name: `Tag [${row.tagId}]`, type: 'UNKNOWN' };
+      const assetInfo = assetByTagMap.get(row.tagId) || { id: '', name: `Tag [${row.tagId}]`, type: 'UNKNOWN', attributes: [] };
       const ts = row.timestamp ? new Date(row.timestamp).toISOString() : new Date().toISOString();
 
-      const addAttr = (attrName: string, val: number | null | undefined, unit: string) => {
+      const addAttr = (attrName: string, val: any, defaultUnit: string) => {
         if (val === null || val === undefined) return;
-        if (attrFilters.length > 0 && !attrFilters.includes('all')) {
-          if (!attrFilters.some((f: string) => attrName.toLowerCase().includes(f))) return;
+        if (!matchesFilter(attrName)) return;
+
+        let displayValue: any = val;
+        if (val === 'true' || val === 'false' || typeof val === 'boolean') {
+          displayValue = val === 'true' || val === true;
+        } else if (!isNaN(Number(val)) && String(val).trim() !== '') {
+          displayValue = Number(val);
         }
 
-        results.push({
-          id: `${row.tagId}-${new Date(row.timestamp).getTime()}-${attrName}`,
-          timestamp: ts,
-          tagId: row.tagId,
-          assetId: assetInfo.id,
-          assetName: assetInfo.name,
-          assetType: assetInfo.type,
-          attribute: attrName,
-          value: Number(val),
-          unit: unit,
-        });
+        const key = `${row.tagId}-${new Date(row.timestamp).getTime()}-${normalizeAttrKey(attrName)}`;
+        if (!recordSet.has(key)) {
+          recordSet.add(key);
+          results.push({
+            id: `${row.tagId}-${new Date(row.timestamp).getTime()}-${attrName}`,
+            timestamp: ts,
+            tagId: row.tagId,
+            assetId: assetInfo.id,
+            assetName: assetInfo.name,
+            assetType: assetInfo.type,
+            attribute: attrName,
+            value: displayValue,
+            unit: getUnitForAttr(assetInfo.attributes, attrName, defaultUnit),
+          });
+        }
       };
 
       addAttr('temperature', row.temperature, '°C');
       addAttr('humidity', row.humidity, '%');
-      addAttr('battery', row.battery, '%');
+
+      const hasVoltageAttr = assetInfo.attributes?.some((a) => normalizeAttrKey(a.name || '') === 'voltage');
+      if (hasVoltageAttr) {
+        addAttr('voltage', row.battery, 'mV');
+      } else {
+        addAttr('battery', row.battery, '%');
+      }
+
       addAttr('rssi', row.rssi, 'dBm');
-      addAttr('accelX', row.accelX, 'g');
-      addAttr('accelY', row.accelY, 'g');
-      addAttr('accelZ', row.accelZ, 'g');
+      addAttr('accelX', row.accelX, 'mg');
+      addAttr('accelY', row.accelY, 'mg');
+      addAttr('accelZ', row.accelZ, 'mg');
       addAttr('pitch', row.pitch, '°');
       addAttr('roll', row.roll, '°');
     });
 
-    return results;
+    // 3. Registered static/current attributes from asset.description JSON
+    tenantAssets.forEach((a) => {
+      if (a.description) {
+        try {
+          const desc = JSON.parse(a.description);
+          if (Array.isArray(desc.attributes)) {
+            desc.attributes.forEach((at: any) => {
+              if (at.name && at.value !== undefined && at.value !== null) {
+                if (!matchesFilter(at.name)) return;
+                const tagId = a.tagId || a.id;
+                const ts = at.lastUpdated
+                  ? new Date(at.lastUpdated).toISOString()
+                  : a.updatedAt
+                  ? new Date(a.updatedAt).toISOString()
+                  : new Date().toISOString();
+                const key = `${tagId}-${new Date(ts).getTime()}-${normalizeAttrKey(at.name)}`;
+                if (!recordSet.has(key)) {
+                  recordSet.add(key);
+                  results.push({
+                    id: `${tagId}-${new Date(ts).getTime()}-${at.name}`,
+                    timestamp: ts,
+                    tagId: tagId,
+                    assetId: a.id,
+                    assetName: a.name,
+                    assetType: a.type,
+                    attribute: at.name,
+                    value: at.value,
+                    unit: at.unit || getUnitForAttr(desc.attributes, at.name),
+                  });
+                }
+              }
+            });
+          }
+        } catch (e) {}
+      }
+    });
+
+    results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return results.slice(0, limitNum);
   }
 
   async getAnchors(tenantId: string) {

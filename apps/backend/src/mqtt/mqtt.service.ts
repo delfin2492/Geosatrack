@@ -1369,29 +1369,31 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
 
       for (const attr of registeredAttributes) {
-
         if (!attr.name) continue;
-
         const rawVal = decoded[attr.name];
-
         if (rawVal === undefined || rawVal === null) continue;
 
-        const numVal = parseFloat(String(rawVal));
+        let numVal: number | null = null;
+        let strVal: string | null = null;
 
-        if (isNaN(numVal)) continue;
+        if (typeof rawVal === 'boolean') {
+          strVal = rawVal ? 'true' : 'false';
+          numVal = rawVal ? 1 : 0;
+        } else {
+          const parsed = parseFloat(String(rawVal));
+          if (!isNaN(parsed)) {
+            numVal = parsed;
+            strVal = String(rawVal);
+          } else {
+            strVal = String(rawVal);
+          }
+        }
 
-
-
-        await this.prisma.telemetryLog.upsert({
-
+        await (this.prisma as any).telemetryLog.upsert({
           where: { timestamp_tagId_attrName: { timestamp: now, tagId, attrName: attr.name } },
-
-          update: { value: numVal },
-
-          create: { timestamp: now, tagId, attrName: attr.name, value: numVal },
-
+          update: { value: numVal, strValue: strVal },
+          create: { timestamp: now, tagId, attrName: attr.name, value: numVal, strValue: strVal },
         });
-
       }
 
     } catch (e) {

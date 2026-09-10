@@ -56,12 +56,45 @@ interface TreeTargetAssetAttributePickerProps {
 const DEFAULT_ATTRIBUTES: AttributeOption[] = [
   { name: 'temperature', label: 'Temperature (°C)', unit: '°C' },
   { name: 'humidity', label: 'Humidity (%)', unit: '%' },
-  { name: 'battery', label: 'Battery / Voltage (V)', unit: 'V' },
+  { name: 'voltage', label: 'Voltage (mV)', unit: 'mV' },
+  { name: 'battery', label: 'Battery (%)', unit: '%' },
   { name: 'rssi', label: 'Signal RSSI (dBm)', unit: 'dBm' },
-  { name: 'accelX', label: 'Accel X (g)', unit: 'g' },
-  { name: 'accelY', label: 'Accel Y (g)', unit: 'g' },
-  { name: 'accelZ', label: 'Accel Z (g)', unit: 'g' },
 ];
+
+const formatAttrLabel = (name: string, unit?: string): string => {
+  const normName = name.toLowerCase().trim();
+
+  const knownLabels: Record<string, { label: string; defaultUnit?: string }> = {
+    temperature: { label: 'Temperature', defaultUnit: '°C' },
+    humidity: { label: 'Humidity', defaultUnit: '%' },
+    voltage: { label: 'Voltage', defaultUnit: 'mV' },
+    battery: { label: 'Battery', defaultUnit: '%' },
+    rssi: { label: 'Signal RSSI', defaultUnit: 'dBm' },
+    gateway_rssi: { label: 'Gateway RSSI', defaultUnit: 'dBm' },
+    accelx: { label: 'Accel x', defaultUnit: 'mg' },
+    accely: { label: 'Accel y', defaultUnit: 'mg' },
+    accelz: { label: 'Accel z', defaultUnit: 'mg' },
+    accel_x: { label: 'Accel x', defaultUnit: 'mg' },
+    accel_y: { label: 'Accel y', defaultUnit: 'mg' },
+    accel_z: { label: 'Accel z', defaultUnit: 'mg' },
+    pitch: { label: 'Pitch', defaultUnit: '°' },
+    roll: { label: 'Roll', defaultUnit: '°' },
+    co2: { label: 'CO2 Level', defaultUnit: 'ppm' },
+    co: { label: 'CO Level', defaultUnit: 'ppm' },
+  };
+
+  const matched = knownLabels[normName];
+  const baseLabel = matched
+    ? matched.label
+    : name
+        .replace(/_/g, ' ')
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, (str) => str.toUpperCase())
+        .trim();
+
+  const activeUnit = unit || matched?.defaultUnit;
+  return activeUnit ? `${baseLabel} (${activeUnit})` : baseLabel;
+};
 
 const typeIconLookup: Record<string, React.ComponentType<any>> = {
   AGENT_MQTT_TELTONIKA: Radio,
@@ -164,126 +197,99 @@ export default function TreeTargetAssetAttributePicker({
     setCollapsedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Helper: extract attributes for active asset strictly matching selected asset
+  // Helper: extract attributes for active asset strictly matching selected asset attributes on Assets Page
   const getAttributesForAsset = (assetId: string): AttributeOption[] => {
     const attrMap = new Map<string, AttributeOption>();
 
-    const formatLabel = (name: string, unit?: string) => {
-      const defaultMatch = DEFAULT_ATTRIBUTES.find((d) => d.name.toLowerCase() === name.toLowerCase());
-      if (defaultMatch) return defaultMatch.label;
-
-      let labelName = name
-        .replace(/_/g, ' ')
-        .replace(/([A-Z])/g, ' $1')
-        .replace(/^./, (str: string) => str.toUpperCase());
-      return labelName + (unit ? ` (${unit})` : '');
+    const registerAttr = (rawName: string, unit?: string) => {
+      if (!rawName) return;
+      const normKey = rawName.toLowerCase().trim();
+      if (!attrMap.has(normKey)) {
+        attrMap.set(normKey, {
+          name: rawName,
+          label: formatAttrLabel(rawName, unit),
+          unit: unit || '',
+        });
+      }
     };
 
     if (assetId === 'all') {
-      DEFAULT_ATTRIBUTES.forEach((at) => attrMap.set(at.name.toLowerCase(), at));
+      DEFAULT_ATTRIBUTES.forEach((at) => registerAttr(at.name, at.unit));
 
-      // Collect custom attributes from logs
-      if (Array.isArray(logs)) {
-        logs.forEach((l) => {
-          if (l.attribute && !attrMap.has(l.attribute.toLowerCase())) {
-            attrMap.set(l.attribute.toLowerCase(), {
-              name: l.attribute,
-              label: formatLabel(l.attribute, l.unit),
-              unit: l.unit || ''
-            });
-          }
-        });
-      }
-
-      // Collect custom attributes from asset descriptions
       assets.forEach((a) => {
         if (a.description) {
           try {
             const desc = JSON.parse(a.description);
-            const registered = desc.attributes || [];
-            registered.forEach((at: any) => {
-              if (at.name && !attrMap.has(at.name.toLowerCase())) {
-                attrMap.set(at.name.toLowerCase(), {
-                  name: at.name,
-                  label: formatLabel(at.name, at.unit),
-                  unit: at.unit || ''
-                });
-              }
-            });
+            if (Array.isArray(desc.attributes)) {
+              desc.attributes.forEach((at: any) => {
+                if (at.name) registerAttr(at.name, at.unit);
+              });
+            }
           } catch (e) {}
         }
+        if (Array.isArray(a.attributes)) {
+          a.attributes.forEach((at: any) => {
+            const n = at.name || at.attr;
+            if (n) registerAttr(n, at.unit);
+          });
+        }
       });
+
+      if (Array.isArray(logs)) {
+        logs.forEach((l) => {
+          if (l.attribute) registerAttr(l.attribute, l.unit);
+        });
+      }
+
       return Array.from(attrMap.values());
     }
 
     const asset = assets.find((a) => a.id === assetId);
+    if (!asset) return [];
 
-    // 1. Collect attributes present in telemetry logs for this asset
-    if (Array.isArray(logs)) {
-      logs.forEach((l) => {
-        const matchByAsset = asset && (l.assetId === asset.id || l.assetName === asset.name);
-        const matchByTag = asset && (l.tagId === asset.tagId || (asset.tag && l.tagId === asset.tag.id));
-        const matchById = l.assetId === assetId || l.tagId === assetId;
+    // 1. Primary Source: asset.description JSON (Matches Assets Page registered attributes list)
+    if (asset.description) {
+      try {
+        const desc = JSON.parse(asset.description);
+        if (Array.isArray(desc.attributes)) {
+          desc.attributes.forEach((at: any) => {
+            if (at.name) {
+              registerAttr(at.name, at.unit);
+            }
+          });
+        }
+      } catch (e) {}
+    }
 
-        if ((matchByAsset || matchByTag || matchById) && l.attribute) {
-          const norm = l.attribute.toLowerCase();
-          if (!attrMap.has(norm)) {
-            attrMap.set(norm, {
-              name: l.attribute,
-              label: formatLabel(l.attribute, l.unit),
-              unit: l.unit || ''
-            });
-          }
+    // 2. Secondary Source: asset.attributes array
+    if (Array.isArray(asset.attributes)) {
+      asset.attributes.forEach((at: any) => {
+        const n = at.name || at.attr;
+        if (n) {
+          registerAttr(n, at.unit);
         }
       });
     }
 
-    if (asset) {
-      // 2. Collect from asset.description JSON
-      if (asset.description) {
-        try {
-          const desc = JSON.parse(asset.description);
-          const registered: any[] = desc.attributes || [];
-          registered.forEach((at: any) => {
-            if (at.name) {
-              const norm = at.name.toLowerCase();
-              if (!attrMap.has(norm)) {
-                attrMap.set(norm, {
-                  name: at.name,
-                  label: formatLabel(at.name, at.unit),
-                  unit: at.unit || ''
-                });
-              }
-            }
-          });
-        } catch (e) {}
-      }
+    // 3. Telemetry logs matching this asset
+    if (Array.isArray(logs)) {
+      logs.forEach((l) => {
+        const isMatch =
+          (l.assetId && l.assetId === asset.id) ||
+          (l.tagId && (l.tagId === asset.tagId || (asset.tag && l.tagId === asset.tag.id)));
+        if (isMatch && l.attribute) {
+          registerAttr(l.attribute, l.unit);
+        }
+      });
+    }
 
-      // 3. Collect from asset.attributes array
-      if (Array.isArray(asset.attributes)) {
-        asset.attributes.forEach((at: any) => {
-          const attrName = at.name || at.attr;
-          if (attrName) {
-            const norm = String(attrName).toLowerCase();
-            if (!attrMap.has(norm)) {
-              attrMap.set(norm, {
-                name: attrName,
-                label: formatLabel(attrName, at.unit),
-                unit: at.unit || ''
-              });
-            }
-          }
-        });
-      }
-
-      // 4. Collect from asset.tag object (only non-null fields)
-      if (asset.tag) {
-        const t = asset.tag;
-        if (t.temperature !== undefined && t.temperature !== null) attrMap.set('temperature', DEFAULT_ATTRIBUTES[0]);
-        if (t.humidity !== undefined && t.humidity !== null) attrMap.set('humidity', DEFAULT_ATTRIBUTES[1]);
-        if (t.battery !== undefined && t.battery !== null) attrMap.set('battery', DEFAULT_ATTRIBUTES[2]);
-        if (t.rssi !== undefined && t.rssi !== null) attrMap.set('rssi', DEFAULT_ATTRIBUTES[3]);
-      }
+    // 4. Tag fallback (only if not already registered)
+    if (asset.tag) {
+      const t = asset.tag;
+      if (t.temperature !== undefined && t.temperature !== null) registerAttr('temperature', '°C');
+      if (t.humidity !== undefined && t.humidity !== null) registerAttr('humidity', '%');
+      if (t.battery !== undefined && t.battery !== null && !attrMap.has('voltage') && !attrMap.has('battery')) registerAttr('battery', '%');
+      if (t.rssi !== undefined && t.rssi !== null) registerAttr('rssi', 'dBm');
     }
 
     return Array.from(attrMap.values());

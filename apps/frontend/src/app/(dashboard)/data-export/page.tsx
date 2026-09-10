@@ -34,7 +34,7 @@ interface TelemetryRow {
   assetType?: string;
   tagId: string;
   attribute: string;
-  value: number;
+  value: any;
   unit?: string;
   status?: string;
 }
@@ -134,6 +134,16 @@ export default function DataExportPage() {
     isLiveRef.current = isLiveStream;
   }, [isLiveStream]);
 
+  const normalizeAttrKey = (name: string): string => {
+    if (!name) return '';
+    const s = name.toLowerCase().replace(/[\s_()%-]+/g, '').trim();
+    if (s === 'battery' || s === 'voltage' || s === 'batteryvoltage') return 'voltage';
+    if (s === 'accelx' || s === 'accel_x') return 'accelx';
+    if (s === 'accely' || s === 'accel_y') return 'accely';
+    if (s === 'accelz' || s === 'accel_z') return 'accelz';
+    return s;
+  };
+
   useEffect(() => {
     if (!socket) return;
 
@@ -149,8 +159,14 @@ export default function DataExportPage() {
       const newRows: TelemetryRow[] = [];
       const addRow = (attr: string, val: any, unit: string) => {
         if (val === null || val === undefined) return;
-        const numVal = Number(val);
-        if (isNaN(numVal)) return;
+        let displayVal: any = val;
+        if (typeof val === 'boolean') {
+          displayVal = val ? 'true' : 'false';
+        } else if (typeof val === 'number') {
+          displayVal = val;
+        } else {
+          displayVal = String(val);
+        }
 
         newRows.push({
           id: `${tagId}-${Date.now()}-${attr}-${Math.random()}`,
@@ -160,7 +176,7 @@ export default function DataExportPage() {
           assetType,
           tagId,
           attribute: attr,
-          value: numVal,
+          value: displayVal,
           unit,
           status: 'Normal'
         });
@@ -168,8 +184,25 @@ export default function DataExportPage() {
 
       addRow('temperature', telemetry.temperature, '°C');
       addRow('humidity', telemetry.humidity, '%');
-      addRow('battery', telemetry.battery, '%');
+      if (telemetry.voltage !== undefined && telemetry.voltage !== null) {
+        addRow('voltage', telemetry.voltage, 'mV');
+      } else {
+        addRow('battery', telemetry.battery, '%');
+      }
       addRow('rssi', telemetry.rssi, 'dBm');
+      addRow('accelX', telemetry.accelX ?? telemetry.accel_x, 'mg');
+      addRow('accelY', telemetry.accelY ?? telemetry.accel_y, 'mg');
+      addRow('accelZ', telemetry.accelZ ?? telemetry.accel_z, 'mg');
+      addRow('pitch', telemetry.pitch, '°');
+      addRow('roll', telemetry.roll, '°');
+
+      if (telemetry.attributes && typeof telemetry.attributes === 'object') {
+        Object.entries(telemetry.attributes).forEach(([k, v]) => {
+          if (!['temperature', 'humidity', 'battery', 'voltage', 'rssi', 'accelx', 'accely', 'accelz', 'pitch', 'roll'].includes(normalizeAttrKey(k))) {
+            addRow(k, v, '');
+          }
+        });
+      }
 
       if (newRows.length > 0) {
         setLogs((prev) => [...newRows, ...prev].slice(0, 10000));
@@ -187,7 +220,16 @@ export default function DataExportPage() {
     return logs.filter((log) => {
       if (selectedAssetId !== 'all' && log.assetId !== selectedAssetId) return false;
       if (selectedAttributes.length > 0 && !selectedAttributes.includes('all')) {
-        const matchAttr = selectedAttributes.some((attr) => log.attribute.toLowerCase().includes(attr.toLowerCase()));
+        const normLogAttr = normalizeAttrKey(log.attribute);
+        const matchAttr = selectedAttributes.some((attr) => {
+          const normSel = normalizeAttrKey(attr);
+          return (
+            normLogAttr === normSel ||
+            normLogAttr.includes(normSel) ||
+            normSel.includes(normLogAttr) ||
+            log.attribute.toLowerCase().includes(attr.toLowerCase())
+          );
+        });
         if (!matchAttr) return false;
       }
       if (searchQuery.trim() !== '') {
@@ -195,7 +237,8 @@ export default function DataExportPage() {
         const matchName = log.assetName.toLowerCase().includes(q);
         const matchTag = log.tagId.toLowerCase().includes(q);
         const matchAttr = log.attribute.toLowerCase().includes(q);
-        if (!matchName && !matchTag && !matchAttr) return false;
+        const matchVal = String(log.value).toLowerCase().includes(q);
+        if (!matchName && !matchTag && !matchAttr && !matchVal) return false;
       }
       return true;
     });
@@ -212,11 +255,9 @@ export default function DataExportPage() {
   const summaryStats = useMemo(() => {
     const totalCount = filteredLogs.length;
     const uniqueAssets = new Set(filteredLogs.map((l) => l.assetName)).size;
-    const values = filteredLogs.map((l) => l.value);
-    const avgVal = values.length > 0 ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1) : '--';
     const alertCount = filteredLogs.filter((l) => l.status === 'Alert' || l.status === 'Warning').length;
 
-    return { totalCount, uniqueAssets, avgVal, alertCount };
+    return { totalCount, uniqueAssets, alertCount };
   }, [filteredLogs]);
 
   // 5. CSV Export Handler
@@ -230,7 +271,7 @@ export default function DataExportPage() {
       `"${l.tagId}"`,
       `"${l.assetType || ''}"`,
       `"${l.attribute}"`,
-      l.value,
+      `"${typeof l.value === 'boolean' ? (l.value ? 'TRUE' : 'FALSE') : l.value}"`,
       `"${l.unit || ''}"`,
       `"${l.status || 'Normal'}"`
     ]);
@@ -249,11 +290,9 @@ export default function DataExportPage() {
   const handleExportJSON = () => {
     if (filteredLogs.length === 0) return;
 
-    const jsonStr = JSON.stringify(filteredLogs, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(filteredLogs, null, 2));
     const link = document.createElement('a');
-    link.setAttribute('href', url);
+    link.setAttribute('href', dataStr);
     link.setAttribute('download', `geomesh_telemetry_export_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(link);
     link.click();
@@ -261,44 +300,33 @@ export default function DataExportPage() {
   };
 
   return (
-    <div className="flex-1 w-full h-full p-6 overflow-y-auto space-y-6 bg-background text-foreground">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
-              <FileSpreadsheet className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight">Data Export & Telemetry Logger</h1>
-              <p className="text-xs text-muted-foreground">
-                Ekspor dan kelola riwayat log telemetri atribut aset secara real-time maupun historis.
-              </p>
-            </div>
+    <div className="space-y-6 pb-12">
+      {/* Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6 rounded-2xl border border-border bg-card shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-primary/10 text-primary border border-primary/20">
+            <FileSpreadsheet className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-xl font-extrabold text-foreground tracking-tight">Data Export & Telemetry Log</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Export data telemetri historis (CSV / JSON) & pantau stream log real-time dari seluruh asset.
+            </p>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setIsLiveStream(!isLiveStream)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer shadow-xs ${
+            onClick={() => setIsLiveStream((prev) => !prev)}
+            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all cursor-pointer ${
               isLiveStream
-                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25'
-                : 'bg-secondary/40 border-border text-muted-foreground hover:bg-secondary/70'
+                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20'
             }`}
           >
-            {isLiveStream ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                <Pause className="w-3.5 h-3.5" /> Live Stream (Active)
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5" /> Paused
-              </>
-            )}
+            {isLiveStream ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            <span>{isLiveStream ? 'Live Stream Active' : 'Live Paused'}</span>
           </button>
 
           <button
@@ -309,31 +337,11 @@ export default function DataExportPage() {
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-primary' : ''}`} />
           </button>
-
-          <button
-            type="button"
-            onClick={handleExportJSON}
-            disabled={filteredLogs.length === 0}
-            className="px-3 py-2 rounded-xl text-xs font-bold border border-border bg-card hover:bg-secondary/50 text-foreground flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
-          >
-            <FileJson className="w-4 h-4 text-blue-500" />
-            <span>JSON</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportCSV}
-            disabled={filteredLogs.length === 0}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            <span>Export CSV ({filteredLogs.length})</span>
-          </button>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 rounded-2xl border border-border bg-card shadow-xs flex items-center gap-4">
           <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500 border border-blue-500/20">
             <Database className="w-5 h-5" />
@@ -351,16 +359,6 @@ export default function DataExportPage() {
           <div>
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Monitored Assets</p>
             <h3 className="text-xl font-mono font-extrabold mt-0.5">{summaryStats.uniqueAssets} Assets</h3>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl border border-border bg-card shadow-xs flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-            <Activity className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Avg Telemetry Value</p>
-            <h3 className="text-xl font-mono font-extrabold mt-0.5">{summaryStats.avgVal}</h3>
           </div>
         </div>
 
@@ -525,8 +523,16 @@ export default function DataExportPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4 font-mono font-extrabold text-foreground whitespace-nowrap">
-                      {typeof log.value === 'number' ? log.value.toFixed(1) : log.value}
-                      <span className="text-muted-foreground text-[10px] ml-1">{log.unit}</span>
+                      {typeof log.value === 'boolean' || log.value === 'true' || log.value === 'false' ? (
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${log.value === true || log.value === 'true' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-600 border border-rose-500/30'}`}>
+                          {log.value === true || log.value === 'true' ? 'TRUE' : 'FALSE'}
+                        </span>
+                      ) : typeof log.value === 'number' ? (
+                        <span>{Number.isInteger(log.value) ? log.value : log.value.toFixed(2)}</span>
+                      ) : (
+                        <span>{String(log.value)}</span>
+                      )}
+                      {log.unit && <span className="text-muted-foreground text-[10px] ml-1">{log.unit}</span>}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span

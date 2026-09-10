@@ -115,6 +115,16 @@ services:
       - backend
     restart: always
 
+  # 8. Adminer Database GUI
+  adminer:
+    image: adminer:latest
+    container_name: geomesh-adminer
+    ports:
+      - "8082:8080"
+    depends_on:
+      - timescaledb
+    restart: always
+
 volumes:
   emqx-data:
   pg-data:
